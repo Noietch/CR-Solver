@@ -1,0 +1,9 @@
+{
+    "num_sections": 3,
+    "num_points_per_section": 50,
+    "length": 1.0,
+    "lower_limits_kappa": [-4, -4, -4],
+    "upper_limits_kappa": [4, 4, 4], 
+    "lower_limits_phi": [-3.14, -3.14, -3.14],
+    "upper_limits_phi": [3.14, 3.14, 3.14]
+}
