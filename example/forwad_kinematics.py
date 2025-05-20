@@ -6,27 +6,19 @@ from soul.visualization.visualizer import visualize_pcc_model_2d
 
 jax.config.update("jax_disable_jit", True)
 
-pcc_model_config = dict(
-    num_sections=3,
-    num_points_per_section=50,
-    length=1.0,
-    lower_limits_kappa=[-4, -4, -4],
-    upper_limits_kappa=[4, 4, 4],
-    lower_limits_phi=[0, 0, 0],
-    upper_limits_phi=[0, 0, 0],
-)
-
-pcc_robot = PCCRobot.from_config(pcc_model_config)
+robot = PCCRobot.from_config("configs/pcc_2d.json")
 
 batch_state = ConstantCurvatureState(
+    base_position=jnp.array([[0, 0, 0], [0, 0, 0]]),
     kappa=jnp.array([[1, 2, 3], [0, 0, 0]]),
     phi=jnp.array([[-1, -2, -3], [0, 0, 0]]),
 )
 
 state = ConstantCurvatureState(
-    kappa=jnp.array([1, 2, 4]),
+    base_position=jnp.array([0, 0, 0]),
+    kappa=jnp.array([1, 2, 3]),
     phi=jnp.array([0, 0, 0]),
 )
 
-pose = pcc_robot.forward_kinematics(state)
-visualize_pcc_model_2d(pose, num_points=pcc_model_config["num_points_per_section"], save_path="visualization/forward_kinematics.png")
+pose = robot.forward_kinematics(state)
+visualize_pcc_model_2d(pose, num_points=robot.config.num_points_per_section, save_path="visualization/forward_kinematics.png")

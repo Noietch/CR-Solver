@@ -9,7 +9,7 @@ import jaxlie
 import jaxls
 import numpy as np
 from soul.robots.pcc_robot import PCCRobot
-from soul.costs import pose_cost, limit_cost, position_cost
+from soul.costs import pose_cost, limit_cost
 
 def solve_ik(
     robot: PCCRobot,
@@ -45,34 +45,29 @@ def _solve_ik_jax(
 ) -> jax.Array:
     joint_var = robot.var_cls(0)
     factors = [
-        position_cost(
+        pose_cost(
             robot,
             joint_var,
-            target_position,
+            jaxlie.SE3.from_rotation_and_translation(
+                jaxlie.SO3(target_wxyz), target_position
+            ),
             pos_weight=50.0,
+            ori_weight=0.0,
         ),
-        # pose_cost(
-        #     robot,
-        #     joint_var,
-        #     jaxlie.SE3.from_rotation_and_translation(
-        #         jaxlie.SO3(target_wxyz), target_position
-        #     ),
-        #     pos_weight=50.0,
-        #     ori_weight=10.0,
-        # ),
         limit_cost(
             robot,
             joint_var,
             weight=100.0,
         ),
     ]
-    sol = (
+    sol, summary = (
         jaxls.LeastSquaresProblem(factors, [joint_var])
         .analyze()
         .solve(
             verbose=False,
             linear_solver="dense_cholesky",
             trust_region=jaxls.TrustRegionConfig(lambda_initial=1.0),
+            return_summary=True,
         )
     )
-    return sol[joint_var]
+    return sol[joint_var], summary

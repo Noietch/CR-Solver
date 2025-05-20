@@ -43,7 +43,6 @@ def visualize_pcc_model_2d(
 
     for i in range(batch_size):
         positions = transform[i, :, :3, 3]
-
         # Plot the positions
         plt.scatter([0], [0], c="black", marker="o")
         plt.xlabel("X Position (m)")
