@@ -2,7 +2,7 @@ import jax
 import jax.numpy as jnp
 
 from soul.robots.pcc_robot import PCCRobot, ConstantCurvatureState
-from soul.visualization.visualizer import visualize_pcc_model_2d
+from soul.visualization.visualizer_plot import visualize_pcc_model_2d
 
 jax.config.update("jax_disable_jit", True)
 

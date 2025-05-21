@@ -5,6 +5,9 @@ from jax import Array
 from jaxls import Cost, Var, VarValues
 
 from ..robots.pcc_robot import PCCRobot, ConstantCurvatureState
+from ..collision.pcc_robot_collision import RobotCollision
+from ..collision.geometry import CollGeom
+from ..collision.collision import colldist_from_sdf
 
 @Cost.create_factory
 def pose_cost(
@@ -39,3 +42,20 @@ def limit_cost(
     residual_upper_phi = jnp.maximum(0.0, state.phi - robot.config.upper_limits_phi)
     residual_lower_phi = jnp.maximum(0.0, robot.config.lower_limits_phi - state.phi)
     return ((residual_upper_kappa + residual_lower_kappa + residual_upper_phi + residual_lower_phi) * weight).flatten()
+
+
+@Cost.create_factory
+def world_collision_cost(
+    vals: VarValues,
+    robot: PCCRobot,
+    robot_coll: RobotCollision,
+    robot_var: Var[ConstantCurvatureState],
+    world_geom: CollGeom,
+    margin: float,
+    weight: Array | float,
+) -> Array:
+    """Computes the residual penalizing world collisions below a margin."""
+    state = vals[robot_var]
+    dist_matrix = robot_coll.compute_world_collision_distance(robot, state, world_geom)
+    residual = colldist_from_sdf(dist_matrix, margin)
+    return (residual * weight).flatten()

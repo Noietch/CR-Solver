@@ -52,6 +52,15 @@ class CollGeom(abc.ABC):
         new_size = self.size.reshape(shape + (shape_dim,))
         return type(self)(pose=new_pose, size=new_size)
 
+    def set_transform(self, transform: jaxlie.SE3) -> Self:
+        new_pose = transform
+        new_batch_axes = new_pose.get_batch_axes()
+        broadcast_size = jnp.broadcast_to(
+            self.size, new_batch_axes + self.size.shape[-1:]
+        )
+        kwargs = {"pose": new_pose, "size": broadcast_size}
+        return type(self)(**kwargs)        
+
     def transform(self, transform: jaxlie.SE3) -> Self:
         """Applies an SE3 transformation to the geometry."""
         new_pose = transform @ self.pose

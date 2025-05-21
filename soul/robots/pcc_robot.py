@@ -20,10 +20,10 @@ class PCCModelConfig:
     length: jdc.Static[float]
 
     # kappa_range and phi_range
-    lower_limits_kappa: Float[Array, " n_act_sections"]
-    upper_limits_kappa: Float[Array, " n_act_sections"]
-    lower_limits_phi: Float[Array, " n_act_sections"]
-    upper_limits_phi: Float[Array, " n_act_sections"]
+    lower_limits_kappa: Float[Array, "num_sections"]
+    upper_limits_kappa: Float[Array, "num_sections"]
+    lower_limits_phi: Float[Array, "num_sections"]
+    upper_limits_phi: Float[Array, "num_sections"]
 
     opt_mask: jdc.Static[jnp.ndarray]
 

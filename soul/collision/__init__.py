@@ -7,4 +7,4 @@ from .geometry import CollGeom as CollGeom
 from .geometry import HalfSpace as HalfSpace
 from .geometry import Heightmap as Heightmap
 from .geometry import Sphere as Sphere
-from .robot_collision import RobotCollision as RobotCollision
+from .pcc_robot_collision import RobotCollision as RobotCollision
