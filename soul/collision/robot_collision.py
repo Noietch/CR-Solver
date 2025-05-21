@@ -15,8 +15,8 @@ if TYPE_CHECKING:
     from pyroki._robot import Robot
 
 from .._robot_urdf_parser import RobotURDFParser
-from ._collision import collide, pairwise_collide
-from ._geometry import Capsule, CollGeom
+from .collision import collide, pairwise_collide
+from .geometry import Capsule, CollGeom
 
 
 @jdc.pytree_dataclass

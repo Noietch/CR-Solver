@@ -13,7 +13,7 @@ import numpy as onp
 import jax
 import jax.scipy.ndimage
 
-from ._utils import make_frame
+from .utils import make_frame
 from jax.typing import ArrayLike
 
 

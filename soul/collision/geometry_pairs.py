@@ -3,8 +3,8 @@ from __future__ import annotations
 import jax.numpy as jnp
 from jaxtyping import Float, Array
 
-from ._geometry import HalfSpace, Sphere, Capsule, Heightmap
-from . import _utils
+from .geometry import HalfSpace, Sphere, Capsule, Heightmap
+from . import utils
 
 
 # --- HalfSpace Collision Implementations ---
@@ -63,7 +63,7 @@ def _sphere_sphere_dist(
     radius2: Float[Array, "*batch"],
 ) -> Float[Array, "*batch"]:
     """Helper: Calculates distance between two spheres."""
-    _, dist_center = _utils.normalize_with_norm(pos2 - pos1)
+    _, dist_center = utils.normalize_with_norm(pos2 - pos1)
     dist = dist_center - (radius1 + radius2)
     return dist
 
@@ -87,7 +87,7 @@ def sphere_capsule(sphere: Sphere, capsule: Capsule) -> Float[Array, "*batch"]:
     segment_offset = cap_axis * capsule.height[..., None] / 2
     cap_a = cap_pos - segment_offset
     cap_b = cap_pos + segment_offset
-    pt_on_axis = _utils.closest_segment_point(cap_a, cap_b, sphere_pos)
+    pt_on_axis = utils.closest_segment_point(cap_a, cap_b, sphere_pos)
     dist = _sphere_sphere_dist(sphere_pos, sphere.radius, pt_on_axis, capsule.radius)
     return dist
 
@@ -110,7 +110,7 @@ def capsule_capsule(capsule1: Capsule, capsule2: Capsule) -> Float[Array, "*batc
     a2 = pos2 - segment2_offset
     b2 = pos2 + segment2_offset
 
-    pt1_on_axis, pt2_on_axis = _utils.closest_segment_to_segment_points(a1, b1, a2, b2)
+    pt1_on_axis, pt2_on_axis = utils.closest_segment_to_segment_points(a1, b1, a2, b2)
     dist = _sphere_sphere_dist(pt1_on_axis, radius1, pt2_on_axis, radius2)
     return dist
 

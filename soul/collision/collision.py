@@ -7,8 +7,8 @@ import jax.numpy as jnp
 import jax_dataclasses as jdc
 from jaxtyping import Float, Array
 
-from ._geometry import CollGeom, HalfSpace, Sphere, Capsule, Heightmap
-from ._geometry_pairs import (
+from .geometry import CollGeom, HalfSpace, Sphere, Capsule, Heightmap
+from .geometry_pairs import (
     halfspace_sphere,
     halfspace_capsule,
     sphere_sphere,
