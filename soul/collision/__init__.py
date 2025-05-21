@@ -1,10 +1,10 @@
 """Collision detection primitives and utilities."""
 
-from ._collision import colldist_from_sdf as colldist_from_sdf
-from ._collision import collide as collide
-from ._geometry import Capsule as Capsule
-from ._geometry import CollGeom as CollGeom
-from ._geometry import HalfSpace as HalfSpace
-from ._geometry import Heightmap as Heightmap
-from ._geometry import Sphere as Sphere
-from ._robot_collision import RobotCollision as RobotCollision
+from .collision import colldist_from_sdf as colldist_from_sdf
+from .collision import collide as collide
+from .geometry import Capsule as Capsule
+from .geometry import CollGeom as CollGeom
+from .geometry import HalfSpace as HalfSpace
+from .geometry import Heightmap as Heightmap
+from .geometry import Sphere as Sphere
+from .robot_collision import RobotCollision as RobotCollision

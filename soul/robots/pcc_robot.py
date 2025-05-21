@@ -8,10 +8,7 @@ import jaxls
 import jaxlie
 from jax import Array
 from jax import numpy as jnp
-from jax.typing import ArrayLike
 from jaxtyping import Float
-import numpy as onp
-# --- Dataclasses ---
 
 
 @jdc.pytree_dataclass
@@ -110,36 +107,49 @@ class PCCRobot:
 
     @jdc.jit
     def _forward_kinematics(self, state: ConstantCurvatureState) -> Float[Array, "num_sections 4 4"]:
-        var_kappa = state.kappa
-        var_phi = state.phi
-        segment_pose = jnp.zeros((self.config.num_sections, 4, 4))
-        prev_pose = jaxlie.SE3.identity()
-        for i in range(0, self.config.num_sections):
-            kappa = var_kappa[i]
-            phi = var_phi[i]
+        def build_transform(s, p):
+            kappa = state.kappa[s]
+            phi = state.phi[s]
+            l = p * self.config.length / (self.config.num_points_per_section - 1)  # scale to [0, length]
+            
             cos_phi = jnp.cos(phi)
             sin_phi = jnp.sin(phi)
-            cos_kl = jnp.cos(kappa * self.config.length)
-            sin_kl = jnp.sin(kappa * self.config.length)
-            # refer to https://github.com/turhancan97/2D-and-3D-Constant-Curvature-Kinematics
-            is_small = jnp.isclose(kappa, 0.0)        
-            x_trans = jnp.where(is_small, 0.0, cos_phi * (cos_kl - 1)/kappa)
-            y_trans = jnp.where(is_small, 0.0, sin_phi * (cos_kl - 1)/kappa)
-            z_trans = jnp.where(is_small, self.config.length, sin_kl/kappa)
+            cos_kl = jnp.cos(kappa * l)
+            sin_kl = jnp.sin(kappa * l)
             
-            # Create transformation matrix using jnp.where
+            is_small = jnp.isclose(kappa, 0.0)
+            x_trans = jnp.where(is_small, 0.0, cos_phi * (cos_kl - 1.0)/kappa)
+            y_trans = jnp.where(is_small, 0.0, sin_phi * (cos_kl - 1.0)/kappa)
+            z_trans = jnp.where(is_small, l, sin_kl/kappa)
+            
             Ts_matrix = jnp.array([
-                [cos_phi * cos_kl, -sin_phi, -cos_phi * sin_kl  , x_trans],
+                [cos_phi * cos_kl, -sin_phi, -cos_phi * sin_kl, x_trans],
                 [sin_phi * sin_kl, cos_phi, -sin_phi * sin_kl, y_trans],
                 [sin_kl, 0.0, cos_kl, z_trans],
                 [0.0, 0.0, 0.0, 1.0]
             ])
             
-            Ts_parent_child = jaxlie.SE3.from_matrix(Ts_matrix)
-            pose = prev_pose @ Ts_parent_child
-            prev_pose = pose
-            segment_pose = segment_pose.at[i, ...].set(pose.as_matrix())
-        return segment_pose
+            return Ts_matrix
+        
+        # Create indices for all segment-point pairs
+        segment_indices = jnp.repeat(jnp.arange(self.config.num_sections), self.config.num_points_per_section)
+        point_indices = jnp.tile(jnp.arange(self.config.num_points_per_section), self.config.num_sections)
+        
+        # Vectorize the transform building across all segment-point pairs
+        transform_matrices = jax.vmap(build_transform)(segment_indices, point_indices)
+        
+        # Process each segment separately using JAX's scan
+        final_poses = []
+        prev_pose = jnp.tile(jnp.eye(4), (self.config.num_points_per_section, 1, 1))
+        
+        for i in range(self.config.num_sections):
+            segment_transforms = transform_matrices[i*self.config.num_points_per_section:(i+1)*self.config.num_points_per_section]
+            segment_poses = jnp.matmul(prev_pose, segment_transforms)
+            final_poses.append(segment_poses)
+            prev_pose = segment_poses[-1]
+        # Concatenate all poses
+        all_poses = jnp.concatenate(final_poses)
+        return all_poses
 
     def forward_kinematics(self, state: ConstantCurvatureState) -> Float[Array, "*batch num_sections 4 4"]:
         if state.kappa.ndim == 1:

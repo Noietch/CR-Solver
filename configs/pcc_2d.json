@@ -1,6 +1,6 @@
 {
     "num_sections": 3,
-    "num_points_per_section": 50,
+    "num_points_per_section": 3,
     "length": 1.0,
     "lower_limits_kappa": -4,
     "upper_limits_kappa": 4, 
