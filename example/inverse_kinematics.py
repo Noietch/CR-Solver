@@ -4,7 +4,6 @@ Simplest Inverse Kinematics Example using PyRoki.
 """
 import numpy as np
 from soul.robots.pcc_robot import PCCRobot
-from soul.robots.pcc_robot_array import PCCRobot as PCCRobotArray
 from soul.solver import solve_ik
 from soul.visualization.visualizer import visualize_pcc_model_2d, visualize_pcc_model_3d
 
