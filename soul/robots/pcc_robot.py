@@ -140,7 +140,13 @@ class PCCRobot:
         
         # Process each segment separately using JAX's scan
         final_poses = []
-        prev_pose = jnp.tile(jnp.eye(4), (self.config.num_points_per_section, 1, 1))
+        base_transform = jnp.array([
+            [1, 0, 0, state.base_position[0]],
+            [0, 1, 0, state.base_position[1]],
+            [0, 0, 1, state.base_position[2]],
+            [0, 0, 0, 1]
+        ])
+        prev_pose = jnp.tile(base_transform, (self.config.num_points_per_section, 1, 1))
         
         for i in range(self.config.num_sections):
             segment_transforms = transform_matrices[i*self.config.num_points_per_section:(i+1)*self.config.num_points_per_section]
