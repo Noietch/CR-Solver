@@ -43,11 +43,11 @@ def _solve_ik_jax(
     target_wxyz: jax.Array,
     target_position: jax.Array,
 ) -> jax.Array:
-    joint_var = robot.var_cls(0)
+    robot_var = robot.var_cls(0)
     factors = [
         pose_cost(
             robot,
-            joint_var,
+            robot_var,
             jaxlie.SE3.from_rotation_and_translation(
                 jaxlie.SO3(target_wxyz), target_position
             ),
@@ -56,12 +56,12 @@ def _solve_ik_jax(
         ),
         limit_cost(
             robot,
-            joint_var,
+            robot_var,
             weight=100.0,
         ),
     ]
     sol, summary = (
-        jaxls.LeastSquaresProblem(factors, [joint_var])
+        jaxls.LeastSquaresProblem(factors, [robot_var])
         .analyze()
         .solve(
             verbose=False,
@@ -70,4 +70,4 @@ def _solve_ik_jax(
             return_summary=True,
         )
     )
-    return sol[joint_var], summary
+    return sol[robot_var], summary

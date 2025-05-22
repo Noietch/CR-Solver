@@ -34,7 +34,7 @@ class ViserSoftRobot:
             # breakpoint()
             # Create a mesh for each sphere in the model
             for i in range(num_spheres):
-                sphere_node_name = f"/sphere_{i}"
+                sphere_node_name = f"{self.root_node_name}/sphere_{i}"
                 sphere_handle = self.server.scene.add_mesh_trimesh(
                     name=sphere_node_name,
                     mesh=Sphere.from_center_and_radius(
