@@ -57,8 +57,10 @@ class RobotCollision:
         state_prev: ConstantCurvatureState,
         state_next: ConstantCurvatureState,
     ) -> Capsule:
-        pass
-
+        coll_prev = self.at_state(robot, state_prev)
+        coll_next = self.at_state(robot, state_next)
+        swept_capsules = Capsule.from_sphere_pairs(coll_prev, coll_next)
+        return swept_capsules
 
     def compute_world_collision_distance(
         self,

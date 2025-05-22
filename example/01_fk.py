@@ -4,7 +4,13 @@ import jax.numpy as jnp
 from soul.robots.pcc_robot import PCCRobot, ConstantCurvatureState
 from soul.visualization.visualizer_plot import visualize_pcc_model_2d
 
-jax.config.update("jax_disable_jit", True)
+DISABLE_JIT = False
+
+if DISABLE_JIT:
+    import os
+    import jax
+    os.environ["JAX_DISABLE_JIT"] = "True"
+    jax.config.update("jax_disable_jit", True)
 
 robot = PCCRobot.from_config("configs/pcc_2d.json")
 

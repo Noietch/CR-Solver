@@ -11,6 +11,14 @@ from soul.visualization.visualizer_plot import visualize_pcc_model_2d, visualize
 from soul.collision import RobotCollision
 from soul.visualization.visualizer_viser import ViserSoftRobot
 
+DISABLE_JIT = False
+
+if DISABLE_JIT:
+    import os
+    import jax
+    os.environ["JAX_DISABLE_JIT"] = "True"
+    jax.config.update("jax_disable_jit", True)
+
 def main():
     """Main function for basic IK."""
     robot = PCCRobot.from_config("configs/pcc_2d.json")

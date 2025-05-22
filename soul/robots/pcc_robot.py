@@ -57,8 +57,27 @@ class ConstantCurvatureState:
     kappa: Float[Array, "num_sections"]  # Curvature for each section
     phi: Float[Array, "num_sections"]  # Rotation angle (phi) for each section
 
-    def to_array(self):
-        return jnp.concatenate([self.base_position, self.kappa, self.phi], axis=0)
+    def __sub__(self, other: ConstantCurvatureState) -> ConstantCurvatureState:
+        return ConstantCurvatureState(
+            base_position=self.base_position - other.base_position,
+            kappa=self.kappa - other.kappa,
+            phi=self.phi - other.phi,
+        )
+    
+    def flatten(self) -> Float[Array, "3 + num_sections + num_sections"]:
+        return jnp.concatenate([self.base_position, self.kappa, self.phi])
+    
+
+
+def interpolate_states(start_state: ConstantCurvatureState, end_state: ConstantCurvatureState, timesteps: int) -> ConstantCurvatureState:
+    """
+    Interpolates between two states.
+    """
+    base_position = jnp.linspace(start_state.base_position, end_state.base_position, timesteps)
+    kappa = jnp.linspace(start_state.kappa, end_state.kappa, timesteps)
+    phi = jnp.linspace(start_state.phi, end_state.phi, timesteps)
+    return ConstantCurvatureState(base_position=base_position, kappa=kappa, phi=phi)
+
 
 # --- PCCModel Class ---
 @jdc.pytree_dataclass

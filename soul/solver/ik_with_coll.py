@@ -13,7 +13,7 @@ import numpy as np
 
 from ..robots.pcc_robot import PCCRobot
 from ..collision import RobotCollision, CollGeom
-from ..costs import pose_cost, limit_cost, world_collision_cost
+from ..costs import pose_cost, limit_cost, world_collision_cost, elastic_energy_cost
 
 def solve_ik_with_collision(
     robot: PCCRobot,
@@ -73,6 +73,10 @@ def _solve_ik_with_collision_jax(
             robot,
             robot_var=robot_var,
             weight=100.0,
+        ),
+        elastic_energy_cost(
+            robot_var=robot_var,
+            weight=0.5,
         ),
     ]
     costs.extend(

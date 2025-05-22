@@ -11,6 +11,14 @@ from soul.collision import HalfSpace, RobotCollision, Sphere
 from soul.visualization.visualizer_viser import ViserSoftRobot
 
 
+DISABLE_JIT = False
+
+if DISABLE_JIT:
+    import os
+    import jax
+    os.environ["JAX_DISABLE_JIT"] = "True"
+    jax.config.update("jax_disable_jit", True)
+
 def main():
     robot = PCCRobot.from_config("configs/pcc_2d.json")
     robot_coll = RobotCollision.from_config("configs/pcc_2d.json")
@@ -31,6 +39,7 @@ def main():
     server.scene.add_mesh_trimesh("/obstacle/mesh", mesh=sphere_coll.to_trimesh())
     server.scene.add_grid("/ground", width=6, height=6)
     timing_handle = server.gui.add_number("Elapsed (ms)", 0.001, disabled=True)
+    target_handle = server.gui.add_vector3("Target", ik_target_handle.position, disabled=True)
     
     while True:
         sphere_coll_world_current = sphere_coll.transform_from_pos_wxyz(
@@ -43,6 +52,7 @@ def main():
         elapsed_time = time.time() - start_time
         timing_handle.value = 0.99 * timing_handle.value + 0.01 * (elapsed_time * 1000)
         robot_vis.update_pose(pose)
+        target_handle.value = ik_target_handle.position
 
 if __name__ == "__main__":
     main()
