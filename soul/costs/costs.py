@@ -125,12 +125,14 @@ def elastic_energy_cost(
     kappa = vals[robot_var].kappa
     return (kappa * weight).flatten()
 
+
 @Cost.create_factory
-def elastic_energy_cost(
+def rest_base_cost(
     vals: VarValues,
     robot_var: Var[ConstantCurvatureState],
     weight: Array | float,
 ) -> Array:
-    """Computes the elastic energy of the robot. Penalize large kappa."""
-    kappa = vals[robot_var].kappa
-    return (kappa * weight).flatten()
+    """Computes the residual penalizing the difference between the current state and the rest pose."""
+    # TODO: This is a hack to get the rest pose of the robot. Need to fix this.
+    state = vals[robot_var]
+    return ((state.base_position)).flatten() * weight
