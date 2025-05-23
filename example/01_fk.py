@@ -9,6 +9,7 @@ DISABLE_JIT = False
 if DISABLE_JIT:
     import os
     import jax
+
     os.environ["JAX_DISABLE_JIT"] = "True"
     jax.config.update("jax_disable_jit", True)
 
@@ -27,4 +28,8 @@ state = ConstantCurvatureState(
 )
 
 pose = robot.forward_kinematics(state)
-visualize_pcc_model_2d(pose, num_points=robot.config.num_points_per_section, save_path="visualization/forward_kinematics.png")
+visualize_pcc_model_2d(
+    pose,
+    num_points=robot.config.num_points_per_section,
+    save_path="visualization/forward_kinematics.png",
+)

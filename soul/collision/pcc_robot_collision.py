@@ -26,26 +26,31 @@ class RobotCollision:
     def from_config(cls, config_dict: dict | str) -> RobotCollision:
         if isinstance(config_dict, str):
             config_dict = json.load(open(config_dict))
-        
+
         length = config_dict["length"]
         num_sections = config_dict["num_sections"]
         num_points_per_section = config_dict["num_points_per_section"]
         radius = config_dict["radius"]
 
         sphere_list = list[Sphere]()
-        length_range = jnp.linspace(0, length * num_sections, num_sections * num_points_per_section)
+        length_range = jnp.linspace(
+            0, length * num_sections, num_sections * num_points_per_section
+        )
         for i in range(num_sections):
             for j in range(num_points_per_section):
                 sphere_list.append(
-                    Sphere.from_center_and_radius(jnp.array([0, 0, length_range[i * num_points_per_section + j]]), radius)
+                    Sphere.from_center_and_radius(
+                        jnp.array([0, 0, length_range[i * num_points_per_section + j]]),
+                        radius,
+                    )
                 )
-        spheres = cast(Sphere, jax.tree.map(lambda *args: jnp.stack(args), *sphere_list))
+        spheres = cast(
+            Sphere, jax.tree.map(lambda *args: jnp.stack(args), *sphere_list)
+        )
         return cls(coll=spheres)
 
     @jdc.jit
-    def at_state(
-        self, robot: PCCRobot, state: ConstantCurvatureState
-    ) -> CollGeom:
+    def at_state(self, robot: PCCRobot, state: ConstantCurvatureState) -> CollGeom:
         all_poses = robot.forward_kinematics(state)
         all_poses_se3 = jaxlie.SE3.from_matrix(all_poses)
         return self.coll.set_transform(all_poses_se3)

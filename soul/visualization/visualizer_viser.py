@@ -7,26 +7,27 @@ from ..collision.geometry import Sphere
 
 
 class ViserSoftRobot:
-    def __init__(self, 
-        server: viser.ViserServer | viser.ClientHandle, 
+    def __init__(
+        self,
+        server: viser.ViserServer | viser.ClientHandle,
         robot_coll: RobotCollision,
-        root_node_name: str
+        root_node_name: str,
     ):
         self.server = server
         self.robot_coll = robot_coll
         self.root_node_name = root_node_name
         self.sphere_handles = []
-        
+
         # Create initial spheres with default positions (will be updated later)
         self._create_sphere_visualizations()
-        
+
     def _create_sphere_visualizations(self):
         """Create sphere visualizations for the robot collision model."""
         # Clear any existing sphere handles
         # for handle in self.sphere_handles:
         #     handle.remove()
         self.sphere_handles = []
-        
+
         # Assume spheres have a consistent radius across the robot
         # This is a reasonable assumption based on how RobotCollision is initialized
         if isinstance(self.robot_coll.coll, Sphere):
@@ -42,12 +43,12 @@ class ViserSoftRobot:
                     ).to_trimesh(),
                 )
                 self.sphere_handles.append(sphere_handle)
-    
+
     def update_cfg(self, all_poses: jnp.ndarray):
         """Update visualization with new robot configuration poses."""
         # This method is called with the output of robot.forward_kinematics()
         self.update_pose(all_poses)
-    
+
     def update_pose(self, all_poses: jnp.ndarray):
         """Update visualization with new poses."""
         # Convert the robot poses to sphere positions

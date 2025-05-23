@@ -33,8 +33,12 @@ class PCCModelConfig:
         """Creates a config object from a dictionary."""
         if isinstance(config_dict, str):
             config_dict = json.load(open(config_dict))
-        
-        opt_mask = config_dict["opt_base_position_mask"] + [config_dict["opt_kappa"]] * config_dict["num_sections"] + [config_dict["opt_phi"]] * config_dict["num_sections"]
+
+        opt_mask = (
+            config_dict["opt_base_position_mask"]
+            + [config_dict["opt_kappa"]] * config_dict["num_sections"]
+            + [config_dict["opt_phi"]] * config_dict["num_sections"]
+        )
 
         return cls(
             num_sections=config_dict["num_sections"],
@@ -54,6 +58,7 @@ class ConstantCurvatureState:
     State of the PCC model (kappa, phi per section).
     Length is fixed by PCCModelConfig.
     """
+
     base_position: Float[Array, "3"]
     kappa: Float[Array, "num_sections"]  # Curvature for each section
     phi: Float[Array, "num_sections"]  # Rotation angle (phi) for each section
@@ -64,17 +69,22 @@ class ConstantCurvatureState:
             kappa=self.kappa - other.kappa,
             phi=self.phi - other.phi,
         )
-    
+
     def flatten(self) -> Float[Array, "3 + num_sections + num_sections"]:
         return jnp.concatenate([self.base_position, self.kappa, self.phi])
-    
 
 
-def interpolate_states(start_state: ConstantCurvatureState, end_state: ConstantCurvatureState, timesteps: int) -> ConstantCurvatureState:
+def interpolate_states(
+    start_state: ConstantCurvatureState,
+    end_state: ConstantCurvatureState,
+    timesteps: int,
+) -> ConstantCurvatureState:
     """
     Interpolates between two states.
     """
-    base_position = jnp.linspace(start_state.base_position, end_state.base_position, timesteps)
+    base_position = jnp.linspace(
+        start_state.base_position, end_state.base_position, timesteps
+    )
     kappa = jnp.linspace(start_state.kappa, end_state.kappa, timesteps)
     phi = jnp.linspace(start_state.phi, end_state.phi, timesteps)
     return ConstantCurvatureState(base_position=base_position, kappa=kappa, phi=phi)
@@ -97,7 +107,9 @@ class PCCRobot:
 
         config = PCCModelConfig.from_config(config_dict)
 
-        def retract_fn(cfg: ConstantCurvatureState, delta: jax.Array) -> ConstantCurvatureState:
+        def retract_fn(
+            cfg: ConstantCurvatureState, delta: jax.Array
+        ) -> ConstantCurvatureState:
             """Same as jaxls.SE3Var.retract_fn, but removing updates on certain axes."""
             delta = delta * config.opt_mask
             return jaxls.Var._euclidean_retract(cfg, delta)
@@ -107,10 +119,10 @@ class PCCRobot:
             default_cfg = ConstantCurvatureState(
                 base_position=jnp.zeros(3),
                 kappa=random.uniform(
-                    key, 
-                    (config.num_sections,), 
-                    minval=config.lower_limits_kappa, 
-                    maxval=config.upper_limits_kappa
+                    key,
+                    (config.num_sections,),
+                    minval=config.lower_limits_kappa,
+                    maxval=config.upper_limits_kappa,
                 ),
                 phi=jnp.zeros((config.num_sections,)),
             )
@@ -132,50 +144,66 @@ class PCCRobot:
         return robot
 
     @jdc.jit
-    def _forward_kinematics(self, state: ConstantCurvatureState) -> Float[Array, "num_sections 4 4"]:
+    def _forward_kinematics(
+        self, state: ConstantCurvatureState
+    ) -> Float[Array, "num_sections 4 4"]:
         def build_transform(s, p):
             kappa = state.kappa[s]
             phi = state.phi[s]
-            l = p * self.config.length / (self.config.num_points_per_section - 1)  # scale to [0, length]
-            
+            l = (
+                p * self.config.length / (self.config.num_points_per_section - 1)
+            )  # scale to [0, length]
+
             cos_phi = jnp.cos(phi)
             sin_phi = jnp.sin(phi)
             cos_kl = jnp.cos(kappa * l)
             sin_kl = jnp.sin(kappa * l)
-            
+
             is_small = jnp.isclose(kappa, 0.0)
-            x_trans = jnp.where(is_small, 0.0, cos_phi * (cos_kl - 1.0)/kappa)
-            y_trans = jnp.where(is_small, 0.0, sin_phi * (cos_kl - 1.0)/kappa)
-            z_trans = jnp.where(is_small, l, sin_kl/kappa)
-            
-            Ts_matrix = jnp.array([
-                [cos_phi * cos_kl, -sin_phi, -cos_phi * sin_kl, x_trans],
-                [sin_phi * sin_kl, cos_phi, -sin_phi * sin_kl, y_trans],
-                [sin_kl, 0.0, cos_kl, z_trans],
-                [0.0, 0.0, 0.0, 1.0]
-            ])
-            
+            x_trans = jnp.where(is_small, 0.0, cos_phi * (cos_kl - 1.0) / kappa)
+            y_trans = jnp.where(is_small, 0.0, sin_phi * (cos_kl - 1.0) / kappa)
+            z_trans = jnp.where(is_small, l, sin_kl / kappa)
+
+            Ts_matrix = jnp.array(
+                [
+                    [cos_phi * cos_kl, -sin_phi, -cos_phi * sin_kl, x_trans],
+                    [sin_phi * sin_kl, cos_phi, -sin_phi * sin_kl, y_trans],
+                    [sin_kl, 0.0, cos_kl, z_trans],
+                    [0.0, 0.0, 0.0, 1.0],
+                ]
+            )
+
             return Ts_matrix
-        
+
         # Create indices for all segment-point pairs
-        segment_indices = jnp.repeat(jnp.arange(self.config.num_sections), self.config.num_points_per_section)
-        point_indices = jnp.tile(jnp.arange(self.config.num_points_per_section), self.config.num_sections)
-        
+        segment_indices = jnp.repeat(
+            jnp.arange(self.config.num_sections), self.config.num_points_per_section
+        )
+        point_indices = jnp.tile(
+            jnp.arange(self.config.num_points_per_section), self.config.num_sections
+        )
+
         # Vectorize the transform building across all segment-point pairs
         transform_matrices = jax.vmap(build_transform)(segment_indices, point_indices)
-        
+
         # Process each segment separately using JAX's scan
         final_poses = []
-        base_transform = jnp.array([
-            [1, 0, 0, state.base_position[0]],
-            [0, 1, 0, state.base_position[1]],
-            [0, 0, 1, state.base_position[2]],
-            [0, 0, 0, 1]
-        ])
+        base_transform = jnp.array(
+            [
+                [1, 0, 0, state.base_position[0]],
+                [0, 1, 0, state.base_position[1]],
+                [0, 0, 1, state.base_position[2]],
+                [0, 0, 0, 1],
+            ]
+        )
         prev_pose = jnp.tile(base_transform, (self.config.num_points_per_section, 1, 1))
-        
+
         for i in range(self.config.num_sections):
-            segment_transforms = transform_matrices[i*self.config.num_points_per_section:(i+1)*self.config.num_points_per_section]
+            segment_transforms = transform_matrices[
+                i
+                * self.config.num_points_per_section : (i + 1)
+                * self.config.num_points_per_section
+            ]
             segment_poses = jnp.matmul(prev_pose, segment_transforms)
             final_poses.append(segment_poses)
             prev_pose = segment_poses[-1]
@@ -183,7 +211,9 @@ class PCCRobot:
         all_poses = jnp.concatenate(final_poses)
         return all_poses
 
-    def forward_kinematics(self, state: ConstantCurvatureState) -> Float[Array, "*batch num_sections 4 4"]:
+    def forward_kinematics(
+        self, state: ConstantCurvatureState
+    ) -> Float[Array, "*batch num_sections 4 4"]:
         if state.kappa.ndim == 1:
             return self._forward_kinematics(state)
         else:

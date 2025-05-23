@@ -4,6 +4,7 @@ import jax
 import numpy as np
 import matplotlib.pyplot as plt
 
+
 def _plot_sphere(ax, center, radius):
 
     # Create a mesh grid for the sphere

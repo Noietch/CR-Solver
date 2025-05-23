@@ -9,6 +9,7 @@ from ..collision.pcc_robot_collision import RobotCollision
 from ..collision.geometry import CollGeom
 from ..collision.collision import colldist_from_sdf, collide
 
+
 @Cost.create_factory
 def pose_cost(
     vals: VarValues,
@@ -37,11 +38,23 @@ def limit_cost(
 ) -> Array:
     """Computes the residual penalizing joint limit violations."""
     state = vals[robot_var]
-    residual_upper_kappa = jnp.maximum(0.0, state.kappa - robot.config.upper_limits_kappa)
-    residual_lower_kappa = jnp.maximum(0.0, robot.config.lower_limits_kappa - state.kappa)
+    residual_upper_kappa = jnp.maximum(
+        0.0, state.kappa - robot.config.upper_limits_kappa
+    )
+    residual_lower_kappa = jnp.maximum(
+        0.0, robot.config.lower_limits_kappa - state.kappa
+    )
     residual_upper_phi = jnp.maximum(0.0, state.phi - robot.config.upper_limits_phi)
     residual_lower_phi = jnp.maximum(0.0, robot.config.lower_limits_phi - state.phi)
-    return ((residual_upper_kappa + residual_lower_kappa + residual_upper_phi + residual_lower_phi) * weight).flatten()
+    return (
+        (
+            residual_upper_kappa
+            + residual_lower_kappa
+            + residual_upper_phi
+            + residual_lower_phi
+        )
+        * weight
+    ).flatten()
 
 
 @Cost.create_factory
@@ -86,7 +99,7 @@ def smoothness_cost(
     weight: Array | float,
 ) -> Array:
     """Computes the residual penalizing joint configuration differences (velocity)."""
-    return ((vals[curr_robot_var] - vals[past_robot_var])).flatten()  * weight
+    return ((vals[curr_robot_var] - vals[past_robot_var])).flatten() * weight
 
 
 @Cost.create_factory

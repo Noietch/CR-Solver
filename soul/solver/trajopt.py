@@ -18,10 +18,9 @@ from ..costs import (
     smoothness_cost,
     continuous_collision_cost,
     boundary_cost,
-    start_end_similarity_cost
+    start_end_similarity_cost,
 )
 from ..solver import solve_ik
-
 
 
 def solve_trajopt(
@@ -103,6 +102,3 @@ def solve_trajopt(
         )
     )
     return solution[traj_vars]
-
-
-

@@ -2,6 +2,7 @@
 
 Simplest Inverse Kinematics Example using PyRoki.
 """
+
 import time
 import viser
 import numpy as np
@@ -15,8 +16,10 @@ DISABLE_JIT = False
 if DISABLE_JIT:
     import os
     import jax
+
     os.environ["JAX_DISABLE_JIT"] = "True"
     jax.config.update("jax_disable_jit", True)
+
 
 def main():
     # Setup Environment
@@ -31,7 +34,10 @@ def main():
     )
     robot_vis = ViserSoftRobot(server, robot_coll, root_node_name="/robot")
     start_handle = server.scene.add_transform_controls(
-        "/start", scale=0.3, position=(0.0, 0.0, robot.config.length * robot.config.num_sections), wxyz=(1, 0, 0, 0)
+        "/start",
+        scale=0.3,
+        position=(0.0, 0.0, robot.config.length * robot.config.num_sections),
+        wxyz=(1, 0, 0, 0),
     )
     end_handle = server.scene.add_transform_controls(
         "/end", scale=0.3, position=(0.3, -0.6, 2.5), wxyz=(1, 0, 0, 0)
@@ -54,7 +60,17 @@ def main():
             position=np.array(sphere_handle.position),
             wxyz=np.array(sphere_handle.wxyz),
         )
-        cfg = solve_trajopt(robot, robot_coll, [plane_coll, sphere_coll_world_current], start_handle.position, start_handle.wxyz, end_handle.position, end_handle.wxyz, timesteps, dt)
+        cfg = solve_trajopt(
+            robot,
+            robot_coll,
+            [plane_coll, sphere_coll_world_current],
+            start_handle.position,
+            start_handle.wxyz,
+            end_handle.position,
+            end_handle.wxyz,
+            timesteps,
+            dt,
+        )
         traj = robot.forward_kinematics(cfg)
         for i in range(timesteps):
             time.sleep(dt)
@@ -70,9 +86,10 @@ def main():
 
     plan_button.on_click(plan_callback)
     replay_button.on_click(replay_callback)
-    
+
     while True:
         time.sleep(0.01)
+
 
 if __name__ == "__main__":
     main()
