@@ -6,7 +6,7 @@ import time
 import viser
 import numpy as np
 from soul.robots.pcc_robot import PCCRobot
-from soul.solver import solve_ik_with_collision_mobile
+from soul.solver import solve_ik
 from soul.collision import HalfSpace, RobotCollision, Sphere
 from soul.visualization.visualizer_viser import ViserSoftRobot
 
@@ -47,7 +47,7 @@ def main():
             wxyz=np.array(sphere_handle.wxyz),
         )
         start_time = time.time()
-        cfg, _ = solve_ik_with_collision_mobile(robot, robot_coll, [plane_coll, sphere_coll_world_current], ik_target_handle.position, ik_target_handle.wxyz)
+        cfg, _ = solve_ik(robot, robot_coll, [plane_coll, sphere_coll_world_current], ik_target_handle.position, ik_target_handle.wxyz)
         pose = robot.forward_kinematics(cfg)
         elapsed_time = time.time() - start_time
         timing_handle.value = 0.99 * timing_handle.value + 0.01 * (elapsed_time * 1000)

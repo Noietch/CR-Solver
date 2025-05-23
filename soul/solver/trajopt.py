@@ -20,7 +20,7 @@ from ..costs import (
     boundary_cost,
     start_end_similarity_cost
 )
-from ..solver import solve_ik_with_collision
+from ..solver import solve_ik
 
 
 

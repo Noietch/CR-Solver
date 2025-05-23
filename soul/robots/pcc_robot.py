@@ -8,6 +8,7 @@ import jaxls
 import jaxlie
 from jax import Array
 from jax import numpy as jnp
+from jax import random
 from jaxtyping import Float
 
 
@@ -102,9 +103,15 @@ class PCCRobot:
             return jaxls.Var._euclidean_retract(cfg, delta)
 
         if default_cfg is None:
+            key = random.PRNGKey(0)
             default_cfg = ConstantCurvatureState(
                 base_position=jnp.zeros(3),
-                kappa=jnp.ones((config.num_sections,)),
+                kappa=random.uniform(
+                    key, 
+                    (config.num_sections,), 
+                    minval=config.lower_limits_kappa, 
+                    maxval=config.upper_limits_kappa
+                ),
                 phi=jnp.zeros((config.num_sections,)),
             )
         else:
