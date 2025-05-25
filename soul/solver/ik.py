@@ -118,7 +118,7 @@ def _solve_ik_jax_with_coll(
     ]
     factors.extend(
         [
-            world_collision_cost(robot, coll, robot_var, world_coll, 0.05, 5.0)
+            world_collision_cost(robot, coll, robot_var, world_coll, 0.05, 10.0)
             for world_coll in world_coll_list
         ]
     )

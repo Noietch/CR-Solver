@@ -37,7 +37,7 @@ def main():
         "/ik_target",
         scale=0.8,
         position=(0.0, 0.0, robot.config.length * robot.config.num_sections),
-        wxyz=(0, 0, 1, 0),
+        wxyz=(1, 0, 0, 0),
     )
     sphere_handle = server.scene.add_transform_controls(
         "/obstacle", scale=0.8, position=(0.8, 0.8, 0.8)

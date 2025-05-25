@@ -118,12 +118,7 @@ class PCCRobot:
             key = random.PRNGKey(0)
             default_cfg = ConstantCurvatureState(
                 base_position=jnp.zeros(3),
-                kappa=random.uniform(
-                    key,
-                    (config.num_sections,),
-                    minval=config.lower_limits_kappa,
-                    maxval=config.upper_limits_kappa,
-                ),
+                kappa=jnp.ones((config.num_sections,)),
                 phi=jnp.zeros((config.num_sections,)),
             )
         else:
