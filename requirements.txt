@@ -1,0 +1,9 @@
+jax[cuda12]
+optax
+matplotlib
+tqdm
+viser
+jax_dataclasses
+jaxlie
+jaxtyping
+git+https://github.com/brentyi/jaxls.git
