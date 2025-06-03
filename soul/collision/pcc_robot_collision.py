@@ -67,6 +67,48 @@ class RobotCollision:
         swept_capsules = Capsule.from_sphere_pairs(coll_prev, coll_next)
         return swept_capsules
 
+    def compute_self_collision_distance(
+        self,
+        robot: PCCRobot,
+        cfg: Float[Array, "*batch actuated_count"],
+    ) -> Float[Array, "*batch num_active_pairs"]:
+        """
+        Computes the signed distances for active self-collision pairs.
+
+        Args:
+            robot_coll: The robot's collision model with precomputed active pair indices.
+            robot: The robot's kinematic model.
+            cfg: The robot configuration (actuated joints).
+
+        Returns:
+            Signed distances for each active pair.
+            Shape: (*batch, num_active_pairs).
+            Positive distance means separation, negative means penetration.
+        """
+        batch_axes = cfg.shape[:-1]
+        num_points = robot.config.num_points_per_section * robot.config.num_sections
+        # 1. Get collision geometry at the current config
+        coll = self.at_state(robot, cfg)
+        assert coll.get_batch_axes() == (*batch_axes, num_points)
+
+        # 2. Compute all pairwise distances using the imported function
+        dist_matrix = pairwise_collide(coll, coll)
+        assert dist_matrix.shape == (
+            *batch_axes,
+            num_points,
+            num_points,
+        )
+
+        # 3. Extract distances for the precomputed active pairs
+        # Use advanced indexing with the stored indices
+        active_distances = dist_matrix[..., self.active_idx_i, self.active_idx_j]
+
+        # Expected shape check
+        num_active_pairs = len(self.active_idx_i)
+        assert active_distances.shape == (*batch_axes, num_active_pairs)
+
+        return active_distances
+
     def compute_world_collision_distance(
         self,
         robot: PCCRobot,

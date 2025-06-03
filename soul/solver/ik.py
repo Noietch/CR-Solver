@@ -8,10 +8,13 @@ import jax_dataclasses as jdc
 import jaxlie
 import jaxls
 import numpy as np
-from ..robots.pcc_robot import PCCRobot
+from ..robots.pcc_robot import PCCRobot, ConstantCurvatureState
 from ..costs import pose_cost, limit_cost, world_collision_cost
 from ..collision import RobotCollision, CollGeom
 from typing import Sequence
+
+
+from .utils import newton_raphson, roberts_sequence
 
 
 def solve_ik(
