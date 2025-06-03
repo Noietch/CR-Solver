@@ -16,19 +16,21 @@ if DISABLE_JIT:
     jax.config.update("jax_disable_jit", True)
 
 
-def ik_metric(result_transform: jaxlie.SE3, target_position: jax.Array, target_orientation: jax.Array) -> float:
+def ik_metric(
+    result_transform: jaxlie.SE3,
+    target_position: jax.Array,
+    target_orientation: jax.Array,
+) -> float:
     result_position = result_transform.translation()
     result_orientation = result_transform.rotation()
 
     position_error = jnp.linalg.norm(result_position - target_position, axis=-1)
     position_threshold: float = 0.001
     rotation_threshold: float = 0.05
-    
+
     orientation_error = jnp.linalg.norm(
         jnp.array(
-            (
-                jaxlie.SO3(target_orientation).inverse() @ result_orientation
-            ).log()
+            (jaxlie.SO3(target_orientation).inverse() @ result_orientation).log()
         ),
         axis=-1,
     )
@@ -45,13 +47,13 @@ def ik_metric(result_transform: jaxlie.SE3, target_position: jax.Array, target_o
     )
 
 
-
-
 def eval_ik_with_no_coll():
     """Main function for basic IK."""
     robot = PCCRobot.from_config("configs/robots/pcc_2d.json")
-    
-    solver = IKSolver(robot, num_seeds_init=64, num_seeds_final=4, total_steps=16, init_steps=6)
+
+    solver = IKSolver(
+        robot, num_seeds_init=64, num_seeds_final=4, total_steps=16, init_steps=6
+    )
     batched_ik_solve = jax.vmap(jax.jit(solver.solve_ik))
 
     # sample target transforms
@@ -69,7 +71,7 @@ def eval_ik_with_no_coll():
     solution = batched_ik_solve(target_wxyz, target_position)
     jax.block_until_ready(solution)
     total_time = (time.time() - start) / target_wxyz.shape[0]
-    
+
     # get solved tip transforms
     fk_result = robot.forward_kinematics(solution)
     tip_transforms = jaxlie.SE3.from_matrix(fk_result[:, -1, ...])

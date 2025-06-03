@@ -37,12 +37,8 @@ def solve_trajopt(
     """
     Solves the Trajectory Optimization problem.
     """
-    start_cfg, _ = solve_ik(
-        robot, coll, world_coll_list, start_position, start_wxyz
-    )
-    end_cfg, _ = solve_ik(
-        robot, coll, world_coll_list, end_position, end_wxyz
-    )
+    start_cfg, _ = solve_ik(robot, coll, world_coll_list, start_position, start_wxyz)
+    end_cfg, _ = solve_ik(robot, coll, world_coll_list, end_position, end_wxyz)
     init_traj = interpolate_states(start_cfg, end_cfg, timesteps)
     # return init_traj
     traj_vars = robot.var_cls(jnp.arange(timesteps))

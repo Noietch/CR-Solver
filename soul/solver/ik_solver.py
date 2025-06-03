@@ -4,13 +4,23 @@ import jaxlie
 import jax.numpy as jnp
 
 from ..robots.pcc_robot import PCCRobot, ConstantCurvatureState
-from ..solver.utils import roberts_sequence, newton_raphson                  
+from ..solver.utils import roberts_sequence, newton_raphson
 from ..solver.ik import pose_cost, limit_cost
 
+
 class IKSolver:
-    def __init__(self, robot: PCCRobot, num_seeds_init: int, num_seeds_final: int, total_steps: int, init_steps: int):
+    def __init__(
+        self,
+        robot: PCCRobot,
+        num_seeds_init: int,
+        num_seeds_final: int,
+        total_steps: int,
+        init_steps: int,
+    ):
         self.robot = robot
-        self.sample_root = newton_raphson(lambda x: x ** (robot.config.num_sections + 1) - x - 1, 1.0, 10_000)
+        self.sample_root = newton_raphson(
+            lambda x: x ** (robot.config.num_sections + 1) - x - 1, 1.0, 10_000
+        )
         self.num_seeds_init = num_seeds_init
         self.num_seeds_final = num_seeds_final
         self.total_steps = total_steps
@@ -19,12 +29,14 @@ class IKSolver:
     def sample_states(self, num_states: int) -> ConstantCurvatureState:
         kappa = self.robot.config.lower_limits_kappa + roberts_sequence(
             num_states, self.robot.config.num_sections, self.sample_root
-        ) * (self.robot.config.upper_limits_kappa - self.robot.config.lower_limits_kappa)
-        
+        ) * (
+            self.robot.config.upper_limits_kappa - self.robot.config.lower_limits_kappa
+        )
+
         phi = self.robot.config.lower_limits_phi + roberts_sequence(
-            num_states, self.robot.config.num_sections, self.sample_root    
+            num_states, self.robot.config.num_sections, self.sample_root
         ) * (self.robot.config.upper_limits_phi - self.robot.config.lower_limits_phi)
-        
+
         states = ConstantCurvatureState(
             base_position=jnp.zeros((num_states, 3)),
             kappa=kappa,
@@ -32,9 +44,8 @@ class IKSolver:
         )
         return states
 
-
     def solve_ik(self, target_wxyz: jax.Array, target_position: jax.Array) -> jax.Array:
-        
+
         def solve_one(
             initial_states: jax.Array, lambda_initial: float | jax.Array, max_iters: int
         ) -> tuple[jax.Array, jaxls.SolveSummary]:
@@ -89,16 +100,20 @@ class IKSolver:
         # Get the best initial solutions.
         best_initial_sols = jnp.argsort(
             summary.cost_history[jnp.arange(self.num_seeds_init), -1]
-        )[:self.num_seeds_final]
-        
+        )[: self.num_seeds_final]
+
         # Optimize more for the best initial solutions.
         best_sols, summary = vmapped_solve(
             initial_sols[best_initial_sols],
-            summary.lambda_history[jnp.arange(self.num_seeds_init), -1][best_initial_sols],
+            summary.lambda_history[jnp.arange(self.num_seeds_init), -1][
+                best_initial_sols
+            ],
             self.total_steps - self.init_steps,
         )
         return best_sols[
             jnp.argmin(
-                summary.cost_history[jnp.arange(self.num_seeds_final), summary.iterations]
+                summary.cost_history[
+                    jnp.arange(self.num_seeds_final), summary.iterations
+                ]
             )
         ]

@@ -2,6 +2,7 @@ import jax
 import jax.numpy as jnp
 from jax import lax
 
+
 def newton_raphson(f, x, iters):
     """Use the Newton-Raphson method to find a root of the given function."""
 
