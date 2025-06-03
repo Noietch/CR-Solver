@@ -56,11 +56,11 @@ def main():
         )
         start_time = time.time()
         cfg, _ = solve_ik(
-            robot,
-            robot_coll,
-            [plane_coll, sphere_coll_world_current],
-            ik_target_handle.position,
-            ik_target_handle.wxyz,
+            robot=robot,
+            coll=robot_coll,
+            world_coll_list=[plane_coll, sphere_coll_world_current],
+            target_position=ik_target_handle.position,
+            target_wxyz=ik_target_handle.wxyz,
         )
         pose = robot.forward_kinematics(cfg)
         elapsed_time = time.time() - start_time

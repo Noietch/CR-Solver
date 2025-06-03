@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>2D Obstacle Editor</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+    <div class="container">
+        <h1>2D Obstacle Editor</h1>
+        <div class="controls">
+            <div class="control-group">
+                <label for="gridSize">Grid Size:</label>
+                <input type="number" id="gridSize" min="5" max="50" value="20">
+            </div>
+            <div class="control-group">
+                <label for="radius">Obstacle Radius:</label>
+                <input type="number" id="radius" min="0.01" max="0.1" step="0.01" value="0.02">
+            </div>
+            <div class="control-group">
+                <button id="addObstacle">Add Obstacle</button>
+                <button id="removeObstacle">Remove Selected</button>
+                <button id="clearAll">Clear All</button>
+            </div>
+            <div class="control-group">
+                <button id="exportJson">Export JSON</button>
+            </div>
+        </div>
+
+        <div class="editor-container">
+            <div class="grid-container">
+                <canvas id="gridCanvas"></canvas>
+            </div>
+            <div class="obstacle-list">
+                <h3>Obstacles</h3>
+                <div id="obstaclesList"></div>
+            </div>
+        </div>
+
+        <div class="target-position">
+            <h3>Target Position</h3>
+            <p class="instruction">Hold Shift + Click on the grid to set target position</p>
+            <p class="instruction">All obstacles and targets snap to grid points automatically</p>
+            <div class="control-group">
+                <label for="targetX">X:</label>
+                <input type="number" id="targetX" step="0.05" value="0.05">
+                <label for="targetY">Y:</label>
+                <input type="number" id="targetY" step="0.05" value="0.0">
+                <label for="targetZ">Z:</label>
+                <input type="number" id="targetZ" step="0.00" value="0.2">
+            </div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+
+</html>
