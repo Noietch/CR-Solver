@@ -27,7 +27,7 @@ if DISABLE_JIT:
 
 def main():
     """Main function for basic IK."""
-    robot = PCCRobot.from_config("configs/pcc_2d.json")
+    robot = PCCRobot.from_config("configs/robots/pcc_2d.json")
     target_wxyz = np.array([0, 0, 1, 0])
     target_position = np.array([0.0, 0.0, 4.0])
     cfg, summary = solve_ik(robot, target_wxyz, target_position)
@@ -71,5 +71,5 @@ def viser_main():
 
 
 if __name__ == "__main__":
-    # main()
-    viser_main()
+    main()
+    # viser_main()
