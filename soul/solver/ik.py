@@ -9,7 +9,7 @@ import jaxlie
 import jaxls
 import numpy as np
 from ..robots.pcc_robot import PCCRobot, ConstantCurvatureState
-from ..costs import pose_cost, limit_cost, world_collision_cost
+from ..costs import pose_cost, limit_cost, world_collision_cost, self_collision_cost
 from ..collision import RobotCollision, CollGeom
 from typing import Sequence
 
@@ -118,6 +118,7 @@ def _solve_ik_jax_with_coll(
             robot_var,
             weight=100.0,
         ),
+        self_collision_cost(robot, coll, robot_var, 0.05, 10.0),
     ]
     factors.extend(
         [

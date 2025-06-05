@@ -73,6 +73,21 @@ def world_collision_cost(
     residual = colldist_from_sdf(dist_matrix, margin)
     return (residual * weight).flatten()
 
+@Cost.create_factory
+def self_collision_cost(
+    vals: VarValues,
+    robot: PCCRobot,
+    robot_coll: RobotCollision,
+    joint_var: Var[Array],
+    margin: float,
+    weight: Array | float,
+) -> Array:
+    """Computes the residual penalizing self-collisions below a margin."""
+    cfg = vals[joint_var]
+    active_distances = robot_coll.compute_self_collision_distance(robot, cfg)
+    residual = colldist_from_sdf(active_distances, margin)
+    return (residual * weight).flatten()
+
 
 @Cost.create_factory
 def continuous_collision_cost(

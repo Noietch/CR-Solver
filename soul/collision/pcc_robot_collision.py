@@ -22,8 +22,16 @@ class RobotCollision:
 
     coll: CollGeom
 
+    active_idx_i: Int[Array, "*batch num_active_pairs"]
+
+    active_idx_j: Int[Array, "*batch num_active_pairs"]
+
     @classmethod
-    def from_config(cls, config_dict: dict | str) -> RobotCollision:
+    def from_config(cls, config_dict: dict | str,
+        random_key: int = 0,
+        self_collision_sampling_rate: float = 0.3,
+        skip_section: int = 1,
+    ) -> RobotCollision:
         if isinstance(config_dict, str):
             config_dict = json.load(open(config_dict))
 
@@ -47,7 +55,35 @@ class RobotCollision:
         spheres = cast(
             Sphere, jax.tree.map(lambda *args: jnp.stack(args), *sphere_list)
         )
-        return cls(coll=spheres)
+        active_idx_i, active_idx_j = RobotCollision.build_self_collision_pairs(num_points_per_section, num_sections, random_key=random_key, sampling_rate=self_collision_sampling_rate, skip_section=skip_section)
+        robot_coll = cls(coll=spheres, active_idx_i=active_idx_i, active_idx_j=active_idx_j)
+        return robot_coll
+    
+    @staticmethod
+    def build_self_collision_pairs(
+        num_points_per_section: int,
+        num_sections: int,
+        skip_section: int = 1,
+        sampling_rate: int = 0.3,
+        random_key: int = 0,
+    ) -> None:
+        """
+        Args:
+            num_points_per_section: The number of points per section.
+            num_sections: The number of sections.
+            skip_section: The number of sections to skip between checking pairs.
+        Builds the self-collision pairs for the robot.
+        """
+        random_key, subkey = jax.random.split(jax.random.PRNGKey(random_key))
+        num_points = num_points_per_section * num_sections
+        active_idx_i, active_idx_j = [], []
+        for i in range(num_points):
+            for j in range(num_points):
+                is_sampled = jax.random.uniform(subkey) < sampling_rate
+                if is_sampled and i + skip_section < j:
+                    active_idx_i.append(i)
+                    active_idx_j.append(j)
+        return jnp.array(active_idx_i), jnp.array(active_idx_j)
 
     @jdc.jit
     def at_state(self, robot: PCCRobot, state: ConstantCurvatureState) -> CollGeom:
@@ -85,28 +121,11 @@ class RobotCollision:
             Shape: (*batch, num_active_pairs).
             Positive distance means separation, negative means penetration.
         """
-        batch_axes = cfg.shape[:-1]
-        num_points = robot.config.num_points_per_section * robot.config.num_sections
-        # 1. Get collision geometry at the current config
+        
         coll = self.at_state(robot, cfg)
-        assert coll.get_batch_axes() == (*batch_axes, num_points)
-
-        # 2. Compute all pairwise distances using the imported function
         dist_matrix = pairwise_collide(coll, coll)
-        assert dist_matrix.shape == (
-            *batch_axes,
-            num_points,
-            num_points,
-        )
-
-        # 3. Extract distances for the precomputed active pairs
-        # Use advanced indexing with the stored indices
         active_distances = dist_matrix[..., self.active_idx_i, self.active_idx_j]
-
-        # Expected shape check
-        num_active_pairs = len(self.active_idx_i)
-        assert active_distances.shape == (*batch_axes, num_active_pairs)
-
+        
         return active_distances
 
     def compute_world_collision_distance(
