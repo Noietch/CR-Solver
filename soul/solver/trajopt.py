@@ -19,6 +19,9 @@ from ..costs import (
     continuous_collision_cost,
     boundary_cost,
     start_end_similarity_cost,
+    five_point_velocity_cost,
+    five_point_acceleration_cost,
+    five_point_jerk_cost,
 )
 from ..solver import solve_ik
 
@@ -37,8 +40,20 @@ def solve_trajopt(
     """
     Solves the Trajectory Optimization problem.
     """
-    start_cfg, _ = solve_ik(robot, coll, world_coll_list, start_position, start_wxyz)
-    end_cfg, _ = solve_ik(robot, coll, world_coll_list, end_position, end_wxyz)
+    start_cfg, _ = solve_ik(
+        robot=robot,
+        coll=coll,
+        world_coll_list=world_coll_list,
+        target_position=start_position,
+        target_wxyz=start_wxyz,
+    )
+    end_cfg, _ = solve_ik(
+        robot=robot,
+        coll=coll,
+        world_coll_list=world_coll_list,
+        target_position=end_position,
+        target_wxyz=end_wxyz,
+    )
     init_traj = interpolate_states(start_cfg, end_cfg, timesteps)
     # return init_traj
     traj_vars = robot.var_cls(jnp.arange(timesteps))
@@ -85,6 +100,40 @@ def solve_trajopt(
                 robot.var_cls(jnp.arange(1, timesteps)),
             )
         )
+    # Distance Btw
+
+    # factors.extend(
+    #     [
+    #         five_point_velocity_cost(
+    #             robot,
+    #             robot.var_cls(jnp.arange(4, timesteps)),
+    #             robot.var_cls(jnp.arange(3, timesteps - 1)),
+    #             robot.var_cls(jnp.arange(1, timesteps - 3)),
+    #             robot.var_cls(jnp.arange(0, timesteps - 4)),
+    #             dt,
+    #             jnp.array([10.0])[None],
+    #         ),
+    #         five_point_acceleration_cost(
+    #             robot.var_cls(jnp.arange(2, timesteps - 2)),
+    #             robot.var_cls(jnp.arange(4, timesteps)),
+    #             robot.var_cls(jnp.arange(3, timesteps - 1)),
+    #             robot.var_cls(jnp.arange(1, timesteps - 3)),
+    #             robot.var_cls(jnp.arange(0, timesteps - 4)),
+    #             dt,
+    #             jnp.array([0.1])[None],
+    #         ),
+    #         five_point_jerk_cost(
+    #             robot.var_cls(jnp.arange(6, timesteps)),
+    #             robot.var_cls(jnp.arange(5, timesteps - 1)),
+    #             robot.var_cls(jnp.arange(4, timesteps - 2)),
+    #             robot.var_cls(jnp.arange(2, timesteps - 4)),
+    #             robot.var_cls(jnp.arange(1, timesteps - 5)),
+    #             robot.var_cls(jnp.arange(0, timesteps - 6)),
+    #             dt,
+    #             jnp.array([0.1])[None],
+    #         ),
+    #     ]
+    # )
     # 4. Solve the optimization problem.
     solution = (
         jaxls.LeastSquaresProblem(
@@ -93,7 +142,7 @@ def solve_trajopt(
         )
         .analyze()
         .solve(
-            # with_verbose=False,
+            verbose=False,
             initial_vals=jaxls.VarValues.make((traj_vars.with_value(init_traj),)),
         )
     )

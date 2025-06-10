@@ -77,6 +77,9 @@ class ConstantCurvatureState:
             phi=self.phi[indices],
         )
 
+    def __len__(self) -> int:
+        return self.base_position.shape[0]
+
     def flatten(self) -> Float[Array, "3 + num_sections + num_sections"]:
         return jnp.concatenate([self.base_position, self.kappa, self.phi])
 

@@ -24,7 +24,9 @@ if DISABLE_JIT:
 
 def main():
     robot = PCCRobot.from_config("configs/robots/pcc_2d.json")
-    robot_coll = RobotCollision.from_config("configs/robots/pcc_2d.json", self_collision_sampling_rate=1)
+    robot_coll = RobotCollision.from_config(
+        "configs/robots/pcc_2d.json", self_collision_sampling_rate=1
+    )
     server = viser.ViserServer()
     plane_coll = HalfSpace.from_point_and_normal(
         np.array([0.0, 0.0, 0.0]), np.array([0.0, 0.0, 1.0])

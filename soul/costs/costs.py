@@ -73,6 +73,7 @@ def world_collision_cost(
     residual = colldist_from_sdf(dist_matrix, margin)
     return (residual * weight).flatten()
 
+
 @Cost.create_factory
 def self_collision_cost(
     vals: VarValues,
@@ -102,7 +103,8 @@ def continuous_collision_cost(
         robot, vals[prev_traj_vars], vals[curr_traj_vars]
     )
     dist = collide(coll.reshape(-1, 1), world_coll_obj.reshape(1, -1))
-    colldist = colldist_from_sdf(dist, 0.1)
+    colldist = colldist_from_sdf(dist, 0.05)
+    # jax.debug.breakpoint()
     return (colldist * 20.0).flatten()
 
 
@@ -164,3 +166,77 @@ def rest_base_cost(
     # TODO: This is a hack to get the rest pose of the robot. Need to fix this.
     state = vals[robot_var]
     return ((state.base_position)).flatten() * weight
+
+
+# --- Finite Difference Costs (Velocity, Acceleration, Jerk) ---
+
+
+@Cost.create_factory
+def five_point_velocity_cost(
+    vals: VarValues,
+    robot: PCCRobot,  # Needed for limits
+    var_t_plus_2: Var[Array],
+    var_t_plus_1: Var[Array],
+    var_t_minus_1: Var[Array],
+    var_t_minus_2: Var[Array],
+    dt: float,
+    weight: Array | float,
+) -> Array:
+    """Computes the residual penalizing velocity limit violations (5-point stencil)."""
+    q_tm2 = vals[var_t_minus_2].kappa
+    q_tm1 = vals[var_t_minus_1].kappa
+    q_tp1 = vals[var_t_plus_1].kappa
+    q_tp2 = vals[var_t_plus_2].kappa
+
+    velocity = (-q_tp2 + 8 * q_tp1 - 8 * q_tm1 + q_tm2) / (12 * dt)
+    vel_limits = 0
+    limit_violation = jnp.maximum(0.0, jnp.abs(velocity) - vel_limits)
+    return (limit_violation * weight).flatten()
+
+
+@Cost.create_factory
+def five_point_acceleration_cost(
+    vals: VarValues,
+    var_t: Var[Array],
+    var_t_plus_2: Var[Array],
+    var_t_plus_1: Var[Array],
+    var_t_minus_1: Var[Array],
+    var_t_minus_2: Var[Array],
+    dt: float,
+    weight: Array | float,
+) -> Array:
+    """Computes the residual minimizing joint acceleration (5-point stencil)."""
+    q_tm2 = vals[var_t_minus_2].kappa
+    q_tm1 = vals[var_t_minus_1].kappa
+    q_t = vals[var_t].kappa
+    q_tp1 = vals[var_t_plus_1].kappa
+    q_tp2 = vals[var_t_plus_2].kappa
+
+    acceleration = (-q_tp2 + 16 * q_tp1 - 30 * q_t + 16 * q_tm1 - q_tm2) / (12 * dt**2)
+    return (acceleration * weight).flatten()
+
+
+@Cost.create_factory
+def five_point_jerk_cost(
+    vals: VarValues,
+    var_t_plus_3: Var[Array],
+    var_t_plus_2: Var[Array],
+    var_t_plus_1: Var[Array],
+    var_t_minus_1: Var[Array],
+    var_t_minus_2: Var[Array],
+    var_t_minus_3: Var[Array],
+    dt: float,
+    weight: Array | float,
+) -> Array:
+    """Computes the residual minimizing joint jerk (7-point stencil)."""
+    q_tm3 = vals[var_t_minus_3].kappa
+    q_tm2 = vals[var_t_minus_2].kappa
+    q_tm1 = vals[var_t_minus_1].kappa
+    q_tp1 = vals[var_t_plus_1].kappa
+    q_tp2 = vals[var_t_plus_2].kappa
+    q_tp3 = vals[var_t_plus_3].kappa
+
+    jerk = (-q_tp3 + 8 * q_tp2 - 13 * q_tp1 + 13 * q_tm1 - 8 * q_tm2 + q_tm3) / (
+        8 * dt**3
+    )
+    return (jerk * weight).flatten()

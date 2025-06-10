@@ -27,7 +27,9 @@ class RobotCollision:
     active_idx_j: Int[Array, "*batch num_active_pairs"]
 
     @classmethod
-    def from_config(cls, config_dict: dict | str,
+    def from_config(
+        cls,
+        config_dict: dict | str,
         random_key: int = 0,
         self_collision_sampling_rate: float = 0.3,
         skip_section: int = 1,
@@ -55,10 +57,18 @@ class RobotCollision:
         spheres = cast(
             Sphere, jax.tree.map(lambda *args: jnp.stack(args), *sphere_list)
         )
-        active_idx_i, active_idx_j = RobotCollision.build_self_collision_pairs(num_points_per_section, num_sections, random_key=random_key, sampling_rate=self_collision_sampling_rate, skip_section=skip_section)
-        robot_coll = cls(coll=spheres, active_idx_i=active_idx_i, active_idx_j=active_idx_j)
+        active_idx_i, active_idx_j = RobotCollision.build_self_collision_pairs(
+            num_points_per_section,
+            num_sections,
+            random_key=random_key,
+            sampling_rate=self_collision_sampling_rate,
+            skip_section=skip_section,
+        )
+        robot_coll = cls(
+            coll=spheres, active_idx_i=active_idx_i, active_idx_j=active_idx_j
+        )
         return robot_coll
-    
+
     @staticmethod
     def build_self_collision_pairs(
         num_points_per_section: int,
@@ -121,11 +131,11 @@ class RobotCollision:
             Shape: (*batch, num_active_pairs).
             Positive distance means separation, negative means penetration.
         """
-        
+
         coll = self.at_state(robot, cfg)
         dist_matrix = pairwise_collide(coll, coll)
         active_distances = dist_matrix[..., self.active_idx_i, self.active_idx_j]
-        
+
         return active_distances
 
     def compute_world_collision_distance(

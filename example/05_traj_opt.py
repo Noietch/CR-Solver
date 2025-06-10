@@ -23,8 +23,8 @@ if DISABLE_JIT:
 
 def main():
     # Setup Environment
-    robot = PCCRobot.from_config("configs/pcc_2d.json")
-    robot_coll = RobotCollision.from_config("configs/pcc_2d.json")
+    robot = PCCRobot.from_config("configs/robots/pcc_2d.json")
+    robot_coll = RobotCollision.from_config("configs/robots/pcc_2d.json")
     server = viser.ViserServer()
     plane_coll = HalfSpace.from_point_and_normal(
         np.array([0.0, 0.0, 0.0]), np.array([0.0, 0.0, 1.0])
@@ -51,7 +51,7 @@ def main():
     replay_button = server.gui.add_button("Replay", disabled=False)
     # Set up trajopt parameters
     timesteps = 100
-    dt = 0.1
+    dt = 0.01
     traj = None
 
     def plan_callback(args):
@@ -63,7 +63,7 @@ def main():
         cfg = solve_trajopt(
             robot,
             robot_coll,
-            [plane_coll, sphere_coll_world_current],
+            [sphere_coll_world_current],
             start_handle.position,
             start_handle.wxyz,
             end_handle.position,
@@ -72,6 +72,7 @@ def main():
             dt,
         )
         traj = robot.forward_kinematics(cfg)
+        robot_vis.visualize_traj_collisions(robot, cfg)
         for i in range(timesteps):
             time.sleep(dt)
             robot_vis.update_pose(traj[i])

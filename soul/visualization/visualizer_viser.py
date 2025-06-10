@@ -3,7 +3,8 @@ import numpy as np
 import jax.numpy as jnp
 import jaxlie
 from ..collision.pcc_robot_collision import RobotCollision
-from ..collision.geometry import Sphere
+from ..collision.geometry import Sphere, Capsule
+from ..robots.pcc_robot import ConstantCurvatureState, PCCRobot
 
 
 class ViserSoftRobot:
@@ -59,3 +60,15 @@ class ViserSoftRobot:
             # wxyz = se3.rotation().wxyz
             handle.position = np.array(position)
             # handle.wxyz = np.array(wxyz)
+
+    def visualize_traj_collisions(self, robot: PCCRobot, cfg: ConstantCurvatureState):
+        """Visualize a capsule."""
+        for i in range(len(cfg) - 1):
+            swept_capsules = self.robot_coll.get_swept_capsules(
+                robot, cfg[i], cfg[i + 1]
+            )
+            sphere_handle = self.server.scene.add_mesh_trimesh(
+                name=f"{self.root_node_name}_traj_collisions/swept_capsule_{i}",
+                mesh=swept_capsules.to_trimesh(),
+            )
+            self.sphere_handles.append(sphere_handle)
