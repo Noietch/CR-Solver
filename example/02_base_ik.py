@@ -48,8 +48,8 @@ def main():
 
 
 def viser_main():
-    robot = PCCRobot.from_config("configs/pcc_2d.json")
-    robot_coll = RobotCollision.from_config("configs/pcc_2d.json")
+    robot = PCCRobot.from_config("configs/robots/pcc_2d.json")
+    robot_coll = RobotCollision.from_config("configs/robots/pcc_2d.json")
     server = viser.ViserServer()
     robot_vis = ViserSoftRobot(server, robot_coll, root_node_name="/robot")
     ik_target_handle = server.scene.add_transform_controls(
@@ -71,5 +71,5 @@ def viser_main():
 
 
 if __name__ == "__main__":
-    main()
-    # viser_main()
+    # main()
+    viser_main()
