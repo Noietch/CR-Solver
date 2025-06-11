@@ -76,7 +76,7 @@ def eval_ik_with_no_coll(robot: PCCRobot, eval_num: int, batched_ik_solve, batch
     """Main function for basic IK."""
     ax = create_figure()
     num_sections = robot.config.num_sections
-    test_plot_path = f"benchmark/visualization/test_eval_num{eval_num}_num_sections{num_sections}"
+    test_plot_path = f"soul/visualization/test_eval_num{eval_num}_num_sections{num_sections}"
 
     print(f"start solve ik of num sections {num_sections}, num eval {eval_num}")
 
