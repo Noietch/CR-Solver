@@ -44,7 +44,7 @@ class IKSolver:
         )
         return states
 
-    def solve_ik(self, target_wxyz: jax.Array, target_position: jax.Array) -> jax.Array:
+    def solve_ik(self, target_wxyz: jax.Array, target_position: jax.Array, output_best_sol: bool = True) -> jax.Array:
 
         def solve_one(
             initial_states: jax.Array, lambda_initial: float | jax.Array, max_iters: int
@@ -110,10 +110,13 @@ class IKSolver:
             ],
             self.total_steps - self.init_steps,
         )
-        return best_sols[
-            jnp.argmin(
-                summary.cost_history[
-                    jnp.arange(self.num_seeds_final), summary.iterations
-                ]
-            )
-        ]
+        if output_best_sol: 
+            return best_sols[
+                jnp.argmin(
+                    summary.cost_history[
+                        jnp.arange(self.num_seeds_final), summary.iterations
+                    ]
+                )
+            ]  
+        else:
+            return best_sols
