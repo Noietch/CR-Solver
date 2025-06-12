@@ -132,7 +132,7 @@ def eval_ik_all_sections(section_list: list, eval_num_list: list):
         solver = IKSolver(
             robot, num_seeds_init=64, num_seeds_final=4, total_steps=16, init_steps=6
         )
-        batched_ik_solve = jax.vmap(jax.jit(solver.solve_ik))
+        batched_ik_solve = jax.vmap(jax.jit(solver.solve_ik_best))
         for eval_num in eval_num_list:
             all_results_summary.append(eval_ik_with_no_coll(robot, eval_num, batched_ik_solve, batched_fk))
 

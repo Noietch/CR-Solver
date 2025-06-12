@@ -2,6 +2,7 @@ import jax
 import jaxls
 import jaxlie
 import jax.numpy as jnp
+import jax_dataclasses as jdc
 
 from ..robots.pcc_robot import PCCRobot, ConstantCurvatureState
 from ..solver.utils import roberts_sequence, newton_raphson
@@ -44,7 +45,8 @@ class IKSolver:
         )
         return states
 
-    def solve_ik(self, target_wxyz: jax.Array, target_position: jax.Array, output_best_sol: bool = True) -> jax.Array:
+
+    def solve_ik(self, target_wxyz: jax.Array, target_position: jax.Array) -> jax.Array:
 
         def solve_one(
             initial_states: jax.Array, lambda_initial: float | jax.Array, max_iters: int
@@ -110,13 +112,15 @@ class IKSolver:
             ],
             self.total_steps - self.init_steps,
         )
-        if output_best_sol: 
-            return best_sols[
-                jnp.argmin(
-                    summary.cost_history[
-                        jnp.arange(self.num_seeds_final), summary.iterations
-                    ]
-                )
-            ]  
-        else:
-            return best_sols
+        return best_sols, summary
+
+
+    def solve_ik_best(self, target_wxyz: jax.Array, target_position: jax.Array) -> jax.Array:
+        best_sols, summary = self.solve_ik(target_wxyz, target_position)
+        return best_sols[
+            jnp.argmin(
+                summary.cost_history[
+                    jnp.arange(self.num_seeds_final), summary.iterations
+                ]
+            )
+        ]   

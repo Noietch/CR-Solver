@@ -83,7 +83,6 @@ class ConstantCurvatureState:
     def flatten(self) -> Float[Array, "3 + num_sections + num_sections"]:
         return jnp.concatenate([self.base_position, self.kappa, self.phi])
 
-
 def interpolate_states(
     start_state: ConstantCurvatureState,
     end_state: ConstantCurvatureState,

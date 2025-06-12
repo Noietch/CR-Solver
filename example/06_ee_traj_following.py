@@ -12,7 +12,7 @@ from soul.collision import HalfSpace, RobotCollision, Sphere
 from soul.visualization.visualizer_viser import ViserSoftRobot
 from soul.visualization.visualizer_plot import visualize_pcc_model_3d
 from soul.envs.obs_env import ObstacleEnv
-from soul.solver.traj_follow import solve_ee_traj_follow
+from soul.solver.traj_follow import solve_ee_traj_follow, solve_ee_traj_follow_dp
 
 
 
@@ -35,6 +35,46 @@ def circle_traj(traj_length:int):
     return np.stack(position_list), np.stack(wxyz_list)
 
 
+def square_traj(traj_length:int):
+    position_list, wxyz_list = [], []
+    
+    # Define square parameters
+    side_length = 1.0  # Size of the square
+    center = np.array([0, 0, 2.5])  # Center of the square
+    
+    # Divide trajectory into 4 sides
+    points_per_side = traj_length // 4
+    
+    for i in range(traj_length):
+        side = i // points_per_side
+        t = (i % points_per_side) / points_per_side if points_per_side > 0 else 0
+        
+        if side == 0:  # Bottom side: left to right
+            position = center + np.array([-side_length/2 + t*side_length, -side_length/2, 0])
+        elif side == 1:  # Right side: bottom to top
+            position = center + np.array([side_length/2, -side_length/2 + t*side_length, 0])
+        elif side == 2:  # Top side: right to left
+            position = center + np.array([side_length/2 - t*side_length, side_length/2, 0])
+        else:  # Left side: top to bottom
+            position = center + np.array([-side_length/2, side_length/2 - t*side_length, 0])
+        
+        wxyz = np.array([1, 0, 0, 0])
+        position_list.append(position)
+        wxyz_list.append(wxyz)
+    
+    return np.stack(position_list), np.stack(wxyz_list)
+
+
+def line_traj(traj_length:int):
+    position_list, wxyz_list = [], []
+    line_length = 1.0
+    for i in range(traj_length):
+        position = np.array([i/traj_length*line_length, 0, 2.5])
+        wxyz = np.array([1, 0, 0, 0])
+        position_list.append(position)
+        wxyz_list.append(wxyz)
+    return np.stack(position_list), np.stack(wxyz_list)
+
 def main():
     robot_config = "configs/robots/pcc_2d.json"
     map_config = "configs/maps/obstacles.json"
@@ -44,8 +84,8 @@ def main():
     robot_coll = RobotCollision.from_config(
         robot_config, self_collision_sampling_rate=1
     )
-    ee_traj = circle_traj(100)
-    solution = solve_ee_traj_follow(robot, ee_traj[0], ee_traj[1])
+    ee_traj = line_traj(10)
+    solution = solve_ee_traj_follow_dp(robot, ee_traj[0], ee_traj[1])
     fk_result = robot.forward_kinematics(solution)
     visualize_pcc_model_3d(fk_result, target_position=ee_traj[0], save_path="visualization/ee_traj_following.png", num_points=num_points)
 
