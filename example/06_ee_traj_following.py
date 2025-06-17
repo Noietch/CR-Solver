@@ -29,7 +29,7 @@ if DISABLE_JIT:
 def circle_traj(traj_length:int):
     position_list, wxyz_list = [], []
     for i in range(traj_length):
-        position = np.array([np.cos(i/traj_length*2*np.pi), np.sin(i/traj_length*2*np.pi), 2.5])
+        position = np.array([np.cos(i/traj_length*2*np.pi), np.sin(i/traj_length*2*np.pi), 3.5])
         wxyz = np.array([1, 0, 0, 0])
         position_list.append(position)
         wxyz_list.append(wxyz)
@@ -70,7 +70,7 @@ def line_traj(traj_length:int):
     position_list, wxyz_list = [], []
     line_length = 1.0
     for i in range(traj_length):
-        position = np.array([i/traj_length*line_length, 0, 2.5])
+        position = np.array([i/traj_length*line_length, 0, 3.5])
         wxyz = np.array([1, 0, 0, 0])
         position_list.append(position)
         wxyz_list.append(wxyz)
@@ -83,7 +83,7 @@ traj_func_dict = {
 }
 
 def test_diverse_ik():
-    robot = PCCRobot.from_config("configs/robots/pcc_2d.json")
+    robot = PCCRobot.from_config("configs/robots/pcc.json")
     soltion_num = 10
     target_wxyz = jnp.array([0, 0, 0, 1])
     target_position = jnp.array([0.0, 0.0, 2.5])
@@ -105,10 +105,10 @@ def test_diverse_ik():
 
 
 def main():
-    robot_config = "configs/robots/pcc_2d.json"
+    robot_config = "configs/robots/pcc.json"
     map_config = "configs/maps/obstacles.json"
     traj_type = "circle"
-    traj_length = 100
+    traj_length = 40
 
     robot = PCCRobot.from_config(robot_config)
     num_points = robot.config.num_points_per_section
@@ -122,7 +122,7 @@ def main():
 
 
 def viser_main():
-    robot_config = "configs/robots/pcc_2d.json"
+    robot_config = "configs/robots/pcc.json"
     map_config = "configs/maps/obstacles.json"
 
     robot = PCCRobot.from_config(robot_config)
@@ -162,5 +162,5 @@ def viser_main():
         time.sleep(0.01)
 
 if __name__ == "__main__":
-    # main()
-    test_diverse_ik()
+    main()
+    # test_diverse_ik()

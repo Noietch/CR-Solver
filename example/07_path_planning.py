@@ -50,9 +50,9 @@ def test_biased_sample_nodes(robot: PCCRobot, graph_planner: GraphPlanner, num_n
 
 
 def main():
-    robot = PCCRobot.from_config("configs/robots/pcc_2d.json")
+    robot = PCCRobot.from_config("configs/robots/pcc.json")
     robot_coll = RobotCollision.from_config(
-        "configs/robots/pcc_2d.json", self_collision_sampling_rate=1
+        "configs/robots/pcc.json", self_collision_sampling_rate=1
     )
     sphere_coll = Sphere.from_center_and_radius(
         np.array([0.0, 0.0, 0.0]), np.array([0.2])

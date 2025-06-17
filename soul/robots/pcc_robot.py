@@ -21,8 +21,8 @@ class PCCModelConfig:
     length: jdc.Static[float]
 
     # kappa_range and phi_range
-    lower_limits_kappa: Float[Array, "num_sections"]
-    upper_limits_kappa: Float[Array, "num_sections"]
+    lower_limits_theta: Float[Array, "num_sections"]
+    upper_limits_theta: Float[Array, "num_sections"]
     lower_limits_phi: Float[Array, "num_sections"]
     upper_limits_phi: Float[Array, "num_sections"]
 
@@ -45,8 +45,8 @@ class PCCModelConfig:
             num_points_per_section=config_dict["num_points_per_section"],
             length=config_dict["length"],
             opt_mask=jnp.array(opt_mask, dtype=jnp.bool),
-            lower_limits_kappa=jnp.array(config_dict["lower_limits_kappa"]),
-            upper_limits_kappa=jnp.array(config_dict["upper_limits_kappa"]),
+            lower_limits_theta=jnp.array(config_dict["lower_limits_theta"]),
+            upper_limits_theta=jnp.array(config_dict["upper_limits_theta"]),
             lower_limits_phi=jnp.array(config_dict["lower_limits_phi"]),
             upper_limits_phi=jnp.array(config_dict["upper_limits_phi"]),
         )
@@ -164,15 +164,15 @@ class PCCRobot:
             sin_kl = jnp.sin(kappa * l)
 
             is_small = jnp.isclose(kappa, 0.0)
-            x_trans = jnp.where(is_small, 0.0, cos_phi * (cos_kl - 1.0) / kappa)
-            y_trans = jnp.where(is_small, 0.0, sin_phi * (cos_kl - 1.0) / kappa)
+            x_trans = jnp.where(is_small, 0.0, cos_phi * (1.0 - cos_kl) / kappa)
+            y_trans = jnp.where(is_small, 0.0, sin_phi * (1.0 - cos_kl) / kappa)
             z_trans = jnp.where(is_small, l, sin_kl / kappa)
 
             Ts_matrix = jnp.array(
                 [
-                    [cos_phi * cos_kl, -sin_phi, -cos_phi * sin_kl, x_trans],
-                    [sin_phi * sin_kl, cos_phi, -sin_phi * sin_kl, y_trans],
-                    [sin_kl, 0.0, cos_kl, z_trans],
+                    [cos_phi * cos_phi * (cos_kl - 1.0) + 1.0, sin_phi * cos_phi * (cos_kl - 1.0), cos_phi * sin_kl, x_trans],
+                    [sin_phi * cos_phi * (cos_kl - 1.0), sin_phi * sin_phi * (cos_kl - 1.0) + 1.0, sin_phi * sin_kl, y_trans],
+                    [-cos_phi * sin_kl, -sin_phi * sin_kl, cos_kl, z_trans],
                     [0.0, 0.0, 0.0, 1.0],
                 ]
             )

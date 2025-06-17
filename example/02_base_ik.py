@@ -27,7 +27,7 @@ if DISABLE_JIT:
 
 def main():
     """Main function for basic IK."""
-    robot = PCCRobot.from_config("configs/robots/pcc_2d.json")
+    robot = PCCRobot.from_config("configs/robots/pcc.json")
     target_wxyz = np.array([0, 0, 1, 0])
     target_position = np.array([0.0, 0.0, 4.0])
     cfg, summary = solve_ik(robot, target_wxyz, target_position)
@@ -48,8 +48,8 @@ def main():
 
 
 def viser_main():
-    robot = PCCRobot.from_config("configs/robots/pcc_2d.json")
-    robot_coll = RobotCollision.from_config("configs/robots/pcc_2d.json")
+    robot = PCCRobot.from_config("configs/robots/pcc.json")
+    robot_coll = RobotCollision.from_config("configs/robots/pcc.json")
     server = viser.ViserServer()
     robot_vis = ViserSoftRobot(server, robot_coll, root_node_name="/robot")
     ik_target_handle = server.scene.add_transform_controls(

@@ -54,8 +54,8 @@ def sample_states_test(robot: PCCRobot, num_states: int) -> ConstantCurvatureSta
     kappa = jax.random.uniform(
         key=subkey,
         shape=(num_states, robot.config.num_sections),
-        minval=robot.config.lower_limits_kappa,
-        maxval=robot.config.upper_limits_kappa,
+        minval=robot.config.lower_limits_theta,
+        maxval=robot.config.upper_limits_theta,
     )
     phi = jax.random.uniform(
         key=subkey,
@@ -127,7 +127,9 @@ def eval_ik_with_no_coll(robot: PCCRobot, eval_num: int, batched_ik_solve, batch
 def eval_ik_all_sections(section_list: list, eval_num_list: list):
     all_results_summary = []
     for num_sections in section_list:
-        robot = PCCRobot.from_config(f"configs/robots/pcc_2d_{num_sections}.json")
+        config = json.load(open(f"configs/robots/pcc.json"))
+        config["num_sections"] = num_sections
+        robot = PCCRobot.from_config(config)
         batched_fk = jax.vmap(robot._forward_kinematics)
         solver = IKSolver(
             robot, num_seeds_init=64, num_seeds_final=4, total_steps=16, init_steps=6

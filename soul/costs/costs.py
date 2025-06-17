@@ -38,11 +38,12 @@ def limit_cost(
 ) -> Array:
     """Computes the residual penalizing joint limit violations."""
     state = vals[robot_var]
+    theta = state.kappa * robot.config.length
     residual_upper_kappa = jnp.maximum(
-        0.0, state.kappa - robot.config.upper_limits_kappa
+        0.0, theta - robot.config.upper_limits_theta
     )
     residual_lower_kappa = jnp.maximum(
-        0.0, robot.config.lower_limits_kappa - state.kappa
+        0.0, robot.config.lower_limits_theta - theta
     )
     residual_upper_phi = jnp.maximum(0.0, state.phi - robot.config.upper_limits_phi)
     residual_lower_phi = jnp.maximum(0.0, robot.config.lower_limits_phi - state.phi)

@@ -13,7 +13,7 @@ if DISABLE_JIT:
     os.environ["JAX_DISABLE_JIT"] = "True"
     jax.config.update("jax_disable_jit", True)
 
-robot = PCCRobot.from_config("configs/pcc_2d.json")
+robot = PCCRobot.from_config("configs/robots/pcc.json")
 
 batch_state = ConstantCurvatureState(
     base_position=jnp.array([[0, 0, 0], [0, 0, 0]]),

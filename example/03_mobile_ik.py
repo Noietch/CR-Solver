@@ -23,7 +23,7 @@ if DISABLE_JIT:
 
 
 def main():
-    robot_config = "configs/robots/pcc_2d_mobile.json"
+    robot_config = "configs/robots/pcc_mobile.json"
     map_config = "configs/maps/obstacles.json"
 
     robot = PCCRobot.from_config(robot_config)

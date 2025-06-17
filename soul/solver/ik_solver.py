@@ -28,10 +28,10 @@ class IKSolver:
         self.init_steps = init_steps
 
     def sample_states(self, num_states: int) -> ConstantCurvatureState:
-        kappa = self.robot.config.lower_limits_kappa + roberts_sequence(
+        kappa = self.robot.config.lower_limits_theta + roberts_sequence(
             num_states, self.robot.config.num_sections, self.sample_root
         ) * (
-            self.robot.config.upper_limits_kappa - self.robot.config.lower_limits_kappa
+            self.robot.config.upper_limits_theta - self.robot.config.lower_limits_theta
         )
 
         phi = self.robot.config.lower_limits_phi + roberts_sequence(
