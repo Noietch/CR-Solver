@@ -71,7 +71,7 @@ def solve_trajopt(
         smoothness_cost(
             robot.var_cls(jnp.arange(1, timesteps)),
             robot.var_cls(jnp.arange(0, timesteps - 1)),
-            jnp.array([0.1])[None],
+            jnp.array([5])[None],
         ),
     ]
 
