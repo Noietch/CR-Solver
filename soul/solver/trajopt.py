@@ -17,6 +17,7 @@ from ..costs import (
     limit_cost,
     smoothness_cost,
     continuous_collision_cost,
+    trajectory_length_cost,
     boundary_cost,
     start_end_similarity_cost,
     five_point_velocity_cost,
@@ -71,7 +72,13 @@ def solve_trajopt(
         smoothness_cost(
             robot.var_cls(jnp.arange(1, timesteps)),
             robot.var_cls(jnp.arange(0, timesteps - 1)),
-            jnp.array([5])[None],
+            jnp.array([5.0])[None],
+        ),
+        trajectory_length_cost(
+            robot,
+            robot.var_cls(jnp.arange(1, timesteps)),
+            robot.var_cls(jnp.arange(0, timesteps - 1)),
+            jnp.array([5.0])[None],
         ),
     ]
 

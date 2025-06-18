@@ -167,6 +167,24 @@ def rest_base_cost(
     state = vals[robot_var]
     return ((state.base_position)).flatten() * weight
 
+@Cost.create_factory
+def trajectory_length_cost(
+    vals: VarValues,
+    robot: PCCRobot,
+    curr_robot_var: Var[ConstantCurvatureState],
+    past_robot_var: Var[ConstantCurvatureState],
+    weight: Array | float,
+) -> Array:
+    """Computes the residual penalizing the total path length of the end-effector."""
+    prev_states = vals[past_robot_var]
+    curr_states = vals[curr_robot_var]
+    prev_poses = robot.forward_kinematics(prev_states)
+    curr_poses = robot.forward_kinematics(curr_states)
+    prev_ee_positions = prev_poses[-1, :3, 3]
+    curr_ee_positions = curr_poses[-1, :3, 3]
+    diffs = curr_ee_positions - prev_ee_positions
+    dists = jnp.linalg.norm(diffs, axis=-1)
+    return (dists * weight).flatten()
 
 # --- Finite Difference Costs (Velocity, Acceleration, Jerk) ---
 

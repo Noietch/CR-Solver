@@ -5,6 +5,7 @@ from soul.robots.pcc_robot import PCCRobot
 from soul.solver import solve_trajopt
 from soul.collision import HalfSpace, RobotCollision, Sphere
 from soul.visualization.visualizer_viser import ViserSoftRobot
+from soul.visualization.visualizer_plot import visualize_pcc_model_3d
 
 DISABLE_JIT = False
 
@@ -15,8 +16,37 @@ if DISABLE_JIT:
     os.environ["JAX_DISABLE_JIT"] = "True"
     jax.config.update("jax_disable_jit", True)
 
-
 def main():
+    robot = PCCRobot.from_config("configs/robots/pcc.json")
+    robot_coll = RobotCollision.from_config("configs/robots/pcc.json")
+    start_position = np.array([0.0, 0.0, robot.config.length * robot.config.num_sections])
+    start_wxyz = np.array([1.0, 0.0, 0.0, 0.0])
+    end_position = np.array([0.3, -0.6, 2.5])
+    end_wxyz = np.array([1.0, 0.0, 0.0, 0.0])
+
+    timesteps = 100
+    dt = 0.01
+    solution = solve_trajopt(
+        robot,
+        robot_coll,
+        world_coll_list=[],
+        start_position=start_position,
+        start_wxyz=start_wxyz,
+        end_position=end_position,
+        end_wxyz=end_wxyz,
+        timesteps=timesteps,
+        dt=dt,
+    )
+    pose = robot.forward_kinematics(solution)
+    visualize_pcc_model_3d(
+        pose,
+        target_position=np.concatenate([start_position[None], end_position[None]], axis=0),
+        num_points=robot.config.num_points_per_section,
+        save_path="visualization/traj_opt_result.png",
+    )
+
+
+def viser_main():
     # Setup Environment
     robot = PCCRobot.from_config("configs/robots/pcc.json")
     robot_coll = RobotCollision.from_config("configs/robots/pcc.json")
@@ -88,4 +118,5 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    # main()
+    viser_main()
