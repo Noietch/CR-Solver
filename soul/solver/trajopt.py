@@ -2,12 +2,10 @@
 Solves the Trajectory Optimization problem.
 """
 
-from typing import Sequence
+import functools
 
 import jax
 import jax.numpy as jnp
-import jax_dataclasses as jdc
-import jaxlie
 import jaxls
 import numpy as np
 
@@ -18,139 +16,100 @@ from ..costs import (
     smoothness_cost,
     continuous_collision_cost,
     trajectory_length_cost,
-    boundary_cost,
-    start_end_similarity_cost,
-    five_point_velocity_cost,
-    five_point_acceleration_cost,
-    five_point_jerk_cost,
 )
-from ..solver import solve_ik
+from .ik_solver import IKSolver
 
 
-def solve_trajopt(
-    robot: PCCRobot,
-    coll: RobotCollision,
-    world_coll_list: Sequence[CollGeom],
-    start_position: np.ndarray,
-    start_wxyz: np.ndarray,
-    end_position: np.ndarray,
-    end_wxyz: np.ndarray,
-    timesteps: int,
-    dt: float,
-) -> np.ndarray:
-    """
-    Solves the Trajectory Optimization problem.
-    """
-    start_cfg, _ = solve_ik(
-        robot=robot,
-        coll=coll,
-        world_coll_list=world_coll_list,
-        target_position=start_position,
-        target_wxyz=start_wxyz,
-    )
-    end_cfg, _ = solve_ik(
-        robot=robot,
-        coll=coll,
-        world_coll_list=world_coll_list,
-        target_position=end_position,
-        target_wxyz=end_wxyz,
-    )
-    init_traj = interpolate_states(start_cfg, end_cfg, timesteps)
-    # return init_traj
-    traj_vars = robot.var_cls(jnp.arange(timesteps))
-
-    robot = jax.tree.map(lambda x: x[None], robot)  # Add batch dimension.
-    robot_coll = jax.tree.map(lambda x: x[None], coll)  # Add batch dimension.
-
-    # Basic regularization / limit costs.
-    factors: list[jaxls.Cost] = [
-        limit_cost(
+class TrajOptSolver:
+    def __init__(self, robot: PCCRobot, coll: RobotCollision, timesteps: int):
+        self.timesteps = timesteps
+        self.robot = robot
+        self.coll = coll
+        self.ik_solver = IKSolver(
             robot,
-            traj_vars,
-            jnp.array([100.0])[None],
-        ),
-        smoothness_cost(
-            robot.var_cls(jnp.arange(1, timesteps)),
-            robot.var_cls(jnp.arange(0, timesteps - 1)),
-            jnp.array([5.0])[None],
-        ),
-        trajectory_length_cost(
-            robot,
-            robot.var_cls(jnp.arange(1, timesteps)),
-            robot.var_cls(jnp.arange(0, timesteps - 1)),
-            jnp.array([5.0])[None],
-        ),
-    ]
+            num_seeds_init=10,
+            num_seeds_final=1,
+            total_steps=64,
+            init_steps=6,
+            coll=coll,
+        )
+        self._ik_solver_best = jax.jit(self.ik_solver.solve_ik_best_with_coll)
 
-    factors.extend(
-        [
-            jaxls.Cost(
-                lambda vals, var: ((vals[var] - start_cfg)).flatten() * 100.0,
-                (robot.var_cls(jnp.arange(0, 2)),),
-                name="start_pose_constraint",
+        self._robot_batch = jax.tree.map(lambda x: x[None], self.robot)
+        self._robot_coll_batch = jax.tree.map(lambda x: x[None], self.coll)
+
+    def solve(
+        self,
+        world_coll: CollGeom,
+        start_position: np.ndarray,
+        start_wxyz: np.ndarray,
+        end_position: np.ndarray,
+        end_wxyz: np.ndarray,
+    ):
+        """
+        Solves the Trajectory Optimization problem.
+        """
+        start_cfg = self._ik_solver_best(start_wxyz, start_position, world_coll)
+        end_cfg = self._ik_solver_best(end_wxyz, end_position, world_coll)
+        init_traj = interpolate_states(start_cfg, end_cfg, self.timesteps)
+        # return init_traj
+        traj_vars = self.robot.var_cls(jnp.arange(self.timesteps))
+
+        # 1. Basic regularization / limit costs.
+        factors: list[jaxls.Cost] = [
+            limit_cost(
+                self._robot_batch,
+                traj_vars,
+                jnp.array([100.0])[None],
             ),
-            jaxls.Cost(
-                lambda vals, var: ((vals[var] - end_cfg)).flatten() * 100.0,
-                (robot.var_cls(jnp.arange(timesteps - 2, timesteps)),),
-                name="end_pose_constraint",
+            smoothness_cost(
+                self.robot.var_cls(jnp.arange(1, self.timesteps)),
+                self.robot.var_cls(jnp.arange(0, self.timesteps - 1)),
+                jnp.array([10.0])[None],
+            ),
+            trajectory_length_cost(
+                self._robot_batch,
+                self.robot.var_cls(jnp.arange(1, self.timesteps)),
+                self.robot.var_cls(jnp.arange(0, self.timesteps - 1)),
+                jnp.array([10.0])[None],
             ),
         ]
-    )
-    # Collision avoidance.
-    for world_coll_obj in world_coll_list:
-        factors.append(
-            continuous_collision_cost(
-                robot,
-                robot_coll,
-                jax.tree.map(lambda x: x[None], world_coll_obj),
-                robot.var_cls(jnp.arange(0, timesteps - 1)),
-                robot.var_cls(jnp.arange(1, timesteps)),
+        # 2. Add start and end pose constraints.
+        factors.extend(
+            [
+                jaxls.Cost(
+                    lambda vals, var: ((vals[var] - start_cfg)).flatten() * 100.0,
+                    (self.robot.var_cls(jnp.arange(0, 2)),),
+                    name="start_pose_constraint",
+                ),
+                jaxls.Cost(
+                    lambda vals, var: ((vals[var] - end_cfg)).flatten() * 100.0,
+                    (self.robot.var_cls(jnp.arange(self.timesteps - 2, self.timesteps)),),
+                    name="end_pose_constraint",
+                ),
+            ]
+        )
+        # 3. Add collision avoidance costs.
+        for world_coll_obj in world_coll:
+            factors.append(
+                continuous_collision_cost(
+                    self._robot_batch,
+                    self._robot_coll_batch,
+                    jax.tree.map(lambda x: x[None], world_coll_obj),
+                    self.robot.var_cls(jnp.arange(0, self.timesteps - 1)),
+                        self.robot.var_cls(jnp.arange(1, self.timesteps)),
+                )
+            )
+        # 5. Solve the optimization problem.
+        solution = (
+            jaxls.LeastSquaresProblem(
+                factors,
+                [traj_vars],
+            )
+            .analyze()
+            .solve(
+                verbose=False,
+                initial_vals=jaxls.VarValues.make((traj_vars.with_value(init_traj),)),
             )
         )
-    # Distance Btw
-
-    # factors.extend(
-    #     [
-    #         five_point_velocity_cost(
-    #             robot,
-    #             robot.var_cls(jnp.arange(4, timesteps)),
-    #             robot.var_cls(jnp.arange(3, timesteps - 1)),
-    #             robot.var_cls(jnp.arange(1, timesteps - 3)),
-    #             robot.var_cls(jnp.arange(0, timesteps - 4)),
-    #             dt,
-    #             jnp.array([10.0])[None],
-    #         ),
-    #         five_point_acceleration_cost(
-    #             robot.var_cls(jnp.arange(2, timesteps - 2)),
-    #             robot.var_cls(jnp.arange(4, timesteps)),
-    #             robot.var_cls(jnp.arange(3, timesteps - 1)),
-    #             robot.var_cls(jnp.arange(1, timesteps - 3)),
-    #             robot.var_cls(jnp.arange(0, timesteps - 4)),
-    #             dt,
-    #             jnp.array([0.1])[None],
-    #         ),
-    #         five_point_jerk_cost(
-    #             robot.var_cls(jnp.arange(6, timesteps)),
-    #             robot.var_cls(jnp.arange(5, timesteps - 1)),
-    #             robot.var_cls(jnp.arange(4, timesteps - 2)),
-    #             robot.var_cls(jnp.arange(2, timesteps - 4)),
-    #             robot.var_cls(jnp.arange(1, timesteps - 5)),
-    #             robot.var_cls(jnp.arange(0, timesteps - 6)),
-    #             dt,
-    #             jnp.array([0.1])[None],
-    #         ),
-    #     ]
-    # )
-    # 4. Solve the optimization problem.
-    solution = (
-        jaxls.LeastSquaresProblem(
-            factors,
-            [traj_vars],
-        )
-        .analyze()
-        .solve(
-            verbose=False,
-            initial_vals=jaxls.VarValues.make((traj_vars.with_value(init_traj),)),
-        )
-    )
-    return solution[traj_vars]
+        return solution[traj_vars]

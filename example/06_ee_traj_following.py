@@ -4,7 +4,6 @@ import numpy as np
 import jax
 import jax.numpy as jnp
 from soul.robots.pcc_robot import PCCRobot
-from soul.solver import solve_ik
 from soul.collision import HalfSpace, RobotCollision, Sphere
 from soul.visualization.visualizer_viser import ViserSoftRobot
 from soul.visualization.visualizer_plot import visualize_pcc_model_3d
@@ -82,9 +81,6 @@ def test_diverse_ik():
     soltion_num = 10
     target_wxyz = jnp.array([0, 0, 0, 1])
     target_position = jnp.array([0.0, 0.0, 2.5])
-    cfg, summary = solve_ik(robot, target_wxyz, target_position)
-    print("finish solve ik, final_delta", summary.termination_deltas)
-    pose = robot.forward_kinematics(cfg)
     solver = IKSolver(
         robot, num_seeds_init=3, num_seeds_final=soltion_num, total_steps=64, init_steps=6
     )
