@@ -39,12 +39,8 @@ def limit_cost(
     """Computes the residual penalizing joint limit violations."""
     state = vals[robot_var]
     theta = state.kappa * robot.config.length
-    residual_upper_kappa = jnp.maximum(
-        0.0, theta - robot.config.upper_limits_theta
-    )
-    residual_lower_kappa = jnp.maximum(
-        0.0, robot.config.lower_limits_theta - theta
-    )
+    residual_upper_kappa = jnp.maximum(0.0, theta - robot.config.upper_limits_theta)
+    residual_lower_kappa = jnp.maximum(0.0, robot.config.lower_limits_theta - theta)
     residual_upper_phi = jnp.maximum(0.0, state.phi - robot.config.upper_limits_phi)
     residual_lower_phi = jnp.maximum(0.0, robot.config.lower_limits_phi - state.phi)
     return (
@@ -167,6 +163,7 @@ def rest_base_cost(
     state = vals[robot_var]
     return ((state.base_position)).flatten() * weight
 
+
 @Cost.create_factory
 def trajectory_length_cost(
     vals: VarValues,
@@ -185,6 +182,7 @@ def trajectory_length_cost(
     diffs = curr_ee_positions - prev_ee_positions
     dists = jnp.linalg.norm(diffs, axis=-1)
     return (dists * weight).flatten()
+
 
 # --- Finite Difference Costs (Velocity, Acceleration, Jerk) ---
 

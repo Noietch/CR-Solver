@@ -9,6 +9,7 @@ from soul.robots.pcc_robot import PCCRobot, ConstantCurvatureState
 from soul.solver import IKSolver
 
 from benchmark.visualizer_eval import create_figure, visualizer_forward_samples
+
 DISABLE_JIT = False
 
 if DISABLE_JIT:
@@ -17,6 +18,7 @@ if DISABLE_JIT:
 
     os.environ["JAX_DISABLE_JIT"] = "True"
     jax.config.update("jax_disable_jit", True)
+
 
 def ik_metric(
     result_transform: jaxlie.SE3,
@@ -73,7 +75,14 @@ def sample_states_test(robot: PCCRobot, num_states: int) -> ConstantCurvatureSta
     return states
 
 
-def eval_ik_with_no_coll(robot: PCCRobot, eval_num: int, batched_ik_solve: Callable[[jax.Array, jax.Array], jax.Array], batched_fk: Callable[[ConstantCurvatureState], jax.Array], visualize: bool = False, save_path: str = None):
+def eval_ik_with_no_coll(
+    robot: PCCRobot,
+    eval_num: int,
+    batched_ik_solve: Callable[[jax.Array, jax.Array], jax.Array],
+    batched_fk: Callable[[ConstantCurvatureState], jax.Array],
+    visualize: bool = False,
+    save_path: str = None,
+):
     """Main function for basic IK."""
     ax = create_figure()
     num_sections = robot.config.num_sections
@@ -87,7 +96,13 @@ def eval_ik_with_no_coll(robot: PCCRobot, eval_num: int, batched_ik_solve: Calla
     tip_transform = jaxlie.SE3.from_matrix(target_transforms[:, -1, ...])
     target_wxyz = tip_transform.rotation().wxyz
     target_position = tip_transform.translation()
-    visualizer_forward_samples(ax, target_transforms, target_position, num_points=robot.config.num_points_per_section, save_path=save_path)
+    visualizer_forward_samples(
+        ax,
+        target_transforms,
+        target_position,
+        num_points=robot.config.num_points_per_section,
+        save_path=save_path,
+    )
 
     # warmup
     print(f"finish forward, start warmup")
@@ -114,14 +129,14 @@ def eval_ik_with_no_coll(robot: PCCRobot, eval_num: int, batched_ik_solve: Calla
     rotation_error = metric[2]
     success_rate = round(metric[0], 2)
 
-    return  {
-                "eval num": eval_num,
-                "num sections": num_sections,
-                "position error": position_error,
-                "rotation error": rotation_error,
-                "success rate": success_rate,
-                "total time": total_time * 1000,
-            }
+    return {
+        "eval num": eval_num,
+        "num sections": num_sections,
+        "position error": position_error,
+        "rotation error": rotation_error,
+        "success rate": success_rate,
+        "total time": total_time * 1000,
+    }
 
 
 def eval_ik_all_sections(section_list: list, eval_num_list: list):
@@ -136,7 +151,9 @@ def eval_ik_all_sections(section_list: list, eval_num_list: list):
         )
         batched_ik_solve = jax.vmap(jax.jit(solver.solve_ik_best))
         for eval_num in eval_num_list:
-            all_results_summary.append(eval_ik_with_no_coll(robot, eval_num, batched_ik_solve, batched_fk))
+            all_results_summary.append(
+                eval_ik_with_no_coll(robot, eval_num, batched_ik_solve, batched_fk)
+            )
 
     print("\n\n--- IK test resume ---")
     header = f"{'num sections':<10} | {'eval num':<15} | {'position error':<15} | {'rotation error':<15} | {'success rate (%)':<15} | {'total time (ms)':<18} "

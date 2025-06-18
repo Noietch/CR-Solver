@@ -29,7 +29,11 @@ class ObstacleEnv:
         for name, value in self.map_config.items():
             if value["type"] == "sphere":
                 sphere = Sphere.from_center_and_radius(
-                    center=jnp.array([0.0, 0.0, 0.0]) if viser else jnp.array(value["position"]),
+                    center=(
+                        jnp.array([0.0, 0.0, 0.0])
+                        if viser
+                        else jnp.array(value["position"])
+                    ),
                     radius=jnp.array(value["radius"]),
                 )
                 obstacle_list.append((name, sphere))
@@ -37,7 +41,11 @@ class ObstacleEnv:
                 capsule = Capsule.from_radius_height(
                     radius=jnp.array(value["radius"]),
                     height=jnp.array(value["height"]),
-                    position=jnp.array([0.0, 0.0, 0.0]) if viser else jnp.array(value["position"]),
+                    position=(
+                        jnp.array([0.0, 0.0, 0.0])
+                        if viser
+                        else jnp.array(value["position"])
+                    ),
                     wxyz=jnp.array(value["wxyz"]),
                 )
                 obstacle_list.append((name, capsule))
@@ -144,5 +152,7 @@ class ObstacleEnv:
         # update obstacle position handles (Transform control -> GUI)
         while True:
             for name, obstacle_handle in self.obstacle_handle_dict.items():
-                self.obstacle_position_handle_dict[name].value = obstacle_handle.position
+                self.obstacle_position_handle_dict[name].value = (
+                    obstacle_handle.position
+                )
             time.sleep(0.01)

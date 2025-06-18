@@ -17,6 +17,7 @@ if DISABLE_JIT:
     os.environ["JAX_DISABLE_JIT"] = "True"
     jax.config.update("jax_disable_jit", True)
 
+
 def viser_main():
     # Setup Environment
     robot = PCCRobot.from_config("configs/robots/pcc.json")
@@ -49,7 +50,7 @@ def viser_main():
     timesteps = 100
     traj_solver = TrajOptSolver(robot, robot_coll, timesteps)
     traj_solver_jit = jax.jit(traj_solver.solve)
-    
+
     traj = None
 
     def plan_callback(args):

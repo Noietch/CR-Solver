@@ -31,7 +31,13 @@ def main():
         np.array([0.0, 0.0, 0.0]), np.array([0.2])
     )
     solver = IKSolver(
-        robot, num_seeds_init=10, num_seeds_final=1, total_steps=64, init_steps=6, coll=robot_coll, world_coll_list=[plane_coll, sphere_coll]
+        robot,
+        num_seeds_init=10,
+        num_seeds_final=1,
+        total_steps=64,
+        init_steps=6,
+        coll=robot_coll,
+        world_coll_list=[plane_coll, sphere_coll],
     )
     ik_solver = jax.jit(solver.solve_ik_best_with_coll)
     robot_vis = ViserSoftRobot(server, robot_coll, root_node_name="/robot")
@@ -59,9 +65,7 @@ def main():
         world_coll_list = [plane_coll, sphere_coll_world_current]
         start_time = time.time()
         cfg = ik_solver(
-            ik_target_handle.wxyz,
-            ik_target_handle.position,
-            world_coll_list
+            ik_target_handle.wxyz, ik_target_handle.position, world_coll_list
         )
         pose = robot.forward_kinematics(cfg)
         elapsed_time = time.time() - start_time

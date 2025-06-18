@@ -15,6 +15,7 @@ if DISABLE_JIT:
     os.environ["JAX_DISABLE_JIT"] = "True"
     jax.config.update("jax_disable_jit", True)
 
+
 def viser_main():
     robot = PCCRobot.from_config("configs/robots/pcc_mobile.json")
     robot_coll = RobotCollision.from_config("configs/robots/pcc_mobile.json")

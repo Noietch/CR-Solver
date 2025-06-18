@@ -83,6 +83,7 @@ class ConstantCurvatureState:
     def flatten(self) -> Float[Array, "3 + num_sections + num_sections"]:
         return jnp.concatenate([self.base_position, self.kappa, self.phi])
 
+
 def interpolate_states(
     start_state: ConstantCurvatureState,
     end_state: ConstantCurvatureState,
@@ -170,8 +171,18 @@ class PCCRobot:
 
             Ts_matrix = jnp.array(
                 [
-                    [cos_phi * cos_phi * (cos_kl - 1.0) + 1.0, sin_phi * cos_phi * (cos_kl - 1.0), cos_phi * sin_kl, x_trans],
-                    [sin_phi * cos_phi * (cos_kl - 1.0), sin_phi * sin_phi * (cos_kl - 1.0) + 1.0, sin_phi * sin_kl, y_trans],
+                    [
+                        cos_phi * cos_phi * (cos_kl - 1.0) + 1.0,
+                        sin_phi * cos_phi * (cos_kl - 1.0),
+                        cos_phi * sin_kl,
+                        x_trans,
+                    ],
+                    [
+                        sin_phi * cos_phi * (cos_kl - 1.0),
+                        sin_phi * sin_phi * (cos_kl - 1.0) + 1.0,
+                        sin_phi * sin_kl,
+                        y_trans,
+                    ],
                     [-cos_phi * sin_kl, -sin_phi * sin_kl, cos_kl, z_trans],
                     [0.0, 0.0, 0.0, 1.0],
                 ]

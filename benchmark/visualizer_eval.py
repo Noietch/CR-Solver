@@ -15,8 +15,9 @@ def create_figure() -> Axes:
     ax.set_title("PCC Model Visualization")
     return ax
 
+
 def draw_pcc_3d(
-    ax: Axes,  
+    ax: Axes,
     pose: jax.Array,
     target_position: jax.Array = None,
     num_points: int = None,
@@ -58,15 +59,24 @@ def draw_pcc_3d(
             target_position[:, 2],
             c="red",
             marker="x",
-            s=100
+            s=100,
         )
 
-def finalize_plot_3d(ax:Axes, save_path: str = None):
+
+def finalize_plot_3d(ax: Axes, save_path: str = None):
     x_lim, y_lim, z_lim = ax.get_xlim3d(), ax.get_ylim3d(), ax.get_zlim3d()
-    x_range, y_range, z_range = abs(x_lim[1] - x_lim[0]), abs(y_lim[1] - y_lim[0]), abs(z_lim[1] - z_lim[0])
+    x_range, y_range, z_range = (
+        abs(x_lim[1] - x_lim[0]),
+        abs(y_lim[1] - y_lim[0]),
+        abs(z_lim[1] - z_lim[0]),
+    )
     max_range = max(x_range, y_range, z_range)
-    x_mid, y_mid, z_mid = (x_lim[1] + x_lim[0]) / 2, (y_lim[1] + y_lim[0]) / 2, (z_lim[1] + z_lim[0]) / 2
-    
+    x_mid, y_mid, z_mid = (
+        (x_lim[1] + x_lim[0]) / 2,
+        (y_lim[1] + y_lim[0]) / 2,
+        (z_lim[1] + z_lim[0]) / 2,
+    )
+
     padding = 0.1 * max_range
     ax.set_xlim3d(x_mid - max_range / 2 - padding, x_mid + max_range / 2 + padding)
     ax.set_ylim3d(y_mid - max_range / 2 - padding, y_mid + max_range / 2 + padding)
@@ -80,9 +90,15 @@ def finalize_plot_3d(ax:Axes, save_path: str = None):
             os.makedirs(dir_path, exist_ok=True)
         plt.savefig(save_path)
         print(f"figure already saved: {save_path}")
-    
- 
-def visualizer_forward_samples(ax: Axes, batch_pose: Float[Array, "*batch num_sections 4 4"], batch_target_position:jax.Array, num_points:int, save_path:str ):
+
+
+def visualizer_forward_samples(
+    ax: Axes,
+    batch_pose: Float[Array, "*batch num_sections 4 4"],
+    batch_target_position: jax.Array,
+    num_points: int,
+    save_path: str,
+):
     for pose, target_position in zip(batch_pose, batch_target_position):
         draw_pcc_3d(ax, pose, target_position, num_points)
     finalize_plot_3d(ax, save_path)

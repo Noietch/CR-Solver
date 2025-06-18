@@ -54,7 +54,6 @@ class IKSolver:
         )
         return states
 
-
     def solve_ik(self, target_wxyz: jax.Array, target_position: jax.Array) -> jax.Array:
 
         def solve_one(
@@ -123,8 +122,9 @@ class IKSolver:
         )
         return best_sols, summary
 
-
-    def solve_ik_best(self, target_wxyz: jax.Array, target_position: jax.Array) -> jax.Array:
+    def solve_ik_best(
+        self, target_wxyz: jax.Array, target_position: jax.Array
+    ) -> jax.Array:
         best_sols, summary = self.solve_ik(target_wxyz, target_position)
         return best_sols[
             jnp.argmin(
@@ -135,7 +135,10 @@ class IKSolver:
         ]
 
     def solve_ik_with_coll(
-        self, target_wxyz: jax.Array, target_position: jax.Array, world_coll_list: Sequence[CollGeom]
+        self,
+        target_wxyz: jax.Array,
+        target_position: jax.Array,
+        world_coll_list: Sequence[CollGeom],
     ) -> jax.Array:
         def solve_one(
             initial_states: jax.Array, lambda_initial: float | jax.Array, max_iters: int
@@ -213,9 +216,14 @@ class IKSolver:
         return best_sols, summary
 
     def solve_ik_best_with_coll(
-        self, target_wxyz: jax.Array, target_position: jax.Array, world_coll_list: Sequence[CollGeom]
+        self,
+        target_wxyz: jax.Array,
+        target_position: jax.Array,
+        world_coll_list: Sequence[CollGeom],
     ) -> jax.Array:
-        best_sols, summary = self.solve_ik_with_coll(target_wxyz, target_position, world_coll_list)
+        best_sols, summary = self.solve_ik_with_coll(
+            target_wxyz, target_position, world_coll_list
+        )
         return best_sols[
             jnp.argmin(
                 summary.cost_history[

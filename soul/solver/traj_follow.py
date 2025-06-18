@@ -8,13 +8,14 @@ from ..collision.pcc_robot_collision import RobotCollision
 from ..collision.geometry import CollGeom
 from .ik_solver import IKSolver
 
+
 def compute_distances(
     states: jnp.ndarray,
     weight: float = 1.0,
 ) -> jnp.ndarray:
     # compute distances between two timesteps
-    states_curr = states[1:, None, : , :]  # [ntimesteps-1, 1, k, state_dim]
-    states_prev = states[:-1, :, None, :] # [ntimesteps-1, k, 1, state_dim]
+    states_curr = states[1:, None, :, :]  # [ntimesteps-1, 1, k, state_dim]
+    states_prev = states[:-1, :, None, :]  # [ntimesteps-1, k, 1, state_dim]
     return jnp.linalg.norm(states_curr - states_prev, axis=-1) * weight
 
 
@@ -22,7 +23,7 @@ def compute_state_distances(
     states: ConstantCurvatureState,
     curvature_weight: float = 1.0,
     phi_weight: float = 1.0,
-    position_weight: float = 1.0
+    position_weight: float = 1.0,
 ) -> jnp.ndarray:
     # compute distances between states
     kappa_distances = compute_distances(states.kappa, weight=curvature_weight)
@@ -54,8 +55,8 @@ def solve_ee_traj_follow_dp(
     )
     batched_ik_solve = jax.vmap(jax.jit(solver.solve_ik))
     solution, _ = batched_ik_solve(ee_wxyz, ee_position)
-    state_distances = compute_state_distances(solution) # [ntimestep, k, k]
-    
+    state_distances = compute_state_distances(solution)  # [ntimestep, k, k]
+
     # dp search
     ntimestep, k, _ = state_distances.shape
     costs = jnp.zeros((ntimestep, k))
@@ -63,8 +64,8 @@ def solve_ee_traj_follow_dp(
     for t in range(1, ntimestep):
         t_next_cost = jnp.maximum(state_distances[t - 1, :, :], costs[t - 1, :])
         costs = costs.at[t, :].set(jnp.min(t_next_cost, axis=1))
-        memo = memo.at[t, :].set(jnp.argmin(t_next_cost, axis=1)) # [ntimestep, k]
-    
+        memo = memo.at[t, :].set(jnp.argmin(t_next_cost, axis=1))  # [ntimestep, k]
+
     # backtrack
     best_solution_kappa = jnp.zeros((ntimestep, robot.config.num_sections))
     best_solution_phi = jnp.zeros((ntimestep, robot.config.num_sections))
@@ -73,7 +74,9 @@ def solve_ee_traj_follow_dp(
     for t in range(ntimestep - 1, -1, -1):
         best_solution_kappa = best_solution_kappa.at[t, :].set(solution[t, i, :].kappa)
         best_solution_phi = best_solution_phi.at[t, :].set(solution[t, i, :].phi)
-        best_solution_position = best_solution_position.at[t, :].set(solution[t, i, :].base_position)
+        best_solution_position = best_solution_position.at[t, :].set(
+            solution[t, i, :].base_position
+        )
         i = memo[t, i]
     return ConstantCurvatureState(
         base_position=best_solution_position,

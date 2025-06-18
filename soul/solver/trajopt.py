@@ -84,7 +84,11 @@ class TrajOptSolver:
                 ),
                 jaxls.Cost(
                     lambda vals, var: ((vals[var] - end_cfg)).flatten() * 100.0,
-                    (self.robot.var_cls(jnp.arange(self.timesteps - 2, self.timesteps)),),
+                    (
+                        self.robot.var_cls(
+                            jnp.arange(self.timesteps - 2, self.timesteps)
+                        ),
+                    ),
                     name="end_pose_constraint",
                 ),
             ]
@@ -97,7 +101,7 @@ class TrajOptSolver:
                     self._robot_coll_batch,
                     jax.tree.map(lambda x: x[None], world_coll_obj),
                     self.robot.var_cls(jnp.arange(0, self.timesteps - 1)),
-                        self.robot.var_cls(jnp.arange(1, self.timesteps)),
+                    self.robot.var_cls(jnp.arange(1, self.timesteps)),
                 )
             )
         # 5. Solve the optimization problem.
