@@ -4,10 +4,11 @@ import jaxlie
 import time
 import json
 import os
-
+from typing import Callable
 from soul.robots.pcc_robot import PCCRobot, ConstantCurvatureState
 from soul.solver import IKSolver
-from visualizer_eval import create_figure, visualizer_forward_samples
+
+from benchmark.visualizer_eval import create_figure, visualizer_forward_samples
 DISABLE_JIT = False
 
 if DISABLE_JIT:
@@ -72,11 +73,10 @@ def sample_states_test(robot: PCCRobot, num_states: int) -> ConstantCurvatureSta
     return states
 
 
-def eval_ik_with_no_coll(robot: PCCRobot, eval_num: int, batched_ik_solve, batched_fk):
+def eval_ik_with_no_coll(robot: PCCRobot, eval_num: int, batched_ik_solve: Callable[[jax.Array, jax.Array], jax.Array], batched_fk: Callable[[ConstantCurvatureState], jax.Array], visualize: bool = False, save_path: str = None):
     """Main function for basic IK."""
     ax = create_figure()
     num_sections = robot.config.num_sections
-    test_plot_path = f"soul/visualization/test_eval_num{eval_num}_num_sections{num_sections}"
 
     print(f"start solve ik of num sections {num_sections}, num eval {eval_num}")
 
@@ -87,7 +87,7 @@ def eval_ik_with_no_coll(robot: PCCRobot, eval_num: int, batched_ik_solve, batch
     tip_transform = jaxlie.SE3.from_matrix(target_transforms[:, -1, ...])
     target_wxyz = tip_transform.rotation().wxyz
     target_position = tip_transform.translation()
-    visualizer_forward_samples(ax, target_transforms, target_position, num_points=robot.config.num_points_per_section, save_path=test_plot_path)
+    visualizer_forward_samples(ax, target_transforms, target_position, num_points=robot.config.num_points_per_section, save_path=save_path)
 
     # warmup
     print(f"finish forward, start warmup")
@@ -127,12 +127,12 @@ def eval_ik_with_no_coll(robot: PCCRobot, eval_num: int, batched_ik_solve, batch
 def eval_ik_all_sections(section_list: list, eval_num_list: list):
     all_results_summary = []
     for num_sections in section_list:
-        config = json.load(open(f"configs/robots/pcc.json"))
+        config = json.load(open(f"configs/robots/pcc_eval.json"))
         config["num_sections"] = num_sections
         robot = PCCRobot.from_config(config)
         batched_fk = jax.vmap(robot._forward_kinematics)
         solver = IKSolver(
-            robot, num_seeds_init=64, num_seeds_final=4, total_steps=16, init_steps=6
+            robot, num_seeds_init=64, num_seeds_final=4, total_steps=1000, init_steps=10
         )
         batched_ik_solve = jax.vmap(jax.jit(solver.solve_ik_best))
         for eval_num in eval_num_list:
@@ -154,6 +154,6 @@ def eval_ik_all_sections(section_list: list, eval_num_list: list):
 
 
 if __name__ == "__main__":
-    test_list = [2, 3, 4]
-    eval_num_list = [1000, 10, 100]
+    test_list = [2, 3, 4, 5, 6]
+    eval_num_list = [1000]
     eval_ik_all_sections(test_list, eval_num_list)
