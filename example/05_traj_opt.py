@@ -1,8 +1,3 @@
-"""Basic IK
-
-Simplest Inverse Kinematics Example using PyRoki.
-"""
-
 import time
 import viser
 import numpy as np

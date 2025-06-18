@@ -105,7 +105,6 @@ def continuous_collision_cost(
     )
     dist = collide(coll.reshape(-1, 1), world_coll_obj.reshape(1, -1))
     colldist = colldist_from_sdf(dist, 0.05)
-    # jax.debug.breakpoint()
     return (colldist * 20.0).flatten()
 
 
