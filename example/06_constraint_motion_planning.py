@@ -1,10 +1,11 @@
 import jax
 import time
 import viser
+import jaxlie
 import numpy as np
 from soul.robots.pcc_robot import PCCRobot
 from soul.collision import HalfSpace, RobotCollision, Sphere
-from soul.solver import MotionPlanner
+from soul.solver import ConstrainedMotionPlanner
 from soul.visualization.visualizer_viser import ViserSoftRobot
 
 DISABLE_JIT = False
@@ -15,6 +16,28 @@ if DISABLE_JIT:
 
     os.environ["JAX_DISABLE_JIT"] = "True"
     jax.config.update("jax_disable_jit", True)
+
+def get_linear_traj(
+    start_position: np.ndarray, 
+    start_wxyz: np.ndarray,
+    end_position: np.ndarray,
+    end_wxyz: np.ndarray,
+    timesteps: int,
+    ) -> jaxlie.SE3:
+    start_position = np.array(start_position)
+    start_wxyz = np.array(start_wxyz)
+    end_position = np.array(end_position)
+    end_wxyz = np.array(end_wxyz)
+    traj_positions = np.linspace(start_position, end_position, timesteps)
+    traj_wxyz = np.linspace(start_wxyz, end_wxyz, timesteps)
+    traj = jaxlie.SE3.from_rotation_and_translation(
+        jaxlie.SO3(wxyz=traj_wxyz), translation=traj_positions
+    )
+    return traj
+
+def main():
+    pass
+
 
 
 def viser_main():
@@ -47,9 +70,8 @@ def viser_main():
     replay_button = server.gui.add_button("Replay", disabled=False)
     # Set up trajopt parameters
     timesteps = 100
-    traj_solver = MotionPlanner(robot, robot_coll, timesteps)
-    start_end_interpolate_jit = jax.jit(traj_solver.start_end_interpolate)
-    optimize_jit = jax.jit(traj_solver.optimize)
+    traj_solver = ConstrainedMotionPlanner(robot, robot_coll, timesteps)
+    traj_follow_jit = jax.jit(traj_solver.traj_follow)
 
     traj = None
     def plan_callback(args):
@@ -62,14 +84,14 @@ def viser_main():
 
         world_coll = [sphere_coll_world_current, plane_coll]
 
-        cfg = start_end_interpolate_jit(
+        reference_traj = get_linear_traj(
             start_handle.position,
             start_handle.wxyz,
             end_handle.position,
             end_handle.wxyz,
-            world_coll,
+            timesteps,
         )
-        cfg = optimize_jit(cfg, world_coll)
+        cfg = traj_follow_jit(reference_traj, world_coll)
         traj = robot.forward_kinematics(cfg)
         print("Finish planning....")
         robot_vis.visualize_traj_collisions(robot, cfg)

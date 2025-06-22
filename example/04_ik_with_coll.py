@@ -37,7 +37,6 @@ def main():
         total_steps=64,
         init_steps=6,
         coll=robot_coll,
-        world_coll_list=[plane_coll, sphere_coll],
     )
     ik_solver = jax.jit(solver.solve_ik_best_with_coll)
     robot_vis = ViserSoftRobot(server, robot_coll, root_node_name="/robot")

@@ -80,7 +80,7 @@ class ObstacleEnv:
             for name, obstacle in self.obstacle_list:
                 obstacle_handle = server.scene.add_transform_controls(
                     f"/obstacle/{name}",
-                    scale=0.8,
+                    scale=0.5,
                     position=jnp.array(self.map_config[name]["position"]),
                 )
                 obstacle_position_handle = server.gui.add_vector3(

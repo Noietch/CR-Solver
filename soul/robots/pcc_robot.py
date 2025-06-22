@@ -1,14 +1,11 @@
 from __future__ import annotations
 
 import json
-
 import jax
 import jax_dataclasses as jdc
 import jaxls
-import jaxlie
 from jax import Array
 from jax import numpy as jnp
-from jax import random
 from jaxtyping import Float
 
 
@@ -83,21 +80,21 @@ class ConstantCurvatureState:
     def flatten(self) -> Float[Array, "3 + num_sections + num_sections"]:
         return jnp.concatenate([self.base_position, self.kappa, self.phi])
 
-
-def interpolate_states(
-    start_state: ConstantCurvatureState,
-    end_state: ConstantCurvatureState,
-    timesteps: int,
-) -> ConstantCurvatureState:
-    """
-    Interpolates between two states.
-    """
-    base_position = jnp.linspace(
-        start_state.base_position, end_state.base_position, timesteps
-    )
-    kappa = jnp.linspace(start_state.kappa, end_state.kappa, timesteps)
-    phi = jnp.linspace(start_state.phi, end_state.phi, timesteps)
-    return ConstantCurvatureState(base_position=base_position, kappa=kappa, phi=phi)
+    def repeat(self, n: int, axis: int = 0) -> ConstantCurvatureState:
+        # Create tile pattern: all dimensions = 1, except the target axis = n
+        def make_tile_pattern(arr_shape, target_axis, repeat_count):
+            pattern = [1] * len(arr_shape)
+            pattern.insert(target_axis, repeat_count)
+            return tuple(pattern)
+        
+        return ConstantCurvatureState(
+            base_position=jnp.tile(jnp.expand_dims(self.base_position, axis=axis), 
+                                 make_tile_pattern(self.base_position.shape, axis, n)),
+            kappa=jnp.tile(jnp.expand_dims(self.kappa, axis=axis),
+                          make_tile_pattern(self.kappa.shape, axis, n)),
+            phi=jnp.tile(jnp.expand_dims(self.phi, axis=axis),
+                        make_tile_pattern(self.phi.shape, axis, n)),
+        )
 
 
 # --- PCCModel Class ---
@@ -111,8 +108,7 @@ class PCCRobot:
 
     @staticmethod
     def from_config(
-        config_dict: dict,
-        default_cfg: dict | None = None,
+        config_dict: dict
     ) -> PCCRobot:
 
         config = PCCModelConfig.from_config(config_dict)
@@ -124,15 +120,12 @@ class PCCRobot:
             delta = delta * config.opt_mask
             return jaxls.Var._euclidean_retract(cfg, delta)
 
-        if default_cfg is None:
-            key = random.PRNGKey(0)
-            default_cfg = ConstantCurvatureState(
-                base_position=jnp.zeros(3),
-                kappa=jnp.ones((config.num_sections,)),
-                phi=jnp.zeros((config.num_sections,)),
-            )
-        else:
-            default_cfg = ConstantCurvatureState.from_dict(default_cfg)
+        # do the initial guess, but the value is not important
+        default_cfg = ConstantCurvatureState(
+            base_position=jnp.zeros(3),
+            kappa=jnp.ones((config.num_sections,)),
+            phi=jnp.zeros((config.num_sections,)),
+        )            
 
         class StateVar(
             jaxls.Var[Array],

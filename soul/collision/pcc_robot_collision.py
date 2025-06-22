@@ -97,7 +97,7 @@ class RobotCollision:
 
     @jdc.jit
     def at_state(self, robot: PCCRobot, state: ConstantCurvatureState) -> CollGeom:
-        all_poses = robot.forward_kinematics(state)
+        all_poses = robot._forward_kinematics(state)
         all_poses_se3 = jaxlie.SE3.from_matrix(all_poses)
         return self.coll.set_transform(all_poses_se3)
 
