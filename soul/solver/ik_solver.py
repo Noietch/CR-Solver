@@ -328,9 +328,11 @@ class IKSolver:
 
         # Optimize the initial seeds.
         initial_sols, summary = vmapped_solve(
-            repeated_initial_states, jnp.full(self.num_seeds_init, 10.0), self.init_steps
+            repeated_initial_states,
+            jnp.full(self.num_seeds_init, 10.0),
+            self.init_steps,
         )
-        
+
         # Get the best initial solutions.
         best_initial_sols = jnp.argsort(
             summary.cost_history[jnp.arange(self.num_seeds_init), -1]

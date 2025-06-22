@@ -86,14 +86,20 @@ class ConstantCurvatureState:
             pattern = [1] * len(arr_shape)
             pattern.insert(target_axis, repeat_count)
             return tuple(pattern)
-        
+
         return ConstantCurvatureState(
-            base_position=jnp.tile(jnp.expand_dims(self.base_position, axis=axis), 
-                                 make_tile_pattern(self.base_position.shape, axis, n)),
-            kappa=jnp.tile(jnp.expand_dims(self.kappa, axis=axis),
-                          make_tile_pattern(self.kappa.shape, axis, n)),
-            phi=jnp.tile(jnp.expand_dims(self.phi, axis=axis),
-                        make_tile_pattern(self.phi.shape, axis, n)),
+            base_position=jnp.tile(
+                jnp.expand_dims(self.base_position, axis=axis),
+                make_tile_pattern(self.base_position.shape, axis, n),
+            ),
+            kappa=jnp.tile(
+                jnp.expand_dims(self.kappa, axis=axis),
+                make_tile_pattern(self.kappa.shape, axis, n),
+            ),
+            phi=jnp.tile(
+                jnp.expand_dims(self.phi, axis=axis),
+                make_tile_pattern(self.phi.shape, axis, n),
+            ),
         )
 
 
@@ -107,9 +113,7 @@ class PCCRobot:
     var_cls: jdc.Static[type[jaxls.Var[ConstantCurvatureState]]]
 
     @staticmethod
-    def from_config(
-        config_dict: dict
-    ) -> PCCRobot:
+    def from_config(config_dict: dict) -> PCCRobot:
 
         config = PCCModelConfig.from_config(config_dict)
 
@@ -125,7 +129,7 @@ class PCCRobot:
             base_position=jnp.zeros(3),
             kappa=jnp.ones((config.num_sections,)),
             phi=jnp.zeros((config.num_sections,)),
-        )            
+        )
 
         class StateVar(
             jaxls.Var[Array],

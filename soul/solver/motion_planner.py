@@ -48,12 +48,14 @@ class MotionPlanner:
         end_wxyz: np.ndarray,
         world_coll: Sequence[CollGeom],
     ):
-        results: ConstantCurvatureState = self._ik_solver_best(start_wxyz, start_position, end_wxyz, end_position, world_coll)
+        results: ConstantCurvatureState = self._ik_solver_best(
+            start_wxyz, start_position, end_wxyz, end_position, world_coll
+        )
         base_position = jnp.linspace(
             results[0].base_position, results[1].base_position, self.timesteps
         )
         kappa = jnp.linspace(results[0].kappa, results[1].kappa, self.timesteps)
-        phi = jnp.linspace(results[0].phi, results[1].phi, self.timesteps) 
+        phi = jnp.linspace(results[0].phi, results[1].phi, self.timesteps)
         return ConstantCurvatureState(base_position=base_position, kappa=kappa, phi=phi)
 
     def optimize(
@@ -130,14 +132,14 @@ class MotionPlanner:
         return solution[traj_vars]
 
 
-
 class ConstrainedMotionPlanner(MotionPlanner):
-
 
     def traj_follow(self, reference_traj: jaxlie.SE3, world_coll: Sequence[CollGeom]):
         batched_ik_solver = jax.vmap(self.ik_solver.solve_ik_best)
-        init_traj = batched_ik_solver(reference_traj.wxyz_xyz[..., :4], reference_traj.wxyz_xyz[..., 4:])
-        
+        init_traj = batched_ik_solver(
+            reference_traj.wxyz_xyz[..., :4], reference_traj.wxyz_xyz[..., 4:]
+        )
+
         traj_vars = self.robot.var_cls(jnp.arange(self.timesteps))
 
         # 1. Basic regularization / limit costs.
@@ -158,7 +160,7 @@ class ConstrainedMotionPlanner(MotionPlanner):
                 self.robot.var_cls(jnp.arange(1, self.timesteps)),
                 self.robot.var_cls(jnp.arange(0, self.timesteps - 1)),
                 jnp.array([10.0])[None],
-            )
+            ),
         ]
         # 2. Add start and end pose constraints.
         factors.extend(
@@ -203,4 +205,3 @@ class ConstrainedMotionPlanner(MotionPlanner):
             )
         )
         return solution[traj_vars]
-        

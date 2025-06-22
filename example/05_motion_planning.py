@@ -52,6 +52,7 @@ def viser_main():
     optimize_jit = jax.jit(traj_solver.optimize)
 
     traj = None
+
     def plan_callback(args):
         print("Start planning....")
         global traj

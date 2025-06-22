@@ -17,13 +17,14 @@ if DISABLE_JIT:
     os.environ["JAX_DISABLE_JIT"] = "True"
     jax.config.update("jax_disable_jit", True)
 
+
 def get_linear_traj(
-    start_position: np.ndarray, 
+    start_position: np.ndarray,
     start_wxyz: np.ndarray,
     end_position: np.ndarray,
     end_wxyz: np.ndarray,
     timesteps: int,
-    ) -> jaxlie.SE3:
+) -> jaxlie.SE3:
     start_position = np.array(start_position)
     start_wxyz = np.array(start_wxyz)
     end_position = np.array(end_position)
@@ -35,9 +36,9 @@ def get_linear_traj(
     )
     return traj
 
+
 def main():
     pass
-
 
 
 def viser_main():
@@ -74,6 +75,7 @@ def viser_main():
     traj_follow_jit = jax.jit(traj_solver.traj_follow)
 
     traj = None
+
     def plan_callback(args):
         print("Start planning....")
         global traj
