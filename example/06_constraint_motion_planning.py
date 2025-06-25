@@ -4,7 +4,7 @@ import viser
 import jaxlie
 import numpy as np
 from soul.robots.pcc_robot import PCCRobot
-from soul.collision import HalfSpace, RobotCollision, Sphere
+from soul.geom import HalfSpace, RobotCollision, Sphere
 from soul.solver import ConstrainedMotionPlanner
 from soul.visualization.visualizer_viser import ViserSoftRobot
 

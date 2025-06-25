@@ -7,8 +7,8 @@ import viser
 import time
 
 from ..robots.pcc_robot import PCCRobot, ConstantCurvatureState
-from ..collision import RobotCollision
-from ..collision import CollGeom, Sphere, Capsule, HalfSpace
+from ..geom import RobotCollision
+from ..geom import CollGeom, Sphere, Capsule, HalfSpace
 from ..visualization.visualizer_plot import visualize_pcc_model_2d
 
 

@@ -3,7 +3,7 @@ import time
 import viser
 import numpy as np
 from soul.robots.pcc_robot import PCCRobot
-from soul.collision import HalfSpace, RobotCollision, Sphere
+from soul.geom import HalfSpace, RobotCollision, Sphere
 from soul.solver import MotionPlanner
 from soul.visualization.visualizer_viser import ViserSoftRobot
 

@@ -11,7 +11,7 @@ import jaxlie
 import numpy as np
 
 from ..robots.pcc_robot import PCCRobot, ConstantCurvatureState
-from ..collision import RobotCollision, CollGeom
+from ..geom import RobotCollision, CollGeom
 from ..costs import (
     pose_cost,
     limit_cost,

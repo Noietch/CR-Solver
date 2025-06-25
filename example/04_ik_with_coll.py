@@ -4,7 +4,7 @@ import viser
 import numpy as np
 from soul.robots.pcc_robot import PCCRobot
 from soul.solver import IKSolver
-from soul.collision import HalfSpace, RobotCollision, Sphere
+from soul.geom import HalfSpace, RobotCollision, Sphere
 from soul.visualization.visualizer_viser import ViserSoftRobot
 
 

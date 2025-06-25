@@ -2,8 +2,8 @@ import viser
 import numpy as np
 import jax.numpy as jnp
 import jaxlie
-from ..collision.pcc_robot_collision import RobotCollision
-from ..collision.geometry import Sphere, Capsule
+from ..geom.pcc_robot_collision import RobotCollision
+from ..geom.geometry import Sphere, Capsule
 from ..robots.pcc_robot import ConstantCurvatureState, PCCRobot
 
 

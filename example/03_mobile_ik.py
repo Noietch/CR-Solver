@@ -3,7 +3,7 @@ import time
 import viser
 from soul.robots.pcc_robot import PCCRobot
 from soul.solver import IKSolver
-from soul.collision import RobotCollision
+from soul.geom import RobotCollision
 from soul.visualization.visualizer_viser import ViserSoftRobot
 
 DISABLE_JIT = False

@@ -13,7 +13,7 @@ from ..costs import (
     world_collision_cost,
     smoothness_cost,
 )
-from ..collision import RobotCollision, CollGeom
+from ..geom import RobotCollision, CollGeom
 
 
 class IKSolver:
