@@ -1,12 +1,11 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Optional, Tuple, cast
+from typing import cast
 
 import jax
 import jax.numpy as jnp
 import jax_dataclasses as jdc
 import jaxlie
-import trimesh
 import json
 from jaxtyping import Array, Float, Int
 from loguru import logger

@@ -13,10 +13,7 @@ from .geometry_pairs import (
     halfspace_capsule,
     sphere_sphere,
     sphere_capsule,
-    capsule_capsule,
-    heightmap_sphere,
-    heightmap_capsule,
-    heightmap_halfspace,
+    capsule_capsule
 )
 
 COLLISION_FUNCTIONS: Dict[
@@ -27,9 +24,6 @@ COLLISION_FUNCTIONS: Dict[
     (Sphere, Sphere): sphere_sphere,
     (Sphere, Capsule): sphere_capsule,
     (Capsule, Capsule): capsule_capsule,
-    (Heightmap, Sphere): heightmap_sphere,
-    (Heightmap, Capsule): heightmap_capsule,
-    (Heightmap, HalfSpace): heightmap_halfspace,
 }
 
 
