@@ -1,0 +1,32 @@
+{
+    "obstacle_1": {
+      "type": "bbox",
+      "position": [0.0, 0.0, 2.5],
+      "extents": [0.2, 1.0, 0.2]
+    },
+    "obstacle_2": {
+        "type": "bbox",
+        "position": [0.0, 0.0, 3.5],
+        "extents": [0.2, 1.0, 0.2]
+    },
+    "obstacle_3": {
+        "type": "bbox",
+        "position": [1.0, 0.0, 2.5],
+        "extents": [0.2, 1.0, 0.2]
+      },
+    "obstacle_4": {
+        "type": "bbox",
+        "position": [1.0, 0.0, 3.5],
+        "extents": [0.2, 1.0, 0.2]
+    },    
+    "obstacle_5": {
+        "type": "bbox",
+        "position": [-1.0, 0.0, 2.5],
+        "extents": [0.2, 1.0, 0.2]
+    },
+    "obstacle_6": {
+        "type": "bbox",
+        "position": [-1.0, 0.0, 3.5],
+        "extents": [0.2, 1.0, 0.2]
+    }
+}

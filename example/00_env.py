@@ -27,6 +27,7 @@ def test_convex_decomp() -> None:
     while True:
         time.sleep(0.01)
 
+
 def test_trimesh_to_voxel() -> None:
     mesh = trimesh.load("assets/objects/warehouse_shelf.glb", force="mesh")
     voxel_grid = creation.voxelize(mesh, pitch=0.4)

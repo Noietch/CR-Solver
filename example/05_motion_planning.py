@@ -21,8 +21,8 @@ def viser_main():
     # Setup Environment
     robot = PCCRobot.from_config("configs/robots/pcc.json")
     robot_coll = RobotCollision.from_config("configs/robots/pcc.json")
-    world_coll = WorldCollision.from_config("configs/maps/obstacles.json")
-    
+    world_coll = WorldCollision.from_config("configs/maps/obstacles_00.json")
+
     # Setup Visualization
     server = viser.ViserServer()
     robot_vis = ViserSoftRobot(server, robot_coll, root_node_name="/robot")
@@ -42,7 +42,7 @@ def viser_main():
     )
     plan_button = server.gui.add_button("Plan", disabled=False)
     replay_button = server.gui.add_button("Replay", disabled=False)
-    
+
     # Set up trajopt parameters
     timesteps = 100
     traj_solver = MotionPlanner(robot, robot_coll, timesteps)
@@ -50,6 +50,7 @@ def viser_main():
     optimize_jit = jax.jit(traj_solver.optimize)
 
     traj = None
+
     def plan_callback(args):
         print("Start planning....")
         global traj

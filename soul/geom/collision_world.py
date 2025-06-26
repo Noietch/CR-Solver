@@ -25,7 +25,7 @@ class WorldCollision:
         if isinstance(config, str):
             with open(config, "r") as f:
                 config = json.load(f)
-            
+
         obstacles = []
         meshes = []
         for obstacle in config.values():
@@ -62,9 +62,12 @@ class WorldCollision:
     def collision_geoms(self) -> list[CollGeom]:
         return [self.obstacles, self.ground]
 
-
-    def transform(self, position: Float[Array, "*batch 3"], wxyz: Float[Array, "*batch 4"]) -> WorldCollision:
-        transform = jaxlie.SE3.from_rotation_and_translation(rotation=jaxlie.SO3(wxyz=jnp.array(wxyz)), translation=jnp.array(position))
+    def transform(
+        self, position: Float[Array, "*batch 3"], wxyz: Float[Array, "*batch 4"]
+    ) -> WorldCollision:
+        transform = jaxlie.SE3.from_rotation_and_translation(
+            rotation=jaxlie.SO3(wxyz=jnp.array(wxyz)), translation=jnp.array(position)
+        )
         return WorldCollision(
             obstacles=self.obstacles.transform(transform),
             mesh=[m.copy().apply_transform(transform.as_matrix()) for m in self.mesh],

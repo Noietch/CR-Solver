@@ -95,13 +95,14 @@ def continuous_collision_cost(
     world_coll_obj: CollGeom,
     prev_traj_vars: Var[ConstantCurvatureState],
     curr_traj_vars: Var[ConstantCurvatureState],
+    weight: Array | float,
 ):
     coll = robot_coll.get_swept_capsules(
         robot, vals[prev_traj_vars], vals[curr_traj_vars]
     )
     dist = collide(coll.reshape(-1, 1), world_coll_obj.reshape(1, -1))
     colldist = colldist_from_sdf(dist, 0.05)
-    return (colldist * 20.0).flatten()
+    return (colldist * weight).flatten()
 
 
 @Cost.create_factory
@@ -159,7 +160,6 @@ def rest_base_cost(
     weight: Array | float,
 ) -> Array:
     """Computes the residual penalizing the difference between the current state and the rest pose."""
-    # TODO: This is a hack to get the rest pose of the robot. Need to fix this.
     state = vals[robot_var]
     return ((state.base_position)).flatten() * weight
 

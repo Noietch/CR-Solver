@@ -15,30 +15,31 @@ import jax.scipy.ndimage
 
 from .utils import make_frame
 
+
 def cat_geoms(geoms: list[CollGeom]) -> CollGeom:
     """Concatenate a list of geometries into a single geometry.
-    
+
     This function handles both single geometries and batched geometries.
     All input geometries are flattened and then concatenated along the first dimension.
-    
+
     Args:
         geoms: List of CollGeom objects. Each can be single or batched.
-    
+
     Returns:
         A single CollGeom object containing all input geometries in its batch dimension.
     """
     if not geoms:
         raise ValueError("Cannot concatenate empty list of geometries")
-    
+
     # Check that all geometries are of the same type
     first_type = type(geoms[0])
     if not all(isinstance(g, first_type) for g in geoms):
         raise TypeError("All geometries must be of the same type")
-    
+
     # Flatten each geometry and collect poses and sizes
     all_poses = []
     all_sizes = []
-    
+
     for geom in geoms:
         batch_axes = geom.get_batch_axes()
         if batch_axes:
@@ -49,14 +50,14 @@ def cat_geoms(geoms: list[CollGeom]) -> CollGeom:
             # Single geometry - add batch dimension
             flat_pose = geom.pose.wxyz_xyz[None, :]
             flat_size = geom.size[None, :]
-        
+
         all_poses.append(flat_pose)
         all_sizes.append(flat_size)
-    
+
     # Concatenate all poses and sizes
     combined_poses = jnp.concatenate(all_poses, axis=0)
     combined_sizes = jnp.concatenate(all_sizes, axis=0)
-    
+
     return first_type(pose=jaxlie.SE3(wxyz_xyz=combined_poses), size=combined_sizes)
 
 

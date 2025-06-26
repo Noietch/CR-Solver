@@ -18,6 +18,7 @@ from ..costs import (
     smoothness_cost,
     continuous_collision_cost,
     trajectory_length_cost,
+    rest_base_cost,
 )
 from .ik_solver import IKSolver
 
@@ -115,6 +116,7 @@ class MotionPlanner:
                     jax.tree.map(lambda x: x[None], world_coll_obj),
                     self.robot.var_cls(jnp.arange(0, self.timesteps - 1)),
                     self.robot.var_cls(jnp.arange(1, self.timesteps)),
+                    jnp.array([20.0])[None],
                 )
             )
         # 5. Solve the optimization problem.
@@ -161,6 +163,10 @@ class ConstrainedMotionPlanner(MotionPlanner):
                 self.robot.var_cls(jnp.arange(0, self.timesteps - 1)),
                 jnp.array([10.0])[None],
             ),
+            rest_base_cost(
+                traj_vars,
+                jnp.array([10.0])[None],
+            ),
         ]
         # 2. Add start and end pose constraints.
         factors.extend(
@@ -190,6 +196,7 @@ class ConstrainedMotionPlanner(MotionPlanner):
                     jax.tree.map(lambda x: x[None], world_coll_obj),
                     self.robot.var_cls(jnp.arange(0, self.timesteps - 1)),
                     self.robot.var_cls(jnp.arange(1, self.timesteps)),
+                    jnp.array([50.0])[None],
                 )
             )
         # 5. Solve the optimization problem.

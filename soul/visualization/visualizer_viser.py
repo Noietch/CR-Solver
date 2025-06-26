@@ -18,7 +18,7 @@ class ViserSoftRobot:
         self.server = server
         self.robot_coll = robot_coll
         self.root_node_name = root_node_name
-        self.sphere_handles = []        
+        self.sphere_handles = []
 
     def create_sphere_visualizations(self):
         """Create sphere visualizations for the robot collision model."""
@@ -67,6 +67,24 @@ class ViserSoftRobot:
                 name=f"{self.root_node_name}_traj_collisions/swept_capsule_{i}",
                 mesh=swept_capsules.to_trimesh(),
             )
+
+    def visualize_traj(
+        self,
+        traj: jnp.ndarray | jaxlie.SE3,
+        color: np.ndarray = np.array([1.0, 0.0, 0.0]),
+        name: str = "traj",
+    ):
+        if isinstance(traj, jaxlie.SE3):
+            traj = traj.translation()
+        else:
+            traj = jaxlie.SE3.from_matrix(traj).wxyz_xyz[..., -1, 4:]
+        self.server.scene.add_point_cloud(
+            name=f"{self.root_node_name}_{name}",
+            points=np.array(traj),
+            colors=color,
+            point_size=0.01,
+            point_shape="circle",
+        )
 
 
 class ViserWorld:

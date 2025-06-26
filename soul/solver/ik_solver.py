@@ -13,6 +13,7 @@ from ..costs import (
     self_collision_cost,
     world_collision_cost,
     smoothness_cost,
+    rest_base_cost,
 )
 from ..geom import RobotCollision, CollGeom
 
@@ -123,9 +124,7 @@ class IKSolver:
         )
         return best_sols, summary
 
-    def solve_ik_best(
-        self, target_wxyz: Array, target_position: Array
-    ) -> Array:
+    def solve_ik_best(self, target_wxyz: Array, target_position: Array) -> Array:
         best_sols, summary = self.solve_ik(target_wxyz, target_position)
         return best_sols[
             jnp.argmin(

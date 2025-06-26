@@ -14,7 +14,10 @@ _SAFE_EPS = 1e-6
 
 
 def _apply_transform_to_mesh(
-    mesh: trimesh.Trimesh, scale: float, wxyz: Array | list | None, position: Array | list | None
+    mesh: trimesh.Trimesh,
+    scale: float,
+    wxyz: Array | list | None,
+    position: Array | list | None,
 ) -> None:
     """Apply scale and transform to a mesh in-place."""
     if scale != 1.0:
@@ -41,7 +44,7 @@ def load_mesh(
     decompose_params: dict | None = None,
 ) -> trimesh.Trimesh | list[trimesh.Trimesh]:
     mesh = trimesh.load(path, force="mesh")
-    
+
     if decompose_type is None:
         _apply_transform_to_mesh(mesh, scale, wxyz)
         return mesh, mesh
@@ -82,7 +85,7 @@ def load_mesh(
         _apply_transform_to_mesh(m, scale, wxyz, position)
     _apply_transform_to_mesh(mesh, scale, wxyz, position)
     print(f"Loaded {len(meshes)} convex parts from {path}")
-    return meshes, mesh 
+    return meshes, mesh
 
 
 def make_frame(direction: Array) -> Array:
