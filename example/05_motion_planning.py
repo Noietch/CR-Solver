@@ -22,6 +22,7 @@ def viser_main():
     robot = PCCRobot.from_config("configs/robots/pcc.json")
     robot_coll = RobotCollision.from_config("configs/robots/pcc.json")
     world_coll = WorldCollision.from_config("configs/maps/obstacles.json")
+    
     # Setup Visualization
     server = viser.ViserServer()
     robot_vis = ViserSoftRobot(server, robot_coll, root_node_name="/robot")
@@ -39,9 +40,6 @@ def viser_main():
     end_handle = server.scene.add_transform_controls(
         "/end", scale=0.3, position=(0.0, -1.0, 2.5), wxyz=(1, 0, 0, 0)
     )
-    sphere_handle = server.scene.add_transform_controls(
-        "/obstacle", scale=0.6, position=(0, 1, 0)
-    )
     plan_button = server.gui.add_button("Plan", disabled=False)
     replay_button = server.gui.add_button("Replay", disabled=False)
     
@@ -52,7 +50,6 @@ def viser_main():
     optimize_jit = jax.jit(traj_solver.optimize)
 
     traj = None
-
     def plan_callback(args):
         print("Start planning....")
         global traj
@@ -64,7 +61,7 @@ def viser_main():
             end_handle.wxyz,
             world_coll.collision_geoms,
         )
-        cfg = optimize_jit(cfg, world_coll)
+        cfg = optimize_jit(cfg, world_coll.collision_geoms)
         traj = robot.forward_kinematics(cfg)
         print("Finish planning....")
         robot_vis.visualize_traj_collisions(robot, cfg)

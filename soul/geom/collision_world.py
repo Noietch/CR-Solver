@@ -4,7 +4,6 @@ import json
 import trimesh
 import jax_dataclasses as jdc
 import jaxlie
-import jax
 import jax.numpy as jnp
 from jaxtyping import Float, Array
 
@@ -37,13 +36,15 @@ class WorldCollision:
                 obstacles.append(bbox)
                 meshes.append(bbox.to_trimesh())
             elif obstacle["type"] == "mesh":
+                decompose_type = obstacle.get("decompose_type", None)
+                decompose_params = obstacle.get("decompose_params", None)
                 decomposed_mesh, original_mesh = load_mesh(
                     obstacle["path"],
                     scale=obstacle["scale"],
                     wxyz=obstacle["wxyz"],
                     position=obstacle["position"],
-                    convex_decompose=obstacle["decompose"],
-                    max_convex_hull=obstacle["max_convex_hull"],
+                    decompose_type=decompose_type,
+                    decompose_params=decompose_params,
                 )
                 obstacles.append(BoundingBox.from_trimesh(decomposed_mesh))
                 meshes.append(original_mesh)

@@ -1,6 +1,6 @@
-from soul.envs.obs_env import ObstacleEnv
-from soul.geom import Capsule, HalfSpace, Sphere, BoundingBox
+from soul.geom import BoundingBox
 import trimesh
+from trimesh.voxel import creation
 import viser
 import time
 import numpy as np
@@ -27,11 +27,27 @@ def test_convex_decomp() -> None:
     while True:
         time.sleep(0.01)
 
-
-def test_env() -> None:
-    env = ObstacleEnv("configs/maps/obstacles.json")
-    env.show()
+def test_trimesh_to_voxel() -> None:
+    mesh = trimesh.load("assets/objects/warehouse_shelf.glb", force="mesh")
+    voxel_grid = creation.voxelize(mesh, pitch=0.4)
+    voxel_cubes = []
+    for center_point in voxel_grid.fill().points:
+        single_cube = trimesh.creation.box()
+        # Assign a random color to the cube for visualization
+        color = np.random.rand(4)  # RGBA
+        single_cube.visual.face_colors = (color * 255).astype(np.uint8)
+        single_cube.apply_scale(voxel_grid.pitch)
+        single_cube.apply_translation(center_point)
+        voxel_cubes.append(single_cube)
+    print("number of voxel_cubes: ", len(voxel_cubes))
+    combined_mesh = trimesh.util.concatenate(voxel_cubes)
+    server = viser.ViserServer()
+    server.scene.add_grid("/ground", width=6, height=6)
+    server.scene.add_mesh_trimesh("/obstacle", mesh=combined_mesh)
+    while True:
+        time.sleep(0.01)
 
 
 if __name__ == "__main__":
-    test_convex_decomp()
+    # test_convex_decomp()
+    test_trimesh_to_voxel()

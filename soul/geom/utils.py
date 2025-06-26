@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 import os
 import pickle
 import coacd
@@ -7,6 +8,7 @@ import jaxlie
 import jax.numpy as jnp
 from typing import Tuple
 from jaxtyping import Float, Array
+from trimesh.voxel import creation
 
 _SAFE_EPS = 1e-6
 
@@ -35,32 +37,52 @@ def load_mesh(
     scale: float = 1.0,
     wxyz: Array | list | None = None,
     position: Array | list | None = None,
-    convex_decompose: bool = False,
-    max_convex_hull: int = 10,
+    decompose_type: str | None = None,
+    decompose_params: dict | None = None,
 ) -> trimesh.Trimesh | list[trimesh.Trimesh]:
     mesh = trimesh.load(path, force="mesh")
-
-    if not convex_decompose:
+    
+    if decompose_type is None:
         _apply_transform_to_mesh(mesh, scale, wxyz)
         return mesh, mesh
 
     # Handle convex decomposition
-    parts_path = path + "_parts.pkl"
-    if os.path.exists(parts_path):
-        with open(parts_path, "rb") as f:
-            parts = pickle.load(f)
+    if decompose_type == "convex":
+        max_convex_hull = decompose_params.get("max_convex_hull", 10)
+        parts_path = path + f"_convex_parts_{max_convex_hull}.pkl"
+        if os.path.exists(parts_path):
+            with open(parts_path, "rb") as f:
+                parts = pickle.load(f)
+        else:
+            mesh_coacd = coacd.Mesh(mesh.vertices, mesh.faces)
+            parts = coacd.run_coacd(mesh_coacd, max_convex_hull=max_convex_hull)
+            with open(parts_path, "wb") as f:
+                pickle.dump(parts, f)
+        meshes = [trimesh.Trimesh(part[0], part[1]) for part in parts]
+    elif decompose_type == "voxel":
+        pitch = decompose_params.get("pitch", 0.4)
+        voxel_path = path + f"_voxel_parts_{pitch}.pkl"
+        if os.path.exists(voxel_path):
+            with open(voxel_path, "rb") as f:
+                meshes = pickle.load(f)
+        else:
+            voxel_grid = creation.voxelize(mesh, pitch=pitch)
+            meshes = []
+            for center_point in voxel_grid.fill().points:
+                single_cube = trimesh.creation.box()
+                single_cube.apply_scale(voxel_grid.pitch)
+                single_cube.apply_translation(center_point)
+                meshes.append(single_cube)
+            with open(voxel_path, "wb") as f:
+                pickle.dump(meshes, f)
     else:
-        mesh_coacd = coacd.Mesh(mesh.vertices, mesh.faces)
-        parts = coacd.run_coacd(mesh_coacd, max_convex_hull=max_convex_hull)
-        with open(parts_path, "wb") as f:
-            pickle.dump(parts, f)
+        raise ValueError(f"Unknown decompose type: {decompose_type}")
 
-    meshes = [trimesh.Trimesh(part[0], part[1]) for part in parts]
     for m in meshes:
         _apply_transform_to_mesh(m, scale, wxyz, position)
     _apply_transform_to_mesh(mesh, scale, wxyz, position)
     print(f"Loaded {len(meshes)} convex parts from {path}")
-    return meshes, mesh
+    return meshes, mesh 
 
 
 def make_frame(direction: Array) -> Array:
