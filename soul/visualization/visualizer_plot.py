@@ -1,6 +1,6 @@
 import os
 
-import jax
+from jaxtyping import Array
 import numpy as np
 import matplotlib.pyplot as plt
 
@@ -25,8 +25,8 @@ def _plot_sphere(ax, center, radius):
 
 
 def visualize_pcc_model_2d(
-    pose: jax.Array,
-    target_position: jax.Array = None,
+    pose: Array,
+    target_position: Array = None,
     num_points: int = None,
     save_path: str = None,
 ):
@@ -110,8 +110,8 @@ def visualize_pcc_model_2d(
 
 
 def visualize_pcc_model_3d(
-    pose: jax.Array,
-    target_position: jax.Array = None,
+    pose: Array,
+    target_position: Array = None,
     num_points: int = None,
     save_path: str = None,
 ):

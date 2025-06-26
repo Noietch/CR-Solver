@@ -118,7 +118,7 @@ class PCCRobot:
         config = PCCModelConfig.from_config(config_dict)
 
         def retract_fn(
-            cfg: ConstantCurvatureState, delta: jax.Array
+            cfg: ConstantCurvatureState, delta: Array
         ) -> ConstantCurvatureState:
             """Same as jaxls.SE3Var.retract_fn, but removing updates on certain axes."""
             delta = delta * config.opt_mask

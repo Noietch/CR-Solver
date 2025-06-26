@@ -7,13 +7,18 @@ import jax.numpy as jnp
 import jax_dataclasses as jdc
 from jaxtyping import Float, Array
 
-from .geometry import CollGeom, HalfSpace, Sphere, Capsule, Heightmap
+from .geometry import CollGeom, HalfSpace, Sphere, Capsule, BoundingBox
 from .geometry_pairs import (
     halfspace_sphere,
     halfspace_capsule,
     sphere_sphere,
     sphere_capsule,
-    capsule_capsule
+    capsule_capsule,
+    bounding_box_bounding_box,
+    bounding_box_halfspace,
+    bounding_box_halfspace,
+    sphere_bounding_box,
+    capsule_bounding_box,
 )
 
 COLLISION_FUNCTIONS: Dict[
@@ -23,7 +28,11 @@ COLLISION_FUNCTIONS: Dict[
     (HalfSpace, Capsule): halfspace_capsule,
     (Sphere, Sphere): sphere_sphere,
     (Sphere, Capsule): sphere_capsule,
+    (Sphere, BoundingBox): sphere_bounding_box,
     (Capsule, Capsule): capsule_capsule,
+    (Capsule, BoundingBox): capsule_bounding_box,
+    (BoundingBox, BoundingBox): bounding_box_bounding_box,
+    (BoundingBox, HalfSpace): bounding_box_halfspace,
 }
 
 
@@ -124,9 +133,9 @@ def pairwise_collide(geom1: CollGeom, geom2: CollGeom) -> Float[Array, "*batch N
 
 
 def colldist_from_sdf(
-    _dist: jax.Array,
-    activation_dist: jax.Array | float,
-) -> jax.Array:
+    _dist: Array,
+    activation_dist: Array | float,
+) -> Array:
     """
     Convert a signed distance field to a collision distance field,
     based on https://arxiv.org/pdf/2310.17274#page=7.39.

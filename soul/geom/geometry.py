@@ -14,7 +14,50 @@ import jax
 import jax.scipy.ndimage
 
 from .utils import make_frame
-from jax.typing import ArrayLike
+
+def cat_geoms(geoms: list[CollGeom]) -> CollGeom:
+    """Concatenate a list of geometries into a single geometry.
+    
+    This function handles both single geometries and batched geometries.
+    All input geometries are flattened and then concatenated along the first dimension.
+    
+    Args:
+        geoms: List of CollGeom objects. Each can be single or batched.
+    
+    Returns:
+        A single CollGeom object containing all input geometries in its batch dimension.
+    """
+    if not geoms:
+        raise ValueError("Cannot concatenate empty list of geometries")
+    
+    # Check that all geometries are of the same type
+    first_type = type(geoms[0])
+    if not all(isinstance(g, first_type) for g in geoms):
+        raise TypeError("All geometries must be of the same type")
+    
+    # Flatten each geometry and collect poses and sizes
+    all_poses = []
+    all_sizes = []
+    
+    for geom in geoms:
+        batch_axes = geom.get_batch_axes()
+        if batch_axes:
+            # Flatten the batched geometry
+            flat_pose = geom.pose.wxyz_xyz.reshape(-1, 7)
+            flat_size = geom.size.reshape(-1, geom.size.shape[-1])
+        else:
+            # Single geometry - add batch dimension
+            flat_pose = geom.pose.wxyz_xyz[None, :]
+            flat_size = geom.size[None, :]
+        
+        all_poses.append(flat_pose)
+        all_sizes.append(flat_size)
+    
+    # Concatenate all poses and sizes
+    combined_poses = jnp.concatenate(all_poses, axis=0)
+    combined_sizes = jnp.concatenate(all_sizes, axis=0)
+    
+    return first_type(pose=jaxlie.SE3(wxyz_xyz=combined_poses), size=combined_sizes)
 
 
 @jdc.pytree_dataclass
@@ -73,8 +116,8 @@ class CollGeom(abc.ABC):
 
     def transform_from_pos_wxyz(
         self,
-        position: Float[ArrayLike, "*batch 3"],
-        wxyz: Float[ArrayLike, "*batch 4"],
+        position: Float[Array, "*batch 3"],
+        wxyz: Float[Array, "*batch 4"],
     ) -> Self:
         """
         Transform the geometry from a position and orientation.
@@ -121,7 +164,7 @@ class HalfSpace(CollGeom):
 
     @staticmethod
     def from_point_and_normal(
-        point: Float[ArrayLike, "*batch 3"], normal: Float[ArrayLike, "*batch 3"]
+        point: Float[Array, "*batch 3"], normal: Float[Array, "*batch 3"]
     ) -> HalfSpace:
         """Create a HalfSpace geometry from a point on the boundary and outward normal."""
         point, normal = jnp.array(point), jnp.array(normal)
@@ -161,7 +204,7 @@ class Sphere(CollGeom):
 
     @staticmethod
     def from_center_and_radius(
-        center: Float[ArrayLike, "*batch 3"], radius: Float[ArrayLike, "*batch"]
+        center: Float[Array, "*batch 3"], radius: Float[Array, "*batch"]
     ) -> Sphere:
         """Create a Sphere geometry from a center point and radius."""
         center, radius = jnp.array(center), jnp.array(radius)
@@ -216,10 +259,10 @@ class Capsule(CollGeom):
 
     @staticmethod
     def from_radius_height(
-        radius: Float[ArrayLike, "*batch"],
-        height: Float[ArrayLike, "*batch"],  # Full height
-        position: Float[ArrayLike, "*batch 3"] | None = None,
-        wxyz: Float[ArrayLike, "*batch 4"] | None = None,
+        radius: Float[Array, "*batch"],
+        height: Float[Array, "*batch"],  # Full height
+        position: Float[Array, "*batch 3"] | None = None,
+        wxyz: Float[Array, "*batch 4"] | None = None,
     ) -> Capsule:
         """Create Capsule geometry from radius and height."""
         if position is None:
@@ -356,3 +399,52 @@ class Capsule(CollGeom):
 
         assert capsule.get_batch_axes() == sph_0.get_batch_axes()
         return capsule
+
+
+@jdc.pytree_dataclass
+class BoundingBox(CollGeom):
+    """Bounding box geometry."""
+
+    @property
+    def extents(self) -> Float[Array, "*batch 3"]:
+        """Extents of the bounding box."""
+        return self.size[..., :3]
+
+    @property
+    def center(self) -> Float[Array, "*batch 3"]:
+        """Center of the bounding box."""
+        return self.pose.translation()
+
+    @staticmethod
+    def from_center_and_extents(
+        center: Float[Array, "*batch 3"], extents: Float[Array, "*batch 3"]
+    ) -> BoundingBox:
+        """Create a BoundingBox geometry from a center and extents."""
+        center, extents = jnp.array(center), jnp.array(extents)
+        batch_axes = jnp.broadcast_shapes(center.shape[:-1], extents.shape)
+        center = jnp.broadcast_to(center, batch_axes + (3,))
+        extents = jnp.broadcast_to(extents, batch_axes + (3,))
+        return BoundingBox(pose=jaxlie.SE3.from_translation(center), size=extents)
+
+    @staticmethod
+    def from_trimesh(mesh: trimesh.Trimesh | list[trimesh.Trimesh]) -> BoundingBox:
+        """Create a BoundingBox geometry from a trimesh object."""
+        if isinstance(mesh, list):
+            return cat_geoms([BoundingBox.from_trimesh(m) for m in mesh])
+
+        mesh_min = mesh.bounds[0]
+        mesh_max = mesh.bounds[1]
+        extents = mesh_max - mesh_min
+        center = (mesh_min + mesh_max) / 2.0
+        pose = jaxlie.SE3.from_translation(center)
+        return BoundingBox(pose=pose, size=extents)
+
+    def _create_one_mesh(self, index: tuple) -> trimesh.Trimesh:
+        pose_i: jaxlie.SE3 = jax.tree.map(lambda x: x[index], self.pose)
+        pos = onp.array(pose_i.translation())
+        extents_val = onp.array(self.extents[index])
+        bbox_mesh = trimesh.creation.box(extents=extents_val)
+        tf = onp.eye(4)
+        tf[:3, 3] = pos
+        bbox_mesh.apply_transform(tf)
+        return bbox_mesh

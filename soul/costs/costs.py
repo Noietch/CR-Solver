@@ -5,7 +5,7 @@ from jax import Array
 from jaxls import Cost, Var, VarValues
 
 from ..robots.pcc_robot import PCCRobot, ConstantCurvatureState
-from ..geom.pcc_robot_collision import RobotCollision
+from ..geom.collision_pcc_robot import RobotCollision
 from ..geom.geometry import CollGeom
 from ..geom.collision import colldist_from_sdf, collide
 

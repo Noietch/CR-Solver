@@ -3,9 +3,9 @@ import time
 import viser
 import numpy as np
 from soul.robots.pcc_robot import PCCRobot
-from soul.geom import HalfSpace, RobotCollision, Sphere
+from soul.geom import RobotCollision, WorldCollision
 from soul.solver import MotionPlanner
-from soul.visualization.visualizer_viser import ViserSoftRobot
+from soul.visualization.visualizer_viser import ViserSoftRobot, ViserWorld
 
 DISABLE_JIT = False
 
@@ -21,14 +21,15 @@ def viser_main():
     # Setup Environment
     robot = PCCRobot.from_config("configs/robots/pcc.json")
     robot_coll = RobotCollision.from_config("configs/robots/pcc.json")
+    world_coll = WorldCollision.from_config("configs/maps/obstacles.json")
+    # Setup Visualization
     server = viser.ViserServer()
-    plane_coll = HalfSpace.from_point_and_normal(
-        np.array([0.0, 0.0, 0.0]), np.array([0.0, 0.0, 1.0])
-    )
-    sphere_coll = Sphere.from_center_and_radius(
-        np.array([0.0, 0.0, 0.0]), np.array([0.2])
-    )
     robot_vis = ViserSoftRobot(server, robot_coll, root_node_name="/robot")
+    robot_vis.create_sphere_visualizations()
+    obstacles_vis = ViserWorld(server, world_coll)
+    obstacles_vis.create_mesh_visualizations()
+
+    # Setup GUI
     start_handle = server.scene.add_transform_controls(
         "/start",
         scale=0.3,
@@ -39,12 +40,11 @@ def viser_main():
         "/end", scale=0.3, position=(0.0, -1.0, 2.5), wxyz=(1, 0, 0, 0)
     )
     sphere_handle = server.scene.add_transform_controls(
-        "/obstacle", scale=0.6, position=(0.4, 0.3, 0.4)
+        "/obstacle", scale=0.6, position=(0, 1, 0)
     )
-    server.scene.add_mesh_trimesh("/obstacle/mesh", mesh=sphere_coll.to_trimesh())
-    server.scene.add_grid("/ground", width=6, height=6)
     plan_button = server.gui.add_button("Plan", disabled=False)
     replay_button = server.gui.add_button("Replay", disabled=False)
+    
     # Set up trajopt parameters
     timesteps = 100
     traj_solver = MotionPlanner(robot, robot_coll, timesteps)
@@ -56,19 +56,13 @@ def viser_main():
     def plan_callback(args):
         print("Start planning....")
         global traj
-        sphere_coll_world_current = sphere_coll.transform_from_pos_wxyz(
-            position=np.array(sphere_handle.position),
-            wxyz=np.array(sphere_handle.wxyz),
-        )
-
-        world_coll = [sphere_coll_world_current, plane_coll]
 
         cfg = start_end_interpolate_jit(
             start_handle.position,
             start_handle.wxyz,
             end_handle.position,
             end_handle.wxyz,
-            world_coll,
+            world_coll.collision_geoms,
         )
         cfg = optimize_jit(cfg, world_coll)
         traj = robot.forward_kinematics(cfg)

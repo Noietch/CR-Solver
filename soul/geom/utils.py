@@ -1,6 +1,9 @@
 from __future__ import annotations
-
-import jax
+import os
+import pickle
+import coacd
+import trimesh
+import jaxlie
 import jax.numpy as jnp
 from typing import Tuple
 from jaxtyping import Float, Array
@@ -8,7 +11,59 @@ from jaxtyping import Float, Array
 _SAFE_EPS = 1e-6
 
 
-def make_frame(direction: jax.Array) -> jax.Array:
+def _apply_transform_to_mesh(
+    mesh: trimesh.Trimesh, scale: float, wxyz: Array | list | None, position: Array | list | None
+) -> None:
+    """Apply scale and transform to a mesh in-place."""
+    if scale != 1.0:
+        # Scale around the mesh center to preserve position
+        mesh.apply_scale(scale)
+
+    if wxyz is not None:
+        if position is None:
+            position = jnp.array([0.0, 0.0, 0.0])
+        mesh.apply_transform(
+            jaxlie.SE3.from_rotation_and_translation(
+                rotation=jaxlie.SO3(wxyz=jnp.array(wxyz)),
+                translation=jnp.array(position),
+            ).as_matrix()
+        )
+
+
+def load_mesh(
+    path: str,
+    scale: float = 1.0,
+    wxyz: Array | list | None = None,
+    position: Array | list | None = None,
+    convex_decompose: bool = False,
+    max_convex_hull: int = 10,
+) -> trimesh.Trimesh | list[trimesh.Trimesh]:
+    mesh = trimesh.load(path, force="mesh")
+
+    if not convex_decompose:
+        _apply_transform_to_mesh(mesh, scale, wxyz)
+        return mesh, mesh
+
+    # Handle convex decomposition
+    parts_path = path + "_parts.pkl"
+    if os.path.exists(parts_path):
+        with open(parts_path, "rb") as f:
+            parts = pickle.load(f)
+    else:
+        mesh_coacd = coacd.Mesh(mesh.vertices, mesh.faces)
+        parts = coacd.run_coacd(mesh_coacd, max_convex_hull=max_convex_hull)
+        with open(parts_path, "wb") as f:
+            pickle.dump(parts, f)
+
+    meshes = [trimesh.Trimesh(part[0], part[1]) for part in parts]
+    for m in meshes:
+        _apply_transform_to_mesh(m, scale, wxyz, position)
+    _apply_transform_to_mesh(mesh, scale, wxyz, position)
+    print(f"Loaded {len(meshes)} convex parts from {path}")
+    return meshes, mesh
+
+
+def make_frame(direction: Array) -> Array:
     """Make a frame from a direction vector, aligning the z-axis with the direction."""
     # Based on `mujoco.mjx._src.math.make_frame`.
 

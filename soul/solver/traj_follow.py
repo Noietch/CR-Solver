@@ -4,7 +4,7 @@ import numpy as np
 from typing import List, Optional
 
 from ..robots.pcc_robot import PCCRobot, ConstantCurvatureState
-from ..geom.pcc_robot_collision import RobotCollision
+from ..geom.collision_pcc_robot import RobotCollision
 from ..geom.geometry import CollGeom
 from .ik_solver import IKSolver
 

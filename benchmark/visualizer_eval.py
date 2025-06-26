@@ -1,8 +1,7 @@
 import matplotlib.pyplot as plt
 from matplotlib.axes import Axes
 import jax
-from jax import Array
-from jaxtyping import Float
+from jaxtyping import Float, Array
 import os
 
 
@@ -18,8 +17,8 @@ def create_figure() -> Axes:
 
 def draw_pcc_3d(
     ax: Axes,
-    pose: jax.Array,
-    target_position: jax.Array = None,
+    pose: Array,
+    target_position: Array = None,
     num_points: int = None,
 ):
     """
@@ -95,7 +94,7 @@ def finalize_plot_3d(ax: Axes, save_path: str = None):
 def visualizer_forward_samples(
     ax: Axes,
     batch_pose: Float[Array, "*batch num_sections 4 4"],
-    batch_target_position: jax.Array,
+    batch_target_position: Array,
     num_points: int,
     save_path: str,
 ):

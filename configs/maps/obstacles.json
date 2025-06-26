@@ -1,34 +1,16 @@
 {
   "obstacle_1": {
-    "type": "capsule",
-    "position": [
-      1.0,
-      0.0,
-      1.5
-    ],
-    "radius": 0.20000000298023224,
-    "height": 3.0,
-    "wxyz": [
-      1.0,
-      1.5407439555097887e-32,
-      6.162975822039155e-33,
-      6.162975822039155e-33
-    ]
+    "type": "bbox",
+    "position": [1.0, 0.0, 1.5],
+    "extents": [0.2, 0.2, 0.2]
   },
   "obstacle_2": {
-    "type": "capsule",
-    "position": [
-      -1.0,
-      0.0,
-      1.5
-    ],
-    "radius": 0.20000000298023224,
-    "height": 3.0,
-    "wxyz": [
-      1.0,
-      1.5407439555097887e-32,
-      6.162975822039155e-33,
-      6.162975822039155e-33
-    ]
+    "type": "mesh",
+    "path": "assets/objects/warehouse_shelf.glb",
+    "scale": 0.5,
+    "wxyz": [0.707, 0.707, 0, 0],
+    "position": [-1.0, 0.0, 1.5],
+    "decompose": true,
+    "max_convex_hull": 15
   }
 }

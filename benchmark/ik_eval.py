@@ -1,4 +1,5 @@
 import jax
+from jaxtyping import Float, Array
 import jax.numpy as jnp
 import jaxlie
 import time
@@ -22,8 +23,8 @@ if DISABLE_JIT:
 
 def ik_metric(
     result_transform: jaxlie.SE3,
-    target_position: jax.Array,
-    target_orientation: jax.Array,
+    target_position: Array,
+    target_orientation: Array,
 ) -> float:
     result_position = result_transform.translation()
     result_orientation = result_transform.rotation()
@@ -78,8 +79,8 @@ def sample_states_test(robot: PCCRobot, num_states: int) -> ConstantCurvatureSta
 def eval_ik_with_no_coll(
     robot: PCCRobot,
     eval_num: int,
-    batched_ik_solve: Callable[[jax.Array, jax.Array], jax.Array],
-    batched_fk: Callable[[ConstantCurvatureState], jax.Array],
+    batched_ik_solve: Callable[[Array, Array], Array],
+    batched_fk: Callable[[ConstantCurvatureState], Array],
     visualize: bool = False,
     save_path: str = None,
 ):
@@ -113,7 +114,7 @@ def eval_ik_with_no_coll(
     print("start solve ik")
     solution = batched_ik_solve(target_wxyz, target_position)
     jax.block_until_ready(solution)
-    total_time = (time.time() - start) / target_wxyz.shape[0]
+    total_time = time.time() - start
 
     # get solved tip transforms
     fk_result = robot.forward_kinematics(solution)
@@ -135,7 +136,7 @@ def eval_ik_with_no_coll(
         "position error": position_error,
         "rotation error": rotation_error,
         "success rate": success_rate,
-        "total time": total_time * 1000,
+        "total time": total_time,
     }
 
 
@@ -156,7 +157,7 @@ def eval_ik_all_sections(section_list: list, eval_num_list: list):
             )
 
     print("\n\n--- IK test resume ---")
-    header = f"{'num sections':<10} | {'eval num':<15} | {'position error':<15} | {'rotation error':<15} | {'success rate (%)':<15} | {'total time (ms)':<18} "
+    header = f"{'num sections':<10} | {'eval num':<15} | {'position error':<15} | {'rotation error':<15} | {'success rate (%)':<15} | {'total time (s)':<18} "
     print(header)
     print("-" * len(header))
     for res_item in all_results_summary:

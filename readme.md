@@ -7,7 +7,7 @@
 CUDA_VISIBLE_DEVICES=3 python benchmark/ik_eval.py
 ```
 
-| num sections | eval num | position error (×10⁻⁵) | rotation error (×10⁻⁵) | success rate (%)| soltion time(ms) |
+| num sections | eval num | position error (×10⁻⁵) | rotation error (×10⁻⁵) | success rate (%)| total soltion time(s) |
 |--------------|----------|------------------------|------------------------|------------------|-----------------|
 | 2            | 1000     | 3.502                  | 1.583                  | 100.00           | 0.543           |
 | 3            | 1000     | 1.582                  | 6.917                  | 99.20            | 0.678           |

@@ -2,6 +2,7 @@ import jax
 import jaxls
 import jaxlie
 import jax.numpy as jnp
+from jaxtyping import Float, Array
 from typing import Sequence
 
 from ..robots.pcc_robot import PCCRobot, ConstantCurvatureState
@@ -54,11 +55,11 @@ class IKSolver:
         )
         return states
 
-    def solve_ik(self, target_wxyz: jax.Array, target_position: jax.Array) -> jax.Array:
+    def solve_ik(self, target_wxyz: Array, target_position: Array) -> Array:
 
         def solve_one(
-            initial_states: jax.Array, lambda_initial: float | jax.Array, max_iters: int
-        ) -> tuple[jax.Array, jaxls.SolveSummary]:
+            initial_states: Array, lambda_initial: float | Array, max_iters: int
+        ) -> tuple[Array, jaxls.SolveSummary]:
             """Solve IK problem with a single initial condition. We'll vmap
             over initial_states to solve problems in parallel."""
             robot_var = self.robot.var_cls(0)
@@ -123,8 +124,8 @@ class IKSolver:
         return best_sols, summary
 
     def solve_ik_best(
-        self, target_wxyz: jax.Array, target_position: jax.Array
-    ) -> jax.Array:
+        self, target_wxyz: Array, target_position: Array
+    ) -> Array:
         best_sols, summary = self.solve_ik(target_wxyz, target_position)
         return best_sols[
             jnp.argmin(
@@ -136,13 +137,13 @@ class IKSolver:
 
     def solve_ik_with_coll(
         self,
-        target_wxyz: jax.Array,
-        target_position: jax.Array,
+        target_wxyz: Array,
+        target_position: Array,
         world_coll_list: Sequence[CollGeom],
-    ) -> jax.Array:
+    ) -> Array:
         def solve_one(
-            initial_states: jax.Array, lambda_initial: float | jax.Array, max_iters: int
-        ) -> tuple[jax.Array, jaxls.SolveSummary]:
+            initial_states: Array, lambda_initial: float | Array, max_iters: int
+        ) -> tuple[Array, jaxls.SolveSummary]:
             """Solve IK problem with a single initial condition. We'll vmap
             over initial_states to solve problems in parallel."""
             robot_var = self.robot.var_cls(0)
@@ -217,10 +218,10 @@ class IKSolver:
 
     def solve_ik_best_with_coll(
         self,
-        target_wxyz: jax.Array,
-        target_position: jax.Array,
+        target_wxyz: Array,
+        target_position: Array,
         world_coll_list: Sequence[CollGeom],
-    ) -> jax.Array:
+    ) -> Array:
         best_sols, summary = self.solve_ik_with_coll(
             target_wxyz, target_position, world_coll_list
         )
@@ -234,15 +235,15 @@ class IKSolver:
 
     def solve_ik_with_coll_start_end(
         self,
-        start_wxyz: jax.Array,
-        start_position: jax.Array,
-        end_wxyz: jax.Array,
-        end_position: jax.Array,
+        start_wxyz: Array,
+        start_position: Array,
+        end_wxyz: Array,
+        end_position: Array,
         world_coll_list: Sequence[CollGeom],
-    ) -> jax.Array:
+    ) -> Array:
         def solve_one(
-            initial_states: jax.Array, lambda_initial: float | jax.Array, max_iters: int
-        ) -> tuple[jax.Array, jaxls.SolveSummary]:
+            initial_states: Array, lambda_initial: float | Array, max_iters: int
+        ) -> tuple[Array, jaxls.SolveSummary]:
             """Solve IK problem with a single initial condition. We'll vmap
             over initial_states to solve problems in parallel."""
             joint_var_0 = self.robot.var_cls(0)
@@ -350,12 +351,12 @@ class IKSolver:
 
     def solve_ik_best_with_coll_start_end(
         self,
-        start_wxyz: jax.Array,
-        start_position: jax.Array,
-        end_wxyz: jax.Array,
-        end_position: jax.Array,
+        start_wxyz: Array,
+        start_position: Array,
+        end_wxyz: Array,
+        end_position: Array,
         world_coll_list: Sequence[CollGeom],
-    ) -> jax.Array:
+    ) -> Array:
         best_sols, summary = self.solve_ik_with_coll_start_end(
             start_wxyz, start_position, end_wxyz, end_position, world_coll_list
         )
