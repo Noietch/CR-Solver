@@ -65,7 +65,7 @@ def viser_main():
         cfg = optimize_jit(cfg, world_coll.collision_geoms)
         traj = robot.forward_kinematics(cfg)
         print("Finish planning....")
-        robot_vis.visualize_traj_collisions(robot, cfg)
+        # robot_vis.visualize_traj_collisions(robot, cfg)
         for i in range(timesteps):
             time.sleep(0.01)
             robot_vis.update_pose(traj[i])

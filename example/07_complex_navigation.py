@@ -5,7 +5,7 @@ import viser
 import numpy as np
 from soul.robots.pcc_robot import PCCRobot
 from soul.geom import RobotCollision, WorldCollision
-from soul.solver import ConstrainedMotionPlanner
+from soul.solver import ConstrainedMotionPlanner, IKSolver
 from soul.visualization.visualizer_viser import ViserSoftRobot, ViserWorld
 
 DISABLE_JIT = False
@@ -81,14 +81,14 @@ def viser_main():
     # Setup Environment
     robot = PCCRobot.from_config("configs/robots/pcc_mobile_z.json")
     robot_coll = RobotCollision.from_config("configs/robots/pcc_mobile_z.json")
-    world_coll = WorldCollision.from_config("configs/maps/obstacles_01.json")
+    # world_coll = WorldCollision.from_config("configs/maps/obstacles_01.json")
 
     # Setup Visualization
     server = viser.ViserServer()
     robot_vis = ViserSoftRobot(server, robot_coll, root_node_name="/robot")
     robot_vis.create_sphere_visualizations()
-    obstacles_vis = ViserWorld(server, world_coll)
-    obstacles_vis.create_mesh_visualizations()
+    # obstacles_vis = ViserWorld(server, world_coll)
+    # obstacles_vis.create_mesh_visualizations()
 
     # Setup GUI
     start_handle = server.scene.add_transform_controls(
@@ -104,7 +104,7 @@ def viser_main():
     replay_button = server.gui.add_button("Replay", disabled=False)
 
     # Set up reference trajectory
-    timesteps = 100
+    timesteps = 30
 
     def update_reference_traj(args):
         reference_traj = get_sine_traj(
@@ -122,6 +122,10 @@ def viser_main():
     update_reference_traj(None)
 
     # Set up trajopt parameters
+    solver = IKSolver(
+        robot, num_seeds_init=10, num_seeds_final=1, total_steps=64, init_steps=6, coll=robot_coll
+    )
+    ik_solver_jit = jax.jit(solver.solve_ik_best_with_coll_shape)
     traj_solver = ConstrainedMotionPlanner(robot, robot_coll, timesteps)
     traj_follow_jit = jax.jit(traj_solver.tip_traj_follow)
 
@@ -134,19 +138,26 @@ def viser_main():
         # Update reference trajectory with current handle positions
         current_reference_traj = update_reference_traj(args)
 
-        cfg = traj_follow_jit(
-            current_reference_traj,
-            world_coll.collision_geoms,
+        cfg = ik_solver_jit(
+            current_reference_traj.as_matrix(),
+            [],
+            # world_coll.collision_geoms,
         )
-        traj = robot.forward_kinematics(cfg)
+        # cfg = traj_follow_jit(
+        #     current_reference_traj,
+        #     world_coll.collision_geoms,
+        # )
+        print(cfg)
+        pose = robot.forward_kinematics(cfg)
         print("Finish planning....")
-        robot_vis.visualize_traj_collisions(robot, cfg)
-        robot_vis.visualize_traj(
-            traj, color=np.array([0.0, 0.0, 1.0]), name="planned_traj"
-        )
-        for i in range(timesteps):
-            time.sleep(0.01)
-            robot_vis.update_pose(traj[i])
+        robot_vis.update_pose(pose)
+        # robot_vis.visualize_traj_collisions(robot, cfg)
+        # robot_vis.visualize_traj(
+        #     traj, color=np.array([0.0, 0.0, 1.0]), name="planned_traj"
+        # )
+        # for i in range(timesteps):
+        #     time.sleep(0.01)
+        #     robot_vis.update_pose(traj[i])
 
     def replay_callback(args):
         global traj

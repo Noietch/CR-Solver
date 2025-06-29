@@ -1,7 +1,3 @@
-"""
-Solves the Trajectory Optimization problem.
-"""
-
 from typing import Sequence
 
 import jax
@@ -19,6 +15,7 @@ from ..costs import (
     continuous_collision_cost,
     trajectory_length_cost,
     rest_base_cost,
+    shape_cost,
 )
 from .ik_solver import IKSolver
 
@@ -136,7 +133,7 @@ class MotionPlanner:
 
 class ConstrainedMotionPlanner(MotionPlanner):
 
-    def traj_follow(self, reference_traj: jaxlie.SE3, world_coll: Sequence[CollGeom]):
+    def tip_traj_follow(self, reference_traj: jaxlie.SE3, world_coll: Sequence[CollGeom]):
         batched_ik_solver = jax.vmap(self.ik_solver.solve_ik_best)
         init_traj = batched_ik_solver(
             reference_traj.wxyz_xyz[..., :4], reference_traj.wxyz_xyz[..., 4:]

@@ -11,6 +11,38 @@ from ..geom.collision import colldist_from_sdf, collide
 
 
 @Cost.create_factory
+def position_cost(
+    vals: VarValues,
+    robot: PCCRobot,
+    robot_var: Var[ConstantCurvatureState],
+    target_position: Array,
+    weight: Array | float,
+) -> Array:
+    """Computes the residual for matching link poses to target poses."""
+    state = vals[robot_var]
+    robot_pose = robot._forward_kinematics(state)
+    tip_position = robot_pose[-1, :3, 3]
+    residual = (tip_position - target_position[:3, 3])
+    return (residual * weight).flatten()
+
+
+@Cost.create_factory
+def shape_cost(
+    vals: VarValues,
+    robot: PCCRobot,
+    robot_var: Var[ConstantCurvatureState],
+    target_shape: Array,
+    weight: Array | float,
+) -> Array:
+    """Computes the residual for matching link poses to target poses."""
+    state = vals[robot_var]
+    robot_pose = robot._forward_kinematics(state)  # (N, 4, 4)
+    assert robot_pose.shape == target_shape.shape
+    residual = robot_pose[..., :3, 3] - target_shape[..., :3, 3]
+    return (residual * weight).flatten()
+
+
+@Cost.create_factory
 def pose_cost(
     vals: VarValues,
     robot: PCCRobot,
@@ -136,7 +168,6 @@ def boundary_cost(
     start_end_cfg: ConstantCurvatureState,
     weight: Array | float,
 ) -> Array:
-    jax.debug.breakpoint()
     """Computes the residual penalizing start and end pose differences."""
     state = vals[robot_var]
     return ((state - start_end_cfg)).flatten() * weight

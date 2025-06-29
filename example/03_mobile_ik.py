@@ -17,8 +17,8 @@ if DISABLE_JIT:
 
 def viser_main():
     # Setup Environment
-    robot = PCCRobot.from_config("configs/robots/pcc_mobile.json")
-    robot_coll = RobotCollision.from_config("configs/robots/pcc_mobile.json")
+    robot = PCCRobot.from_config("configs/robots/pcc_mobile_z.json")
+    robot_coll = RobotCollision.from_config("configs/robots/pcc_mobile_z.json")
     world_coll = WorldCollision.from_config("configs/maps/obstacles_01.json")
 
     # Setup Visualization

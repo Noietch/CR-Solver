@@ -14,3 +14,7 @@ CUDA_VISIBLE_DEVICES=3 python benchmark/ik_eval.py
 | 4            | 1000     | 2.019                  | 4.816                  | 99.50            | 0.806           |
 | 5            | 1000     | 2.503                  | 5.651                  | 99.90            | 0.912           |
 | 6            | 1000     | 2.849                  | 6.277                  | 100.00           | 1.307           |
+
+## TODOs
+[] Fix Complex Env IK 
+[] Sampling Based Motion Planner

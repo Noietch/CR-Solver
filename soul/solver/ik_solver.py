@@ -9,11 +9,13 @@ from ..robots.pcc_robot import PCCRobot, ConstantCurvatureState
 from ..solver.utils import roberts_sequence, newton_raphson
 from ..costs import (
     pose_cost,
+    position_cost,
     limit_cost,
     self_collision_cost,
     world_collision_cost,
     smoothness_cost,
     rest_base_cost,
+    shape_cost,
 )
 from ..geom import RobotCollision, CollGeom
 
@@ -48,11 +50,11 @@ class IKSolver:
         phi = self.robot.config.lower_limits_phi + roberts_sequence(
             num_states, self.robot.config.num_sections, self.sample_root
         ) * (self.robot.config.upper_limits_phi - self.robot.config.lower_limits_phi)
-
+        
         states = ConstantCurvatureState(
             base_position=jnp.zeros((num_states, 3)),
-            kappa=kappa,
-            phi=phi,
+            kappa=kappa * self.robot.config.opt_mask[3],
+            phi=phi * self.robot.config.opt_mask[3 + self.robot.config.num_sections],
         )
         return states
 
@@ -223,6 +225,107 @@ class IKSolver:
     ) -> Array:
         best_sols, summary = self.solve_ik_with_coll(
             target_wxyz, target_position, world_coll_list
+        )
+        return best_sols[
+            jnp.argmin(
+                summary.cost_history[
+                    jnp.arange(self.num_seeds_final), summary.iterations
+                ]
+            )
+        ]
+
+    def solve_ik_with_coll_shape(
+        self,
+        target_shape: Array,
+        world_coll_list: Sequence[CollGeom],
+    ) -> Array:
+        def solve_one(
+            initial_states: Array, lambda_initial: float | Array, max_iters: int
+        ) -> tuple[Array, jaxls.SolveSummary]:
+            """Solve IK problem with a single initial condition. We'll vmap
+            over initial_states to solve problems in parallel."""
+            robot_var = self.robot.var_cls(0)
+
+            factors = [
+                position_cost(
+                    self.robot,
+                    robot_var,
+                    target_shape[-1, ...],
+                    weight=5.0,
+                    # ori_weight=1.0,
+                ),
+                shape_cost(
+                    self.robot,
+                    robot_var,
+                    target_shape,
+                    weight=100.0,
+                ),
+                limit_cost(
+                    self.robot,
+                    robot_var,
+                    weight=100.0,
+                ),
+                self_collision_cost(self.robot, self.coll, robot_var, 0.05, 10.0),
+            ]
+            factors.extend(
+                [
+                    world_collision_cost(
+                        self.robot, self.coll, robot_var, world_coll, 0.05, 10.0
+                    )
+                    for world_coll in world_coll_list
+                ]
+            )
+            sol, summary = (
+                jaxls.LeastSquaresProblem(factors, [robot_var])
+                .analyze()
+                .solve(
+                    initial_vals=jaxls.VarValues.make(
+                        [robot_var.with_value(initial_states)]
+                    ),
+                    verbose=False,
+                    linear_solver="dense_cholesky",
+                    termination=jaxls.TerminationConfig(
+                        max_iterations=max_iters,
+                        early_termination=False,
+                    ),
+                    trust_region=jaxls.TrustRegionConfig(lambda_initial=lambda_initial),
+                    return_summary=True,
+                )
+            )
+            return sol[robot_var], summary
+
+        vmapped_solve = jax.vmap(solve_one, in_axes=(0, 0, None))
+
+        # Create initial seeds, but this time with quasi-random sequence.
+        initial_states = self.sample_states(self.num_seeds_init)
+
+        # Optimize the initial seeds.
+        initial_sols, summary = vmapped_solve(
+            initial_states, jnp.full(self.num_seeds_init, 10.0), self.init_steps
+        )
+
+        # Get the best initial solutions.
+        best_initial_sols = jnp.argsort(
+            summary.cost_history[jnp.arange(self.num_seeds_init), -1]
+        )[: self.num_seeds_final]
+
+        # Optimize more for the best initial solutions.
+        best_sols, summary = vmapped_solve(
+            initial_sols[best_initial_sols],
+            summary.lambda_history[jnp.arange(self.num_seeds_init), -1][
+                best_initial_sols
+            ],
+            self.total_steps - self.init_steps,
+        )
+        return best_sols, summary
+
+    def solve_ik_best_with_coll_shape(
+        self,
+        target_shape: Array,
+        world_coll_list: Sequence[CollGeom],
+    ) -> Array:
+        best_sols, summary = self.solve_ik_with_coll_shape(
+            target_shape, world_coll_list
         )
         return best_sols[
             jnp.argmin(

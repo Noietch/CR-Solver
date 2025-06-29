@@ -9,5 +9,5 @@
     "upper_limits_phi": 6.28,
     "opt_kappa": true,
     "opt_phi": true,
-    "opt_base_position_mask": [true, true, false]
+    "opt_base_position_mask": [true, true, true]
 }

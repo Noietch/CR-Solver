@@ -2,7 +2,7 @@ import jax
 import jax.numpy as jnp
 
 from soul.robots.pcc_robot import PCCRobot, ConstantCurvatureState
-from soul.visualization.visualizer_plot import visualize_pcc_model_2d
+from soul.visualization.visualizer_plot import visualize_pcc_model_3d, visualize_pcc_model_2d
 
 DISABLE_JIT = False
 
@@ -23,7 +23,7 @@ batch_state = ConstantCurvatureState(
 
 state = ConstantCurvatureState(
     base_position=jnp.array([0, 0, 0]),
-    kappa=jnp.array([1, 2, 3]),
+    kappa=jnp.array([1, -1, 3]),
     phi=jnp.array([0, 0, 0]),
 )
 
@@ -31,5 +31,10 @@ pose = robot.forward_kinematics(state)
 visualize_pcc_model_2d(
     pose,
     num_points=robot.config.num_points_per_section,
-    save_path="visualization/forward_kinematics.png",
+    save_path="visualization/forward_kinematics_2d.png",
+)
+visualize_pcc_model_3d(
+    pose,
+    num_points=robot.config.num_points_per_section,
+    save_path="visualization/forward_kinematics_3d.png",
 )
