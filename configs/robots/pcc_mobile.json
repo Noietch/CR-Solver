@@ -7,7 +7,7 @@
     "upper_limits_theta": 3.14, 
     "lower_limits_phi": 0,
     "upper_limits_phi": 6.28,
-    "opt_kappa": true,
+    "opt_theta": true,
     "opt_phi": true,
     "opt_base_position_mask": [true, true, true]
 }

@@ -22,7 +22,7 @@ def position_cost(
     state = vals[robot_var]
     robot_pose = robot._forward_kinematics(state)
     tip_position = robot_pose[-1, :3, 3]
-    residual = (tip_position - target_position[:3, 3])
+    residual = tip_position - target_position[:3, 3]
     return (residual * weight).flatten()
 
 
@@ -55,6 +55,7 @@ def pose_cost(
     state = vals[robot_var]
     robot_pose = robot._forward_kinematics(state)
     tip_pose = jaxlie.SE3.from_matrix(robot_pose[-1, ...])
+
     residual = (tip_pose.inverse() @ target_pose).log()
     pos_residual = residual[..., :3] * pos_weight
     ori_residual = residual[..., 3:] * ori_weight
@@ -70,15 +71,14 @@ def limit_cost(
 ) -> Array:
     """Computes the residual penalizing joint limit violations."""
     state = vals[robot_var]
-    theta = state.kappa * robot.config.length
-    residual_upper_kappa = jnp.maximum(0.0, theta - robot.config.upper_limits_theta)
-    residual_lower_kappa = jnp.maximum(0.0, robot.config.lower_limits_theta - theta)
+    residual_upper_theta = jnp.maximum(0.0, state.theta - robot.config.upper_limits_theta)
+    residual_lower_theta = jnp.maximum(0.0, robot.config.lower_limits_theta - state.theta)
     residual_upper_phi = jnp.maximum(0.0, state.phi - robot.config.upper_limits_phi)
     residual_lower_phi = jnp.maximum(0.0, robot.config.lower_limits_phi - state.phi)
     return (
         (
-            residual_upper_kappa
-            + residual_lower_kappa
+            residual_upper_theta
+            + residual_lower_theta
             + residual_upper_phi
             + residual_lower_phi
         )
@@ -179,9 +179,9 @@ def elastic_energy_cost(
     robot_var: Var[ConstantCurvatureState],
     weight: Array | float,
 ) -> Array:
-    """Computes the elastic energy of the robot. Penalize large kappa."""
-    kappa = vals[robot_var].kappa
-    return (kappa * weight).flatten()
+    """Computes the elastic energy of the robot. Penalize large theta."""
+    theta = vals[robot_var].theta
+    return (theta * weight).flatten()
 
 
 @Cost.create_factory
@@ -230,10 +230,10 @@ def five_point_velocity_cost(
     weight: Array | float,
 ) -> Array:
     """Computes the residual penalizing velocity limit violations (5-point stencil)."""
-    q_tm2 = vals[var_t_minus_2].kappa
-    q_tm1 = vals[var_t_minus_1].kappa
-    q_tp1 = vals[var_t_plus_1].kappa
-    q_tp2 = vals[var_t_plus_2].kappa
+    q_tm2 = vals[var_t_minus_2].theta
+    q_tm1 = vals[var_t_minus_1].theta
+    q_tp1 = vals[var_t_plus_1].theta
+    q_tp2 = vals[var_t_plus_2].theta
 
     velocity = (-q_tp2 + 8 * q_tp1 - 8 * q_tm1 + q_tm2) / (12 * dt)
     vel_limits = 0
@@ -253,11 +253,11 @@ def five_point_acceleration_cost(
     weight: Array | float,
 ) -> Array:
     """Computes the residual minimizing joint acceleration (5-point stencil)."""
-    q_tm2 = vals[var_t_minus_2].kappa
-    q_tm1 = vals[var_t_minus_1].kappa
-    q_t = vals[var_t].kappa
-    q_tp1 = vals[var_t_plus_1].kappa
-    q_tp2 = vals[var_t_plus_2].kappa
+    q_tm2 = vals[var_t_minus_2].theta
+    q_tm1 = vals[var_t_minus_1].theta
+    q_t = vals[var_t].theta
+    q_tp1 = vals[var_t_plus_1].theta
+    q_tp2 = vals[var_t_plus_2].theta
 
     acceleration = (-q_tp2 + 16 * q_tp1 - 30 * q_t + 16 * q_tm1 - q_tm2) / (12 * dt**2)
     return (acceleration * weight).flatten()
@@ -276,12 +276,12 @@ def five_point_jerk_cost(
     weight: Array | float,
 ) -> Array:
     """Computes the residual minimizing joint jerk (7-point stencil)."""
-    q_tm3 = vals[var_t_minus_3].kappa
-    q_tm2 = vals[var_t_minus_2].kappa
-    q_tm1 = vals[var_t_minus_1].kappa
-    q_tp1 = vals[var_t_plus_1].kappa
-    q_tp2 = vals[var_t_plus_2].kappa
-    q_tp3 = vals[var_t_plus_3].kappa
+    q_tm3 = vals[var_t_minus_3].theta
+    q_tm2 = vals[var_t_minus_2].theta
+    q_tm1 = vals[var_t_minus_1].theta
+    q_tp1 = vals[var_t_plus_1].theta
+    q_tp2 = vals[var_t_plus_2].theta
+    q_tp3 = vals[var_t_plus_3].theta
 
     jerk = (-q_tp3 + 8 * q_tp2 - 13 * q_tp1 + 13 * q_tm1 - 8 * q_tm2 + q_tm3) / (
         8 * dt**3

@@ -17,7 +17,7 @@ class PCCModelConfig:
     num_points_per_section: jdc.Static[int]
     length: jdc.Static[float]
 
-    # kappa_range and phi_range
+    # theta_range and phi_range
     lower_limits_theta: Float[Array, "num_sections"]
     upper_limits_theta: Float[Array, "num_sections"]
     lower_limits_phi: Float[Array, "num_sections"]
@@ -33,7 +33,7 @@ class PCCModelConfig:
 
         opt_mask = (
             config_dict["opt_base_position_mask"]
-            + [config_dict["opt_kappa"]] * config_dict["num_sections"]
+            + [config_dict["opt_theta"]] * config_dict["num_sections"]
             + [config_dict["opt_phi"]] * config_dict["num_sections"]
         )
 
@@ -52,25 +52,25 @@ class PCCModelConfig:
 @jdc.pytree_dataclass
 class ConstantCurvatureState:
     """
-    State of the PCC model (kappa, phi per section).
+    State of the PCC model (theta, phi per section).
     Length is fixed by PCCModelConfig.
     """
 
     base_position: Float[Array, "3"]
-    kappa: Float[Array, "num_sections"]  # Curvature for each section
+    theta: Float[Array, "num_sections"]  # Curvature for each section
     phi: Float[Array, "num_sections"]  # Rotation angle (phi) for each section
 
     def __sub__(self, other: ConstantCurvatureState) -> ConstantCurvatureState:
         return ConstantCurvatureState(
             base_position=self.base_position - other.base_position,
-            kappa=self.kappa - other.kappa,
+            theta=self.theta - other.theta,
             phi=self.phi - other.phi,
         )
 
     def __getitem__(self, indices: Array) -> ConstantCurvatureState:
         return ConstantCurvatureState(
             base_position=self.base_position[indices],
-            kappa=self.kappa[indices],
+            theta=self.theta[indices],
             phi=self.phi[indices],
         )
 
@@ -78,7 +78,7 @@ class ConstantCurvatureState:
         return self.base_position.shape[0]
 
     def flatten(self) -> Float[Array, "3 + num_sections + num_sections"]:
-        return jnp.concatenate([self.base_position, self.kappa, self.phi])
+        return jnp.concatenate([self.base_position, self.theta, self.phi])
 
     def repeat(self, n: int, axis: int = 0) -> ConstantCurvatureState:
         # Create tile pattern: all dimensions = 1, except the target axis = n
@@ -92,9 +92,9 @@ class ConstantCurvatureState:
                 jnp.expand_dims(self.base_position, axis=axis),
                 make_tile_pattern(self.base_position.shape, axis, n),
             ),
-            kappa=jnp.tile(
-                jnp.expand_dims(self.kappa, axis=axis),
-                make_tile_pattern(self.kappa.shape, axis, n),
+            theta=jnp.tile(
+                jnp.expand_dims(self.theta, axis=axis),
+                make_tile_pattern(self.theta.shape, axis, n),
             ),
             phi=jnp.tile(
                 jnp.expand_dims(self.phi, axis=axis),
@@ -122,12 +122,13 @@ class PCCRobot:
         ) -> ConstantCurvatureState:
             """Same as jaxls.SE3Var.retract_fn, but removing updates on certain axes."""
             delta = delta * config.opt_mask
+
             return jaxls.Var._euclidean_retract(cfg, delta)
 
         # do the initial guess, but the value is not important
         default_cfg = ConstantCurvatureState(
             base_position=jnp.zeros(3),
-            kappa=jnp.ones((config.num_sections,)),
+            theta=jnp.ones((config.num_sections,)),
             phi=jnp.zeros((config.num_sections,)),
         )
 
@@ -150,37 +151,37 @@ class PCCRobot:
         self, state: ConstantCurvatureState
     ) -> Float[Array, "num_sections 4 4"]:
         def build_transform(s, p):
-            kappa = state.kappa[s]
+            percentage = p / (self.config.num_points_per_section - 1)
+            
+            theta = state.theta[s]
             phi = state.phi[s]
-            l = (
-                p * self.config.length / (self.config.num_points_per_section - 1)
-            )  # scale to [0, length]
+            r = self.config.length / theta
 
             cos_phi = jnp.cos(phi)
             sin_phi = jnp.sin(phi)
-            cos_kl = jnp.cos(kappa * l)
-            sin_kl = jnp.sin(kappa * l)
-
-            is_small = jnp.isclose(kappa, 0.0)
-            x_trans = jnp.where(is_small, 0.0, cos_phi * (1.0 - cos_kl) / kappa)
-            y_trans = jnp.where(is_small, 0.0, sin_phi * (1.0 - cos_kl) / kappa)
-            z_trans = jnp.where(is_small, l, sin_kl / kappa)
+            cos_theta = jnp.cos(theta * percentage)
+            sin_theta = jnp.sin(theta * percentage)
 
             Ts_matrix = jnp.array(
                 [
                     [
-                        cos_phi * cos_phi * (cos_kl - 1.0) + 1.0,
-                        sin_phi * cos_phi * (cos_kl - 1.0),
-                        cos_phi * sin_kl,
-                        x_trans,
+                        cos_phi * cos_phi * (cos_theta - 1.0) + 1.0,
+                        sin_phi * cos_phi * (cos_theta - 1.0),
+                        cos_phi * sin_theta,
+                        r * cos_phi * (1.0 - cos_theta),
                     ],
                     [
-                        sin_phi * cos_phi * (cos_kl - 1.0),
-                        sin_phi * sin_phi * (cos_kl - 1.0) + 1.0,
-                        sin_phi * sin_kl,
-                        y_trans,
+                        sin_phi * cos_phi * (cos_theta - 1.0),
+                        sin_phi * sin_phi * (cos_theta - 1.0) + 1.0,
+                        sin_phi * sin_theta,
+                        r * sin_phi * (1.0 - cos_theta),
                     ],
-                    [-cos_phi * sin_kl, -sin_phi * sin_kl, cos_kl, z_trans],
+                    [
+                        -cos_phi * sin_theta,
+                        -sin_phi * sin_theta,
+                        cos_theta,
+                        r * sin_theta,
+                    ],
                     [0.0, 0.0, 0.0, 1.0],
                 ]
             )
@@ -226,7 +227,7 @@ class PCCRobot:
     def forward_kinematics(
         self, state: ConstantCurvatureState
     ) -> Float[Array, "*batch num_sections 4 4"]:
-        if state.kappa.ndim == 1:
+        if state.theta.ndim == 1:
             return self._forward_kinematics(state)
         else:
             return jax.vmap(self._forward_kinematics)(state)

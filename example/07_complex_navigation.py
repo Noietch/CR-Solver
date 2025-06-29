@@ -123,7 +123,12 @@ def viser_main():
 
     # Set up trajopt parameters
     solver = IKSolver(
-        robot, num_seeds_init=10, num_seeds_final=1, total_steps=64, init_steps=6, coll=robot_coll
+        robot,
+        num_seeds_init=10,
+        num_seeds_final=1,
+        total_steps=64,
+        init_steps=6,
+        coll=robot_coll,
     )
     ik_solver_jit = jax.jit(solver.solve_ik_best_with_coll_shape)
     traj_solver = ConstrainedMotionPlanner(robot, robot_coll, timesteps)

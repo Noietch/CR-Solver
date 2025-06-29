@@ -52,9 +52,9 @@ class MotionPlanner:
         base_position = jnp.linspace(
             results[0].base_position, results[1].base_position, self.timesteps
         )
-        kappa = jnp.linspace(results[0].kappa, results[1].kappa, self.timesteps)
+        theta = jnp.linspace(results[0].theta, results[1].theta, self.timesteps)
         phi = jnp.linspace(results[0].phi, results[1].phi, self.timesteps)
-        return ConstantCurvatureState(base_position=base_position, kappa=kappa, phi=phi)
+        return ConstantCurvatureState(base_position=base_position, theta=theta, phi=phi)
 
     def optimize(
         self,
@@ -133,7 +133,9 @@ class MotionPlanner:
 
 class ConstrainedMotionPlanner(MotionPlanner):
 
-    def tip_traj_follow(self, reference_traj: jaxlie.SE3, world_coll: Sequence[CollGeom]):
+    def tip_traj_follow(
+        self, reference_traj: jaxlie.SE3, world_coll: Sequence[CollGeom]
+    ):
         batched_ik_solver = jax.vmap(self.ik_solver.solve_ik_best)
         init_traj = batched_ik_solver(
             reference_traj.wxyz_xyz[..., :4], reference_traj.wxyz_xyz[..., 4:]

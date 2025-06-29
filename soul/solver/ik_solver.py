@@ -41,7 +41,7 @@ class IKSolver:
         self.coll = coll
 
     def sample_states(self, num_states: int) -> ConstantCurvatureState:
-        kappa = self.robot.config.lower_limits_theta + roberts_sequence(
+        theta = self.robot.config.lower_limits_theta + roberts_sequence(
             num_states, self.robot.config.num_sections, self.sample_root
         ) * (
             self.robot.config.upper_limits_theta - self.robot.config.lower_limits_theta
@@ -50,10 +50,10 @@ class IKSolver:
         phi = self.robot.config.lower_limits_phi + roberts_sequence(
             num_states, self.robot.config.num_sections, self.sample_root
         ) * (self.robot.config.upper_limits_phi - self.robot.config.lower_limits_phi)
-        
+
         states = ConstantCurvatureState(
             base_position=jnp.zeros((num_states, 3)),
-            kappa=kappa * self.robot.config.opt_mask[3],
+            theta=theta * self.robot.config.opt_mask[3],
             phi=phi * self.robot.config.opt_mask[3 + self.robot.config.num_sections],
         )
         return states

@@ -120,7 +120,7 @@ def visualize_pcc_model_3d(
         os.makedirs(dir_path, exist_ok=True)
 
     if pose.ndim == 3:
-        if target_position is not None: 
+        if target_position is not None:
             target_position = target_position[None, :]
         transform = pose[None, :, :, :]
     else:

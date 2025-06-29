@@ -3,11 +3,11 @@
     "num_points_per_section": 10,
     "length": 1.0,
     "radius": 0.1,
-    "lower_limits_theta": -3.14,
+    "lower_limits_theta": 0,
     "upper_limits_theta": 3.14, 
-    "lower_limits_phi": -3.14,
-    "upper_limits_phi": 3.14,
-    "opt_kappa": true,
+    "lower_limits_phi": 0,
+    "upper_limits_phi": 6.28,
+    "opt_theta": true,
     "opt_phi": false,
     "opt_base_position_mask": [true, false, true]
 }

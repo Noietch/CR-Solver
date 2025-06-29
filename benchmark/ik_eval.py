@@ -55,7 +55,7 @@ def ik_metric(
 def sample_states_test(robot: PCCRobot, num_states: int) -> ConstantCurvatureState:
     random_key = jax.random.PRNGKey(42)
     random_key, subkey = jax.random.split(random_key)
-    kappa = jax.random.uniform(
+    theta = jax.random.uniform(
         key=subkey,
         shape=(num_states, robot.config.num_sections),
         minval=robot.config.lower_limits_theta,
@@ -70,7 +70,7 @@ def sample_states_test(robot: PCCRobot, num_states: int) -> ConstantCurvatureSta
 
     states = ConstantCurvatureState(
         base_position=jnp.zeros((num_states, 3)),
-        kappa=kappa,
+        theta=theta,
         phi=phi,
     )
     return states
