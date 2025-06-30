@@ -20,12 +20,12 @@ def viser_main():
     # Setup Environment
     robot = PCCRobot.from_config("configs/robots/pcc.json")
     robot_coll = RobotCollision.from_config("configs/robots/pcc.json")
-    
+
     # Setup Visualization
     server = viser.ViserServer()
     robot_vis = ViserSoftRobot(server, robot_coll, root_node_name="/robot")
     robot_vis.create_sphere_visualizations()
-    
+
     # Setup GUI
     ik_target_handle = server.scene.add_transform_controls(
         "/ik_target",

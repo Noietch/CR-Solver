@@ -5,8 +5,9 @@ import jax.numpy as jnp
 import jaxls
 import jaxlie
 import numpy as np
+import networkx as nx
 
-from ..robots.pcc_robot import PCCRobot, ConstantCurvatureState
+from ..robots.pcc_robot import PCCRobot, ConstantCurvatureState, cat_states
 from ..geom import RobotCollision, CollGeom
 from ..costs import (
     pose_cost,
@@ -15,9 +16,9 @@ from ..costs import (
     continuous_collision_cost,
     trajectory_length_cost,
     rest_base_cost,
-    shape_cost,
 )
 from .ik_solver import IKSolver
+from .utils import sample_states, newton_raphson
 
 
 class MotionPlanner:
@@ -61,9 +62,6 @@ class MotionPlanner:
         init_traj: ConstantCurvatureState,
         world_coll: Sequence[CollGeom],
     ):
-        """
-        Solves the Trajectory Optimization problem.
-        """
         traj_vars = self.robot.var_cls(jnp.arange(self.timesteps))
 
         # 1. Basic regularization / limit costs.
@@ -211,3 +209,45 @@ class ConstrainedMotionPlanner(MotionPlanner):
             )
         )
         return solution[traj_vars]
+
+
+class SamplingBasedMotionPlanner(MotionPlanner):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.sample_root = newton_raphson(
+            lambda x: x ** (self.robot.config.num_sections + 1) - x - 1, 1.0, 10_000
+        )
+        self.sampled_nodes = 100
+        self.graph = nx.Graph()
+
+    def sample_nodes_with_no_collision(self):
+        # 1. sample the nodes with no collision
+        pass
+
+    def distance(self):
+        # 1. compute the distance btw the nodes
+        pass
+
+    def find_k_nearest(self):
+        # 1. compute distance between all states
+        # 2. for one node, find k nearest states
+        pass
+
+    def build_graph(
+        self,
+        start_cfg: ConstantCurvatureState,
+        end_cfg: ConstantCurvatureState,
+        num_states: int,
+        world_coll: Sequence[CollGeom],
+    ):
+        # 1. add nodes in the graph
+        # 2. add edges in the graph
+        return self.graph
+
+    def find_path(self):
+        # 1. find the path in the graph
+        pass
+
+    def interpolate_path(self):
+        # 1. interpolate the path
+        pass

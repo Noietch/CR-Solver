@@ -152,7 +152,7 @@ class PCCRobot:
     ) -> Float[Array, "num_sections 4 4"]:
         def build_transform(s, p):
             percentage = p / (self.config.num_points_per_section - 1)
-            
+
             theta = state.theta[s]
             phi = state.phi[s]
             r = self.config.length / theta

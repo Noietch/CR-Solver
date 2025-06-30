@@ -2,11 +2,11 @@ import jax
 import jaxls
 import jaxlie
 import jax.numpy as jnp
-from jaxtyping import Float, Array
+from jaxtyping import Array
 from typing import Sequence
 
-from ..robots.pcc_robot import PCCRobot, ConstantCurvatureState
-from ..solver.utils import roberts_sequence, newton_raphson
+from ..robots.pcc_robot import PCCRobot
+from ..solver.utils import sample_states, newton_raphson
 from ..costs import (
     pose_cost,
     position_cost,
@@ -39,24 +39,6 @@ class IKSolver:
         self.total_steps = total_steps
         self.init_steps = init_steps
         self.coll = coll
-
-    def sample_states(self, num_states: int) -> ConstantCurvatureState:
-        theta = self.robot.config.lower_limits_theta + roberts_sequence(
-            num_states, self.robot.config.num_sections, self.sample_root
-        ) * (
-            self.robot.config.upper_limits_theta - self.robot.config.lower_limits_theta
-        )
-
-        phi = self.robot.config.lower_limits_phi + roberts_sequence(
-            num_states, self.robot.config.num_sections, self.sample_root
-        ) * (self.robot.config.upper_limits_phi - self.robot.config.lower_limits_phi)
-
-        states = ConstantCurvatureState(
-            base_position=jnp.zeros((num_states, 3)),
-            theta=theta * self.robot.config.opt_mask[3],
-            phi=phi * self.robot.config.opt_mask[3 + self.robot.config.num_sections],
-        )
-        return states
 
     def solve_ik(self, target_wxyz: Array, target_position: Array) -> Array:
 
@@ -104,7 +86,9 @@ class IKSolver:
         vmapped_solve = jax.vmap(solve_one, in_axes=(0, 0, None))
 
         # Create initial seeds, but this time with quasi-random sequence.
-        initial_states = self.sample_states(self.num_seeds_init)
+        initial_states = sample_states(
+            self.robot, self.num_seeds_init, self.sample_root
+        )
 
         # Optimize the initial seeds.
         initial_sols, summary = vmapped_solve(
@@ -195,7 +179,9 @@ class IKSolver:
         vmapped_solve = jax.vmap(solve_one, in_axes=(0, 0, None))
 
         # Create initial seeds, but this time with quasi-random sequence.
-        initial_states = self.sample_states(self.num_seeds_init)
+        initial_states = sample_states(
+            self.robot, self.num_seeds_init, self.sample_root
+        )
 
         # Optimize the initial seeds.
         initial_sols, summary = vmapped_solve(
@@ -297,7 +283,9 @@ class IKSolver:
         vmapped_solve = jax.vmap(solve_one, in_axes=(0, 0, None))
 
         # Create initial seeds, but this time with quasi-random sequence.
-        initial_states = self.sample_states(self.num_seeds_init)
+        initial_states = sample_states(
+            self.robot, self.num_seeds_init, self.sample_root
+        )
 
         # Optimize the initial seeds.
         initial_sols, summary = vmapped_solve(
@@ -425,7 +413,9 @@ class IKSolver:
         vmapped_solve = jax.vmap(solve_one, in_axes=(0, 0, None))
 
         # Create initial seeds, but this time with quasi-random sequence.
-        initial_states = self.sample_states(self.num_seeds_init)
+        initial_states = sample_states(
+            self.robot, self.num_seeds_init, self.sample_root
+        )
         # repeat initial states for start and end
         repeated_initial_states = initial_states.repeat(2, axis=1)
 

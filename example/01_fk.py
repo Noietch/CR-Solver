@@ -26,7 +26,7 @@ batch_state = ConstantCurvatureState(
 
 state = ConstantCurvatureState(
     base_position=jnp.array([0, 0, 0]),
-    theta=jnp.array([3.1415926/3, 3.1415926/3, 3.1415926/3]),
+    theta=jnp.array([3.1415926 / 3, 3.1415926 / 3, 3.1415926 / 3]),
     phi=jnp.array([0, 0, 0]),
 )
 

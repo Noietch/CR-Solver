@@ -16,5 +16,8 @@ CUDA_VISIBLE_DEVICES=3 python benchmark/ik_eval.py
 | 6 | 1000 | 2.85e-04 | 6.16e-04 | 99.70 | 1.299 |
 
 ## TODOs
-[] Fix Complex Env IK 
-[] Sampling Based Motion Planner
+[ ] Benchmark IK with Collision
+
+[ ] (PRM*) Sampling Based Motion Planner
+
+[ ] （Fatcor Graph）Online Planning
