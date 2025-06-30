@@ -16,8 +16,10 @@ CUDA_VISIBLE_DEVICES=3 python benchmark/ik_eval.py
 | 6 | 1000 | 2.85e-04 | 6.16e-04 | 99.70 | 1.299 |
 
 ## TODOs
-[ ] Benchmark IK with Collision
+[ ]Benchmark IK with Collision && Motion Planning (Assigin To YY)
 
-[ ] (PRM*) Sampling Based Motion Planner
+[ ](PRM*) Sampling Based Motion Planner [Try to do special for continuum robot] (Assigin To ZLQ)
 
-[ ] （Fatcor Graph）Online Planning
+[ ](Fatcor Graph | MPPI) Online Planning (Assigin To ZLQ)
+
+[ ]Complex Environment Navigation (Assigin To YHQ)
