@@ -7,7 +7,7 @@ import jaxlie
 import numpy as np
 import networkx as nx
 
-from ..robots.pcc_robot import PCCRobot, ConstantCurvatureState, cat_states
+from ..robots.pcc_robot import PCCRobot, ConstantCurvatureState
 from ..geom import RobotCollision, CollGeom
 from ..costs import (
     pose_cost,
