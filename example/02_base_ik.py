@@ -1,7 +1,7 @@
 import jax
 import time
 import viser
-from soul.robots.pcc_robot import PCCRobot
+from soul.robots.cc_robot import CCRobot
 from soul.solver import IKSolver
 from soul.geom import RobotCollision
 from soul.visualization.visualizer_viser import ViserSoftRobot
@@ -18,8 +18,8 @@ if DISABLE_JIT:
 
 def viser_main():
     # Setup Environment
-    robot = PCCRobot.from_config("configs/robots/pcc.json")
-    robot_coll = RobotCollision.from_config("configs/robots/pcc.json")
+    robot = CCRobot.from_config("configs/robots/cc.json")
+    robot_coll = RobotCollision.from_config("configs/robots/cc.json")
 
     # Setup Visualization
     server = viser.ViserServer()

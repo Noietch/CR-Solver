@@ -2,7 +2,7 @@ import jax
 import time
 import viser
 import numpy as np
-from soul.robots.pcc_robot import PCCRobot
+from soul.robots.cc_robot import CCRobot
 from soul.solver import IKSolver
 from soul.geom import HalfSpace, RobotCollision, Sphere
 from soul.visualization.visualizer_viser import ViserSoftRobot
@@ -19,9 +19,9 @@ if DISABLE_JIT:
 
 
 def main():
-    robot = PCCRobot.from_config("configs/robots/pcc.json")
+    robot = CCRobot.from_config("configs/robots/cc.json")
     robot_coll = RobotCollision.from_config(
-        "configs/robots/pcc.json", self_collision_sampling_rate=1
+        "configs/robots/cc.json", self_collision_sampling_rate=1
     )
     server = viser.ViserServer()
     plane_coll = HalfSpace.from_point_and_normal(

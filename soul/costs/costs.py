@@ -4,8 +4,8 @@ import jaxlie
 from jax import Array
 from jaxls import Cost, Var, VarValues
 
-from ..robots.pcc_robot import PCCRobot, ConstantCurvatureState
-from ..geom.collision_pcc_robot import RobotCollision
+from ..robots.cc_robot import CCRobot, ConstantCurvatureState
+from ..geom.collision_cc_robot import RobotCollision
 from ..geom.geometry import CollGeom
 from ..geom.collision import colldist_from_sdf, collide
 
@@ -13,7 +13,7 @@ from ..geom.collision import colldist_from_sdf, collide
 @Cost.create_factory
 def position_cost(
     vals: VarValues,
-    robot: PCCRobot,
+    robot: CCRobot,
     robot_var: Var[ConstantCurvatureState],
     target_position: Array,
     weight: Array | float,
@@ -29,7 +29,7 @@ def position_cost(
 @Cost.create_factory
 def shape_cost(
     vals: VarValues,
-    robot: PCCRobot,
+    robot: CCRobot,
     robot_var: Var[ConstantCurvatureState],
     target_shape: Array,
     weight: Array | float,
@@ -45,7 +45,7 @@ def shape_cost(
 @Cost.create_factory
 def pose_cost(
     vals: VarValues,
-    robot: PCCRobot,
+    robot: CCRobot,
     robot_var: Var[ConstantCurvatureState],
     target_pose: jaxlie.SE3,
     pos_weight: Array | float,
@@ -65,7 +65,7 @@ def pose_cost(
 @Cost.create_factory
 def limit_cost(
     vals: VarValues,
-    robot: PCCRobot,
+    robot: CCRobot,
     robot_var: Var[ConstantCurvatureState],
     weight: Array | float,
 ) -> Array:
@@ -93,7 +93,7 @@ def limit_cost(
 @Cost.create_factory
 def world_collision_cost(
     vals: VarValues,
-    robot: PCCRobot,
+    robot: CCRobot,
     robot_coll: RobotCollision,
     robot_var: Var[ConstantCurvatureState],
     world_geom: CollGeom,
@@ -110,7 +110,7 @@ def world_collision_cost(
 @Cost.create_factory
 def self_collision_cost(
     vals: VarValues,
-    robot: PCCRobot,
+    robot: CCRobot,
     robot_coll: RobotCollision,
     joint_var: Var[Array],
     margin: float,
@@ -126,7 +126,7 @@ def self_collision_cost(
 @Cost.create_factory
 def continuous_collision_cost(
     vals: VarValues,
-    robot: PCCRobot,
+    robot: CCRobot,
     robot_coll: RobotCollision,
     world_coll_obj: CollGeom,
     prev_traj_vars: Var[ConstantCurvatureState],
@@ -202,7 +202,7 @@ def rest_base_cost(
 @Cost.create_factory
 def trajectory_length_cost(
     vals: VarValues,
-    robot: PCCRobot,
+    robot: CCRobot,
     curr_robot_var: Var[ConstantCurvatureState],
     past_robot_var: Var[ConstantCurvatureState],
     weight: Array | float,
@@ -225,7 +225,7 @@ def trajectory_length_cost(
 @Cost.create_factory
 def five_point_velocity_cost(
     vals: VarValues,
-    robot: PCCRobot,  # Needed for limits
+    robot: CCRobot,  # Needed for limits
     var_t_plus_2: Var[Array],
     var_t_plus_1: Var[Array],
     var_t_minus_1: Var[Array],

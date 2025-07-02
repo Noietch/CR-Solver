@@ -1,10 +1,10 @@
 import jax
 import jax.numpy as jnp
 
-from soul.robots.pcc_robot import PCCRobot, ConstantCurvatureState
+from soul.robots.cc_robot import CCRobot, ConstantCurvatureState
 from soul.visualization.visualizer_plot import (
-    visualize_pcc_model_3d,
-    visualize_pcc_model_2d,
+    visualize_cc_model_3d,
+    visualize_cc_model_2d,
 )
 
 DISABLE_JIT = False
@@ -16,7 +16,7 @@ if DISABLE_JIT:
     os.environ["JAX_DISABLE_JIT"] = "True"
     jax.config.update("jax_disable_jit", True)
 
-robot = PCCRobot.from_config("configs/robots/pcc.json")
+robot = CCRobot.from_config("configs/robots/cc.json")
 
 batch_state = ConstantCurvatureState(
     base_position=jnp.array([[0, 0, 0], [0, 0, 0]]),
@@ -31,13 +31,13 @@ state = ConstantCurvatureState(
 )
 
 pose = robot.forward_kinematics(state)
-print(pose)
-visualize_pcc_model_2d(
+
+visualize_cc_model_2d(
     pose,
     num_points=robot.config.num_points_per_section,
     save_path="visualization/forward_kinematics_2d.png",
 )
-visualize_pcc_model_3d(
+visualize_cc_model_3d(
     pose,
     num_points=robot.config.num_points_per_section,
     save_path="visualization/forward_kinematics_3d.png",

@@ -6,7 +6,7 @@ import time
 import json
 import os
 from typing import Callable
-from soul.robots.pcc_robot import PCCRobot, ConstantCurvatureState
+from soul.robots.cc_robot import CCRobot, ConstantCurvatureState
 from soul.solver import IKSolver
 
 from benchmark.visualizer_eval import create_figure, visualizer_forward_samples
@@ -52,7 +52,7 @@ def ik_metric(
     )
 
 
-def sample_states_test(robot: PCCRobot, num_states: int) -> ConstantCurvatureState:
+def sample_states_test(robot: CCRobot, num_states: int) -> ConstantCurvatureState:
     random_key = jax.random.PRNGKey(42)
     random_key, subkey = jax.random.split(random_key)
     theta = jax.random.uniform(
@@ -77,7 +77,7 @@ def sample_states_test(robot: PCCRobot, num_states: int) -> ConstantCurvatureSta
 
 
 def eval_ik_with_no_coll(
-    robot: PCCRobot,
+    robot: CCRobot,
     eval_num: int,
     batched_ik_solve: Callable[[Array, Array], Array],
     batched_fk: Callable[[ConstantCurvatureState], Array],
@@ -143,9 +143,9 @@ def eval_ik_with_no_coll(
 def eval_ik_all_sections(section_list: list, eval_num_list: list):
     all_results_summary = []
     for num_sections in section_list:
-        config = json.load(open(f"configs/robots/pcc_eval.json"))
+        config = json.load(open(f"configs/robots/cc_eval.json"))
         config["num_sections"] = num_sections
-        robot = PCCRobot.from_config(config)
+        robot = CCRobot.from_config(config)
         batched_fk = jax.vmap(robot._forward_kinematics)
         solver = IKSolver(
             robot, num_seeds_init=64, num_seeds_final=4, total_steps=1000, init_steps=10

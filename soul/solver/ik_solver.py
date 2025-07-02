@@ -5,7 +5,7 @@ import jax.numpy as jnp
 from jaxtyping import Array
 from typing import Sequence
 
-from ..robots.pcc_robot import PCCRobot
+from ..robots.cc_robot import CCRobot
 from ..solver.utils import sample_states, newton_raphson
 from ..costs import (
     pose_cost,
@@ -23,7 +23,7 @@ from ..geom import RobotCollision, CollGeom
 class IKSolver:
     def __init__(
         self,
-        robot: PCCRobot,
+        robot: CCRobot,
         num_seeds_init: int,
         num_seeds_final: int,
         total_steps: int,

@@ -2,7 +2,7 @@ import jax
 import jax.numpy as jnp
 from jax import lax
 
-from ..robots.pcc_robot import PCCRobot, ConstantCurvatureState
+from ..robots.cc_robot import CCRobot, ConstantCurvatureState
 
 
 def newton_raphson(f, x, iters):
@@ -28,7 +28,7 @@ def roberts_sequence(num_points, dim, root):
 
 
 def sample_states(
-    robot: PCCRobot, num_states: int, sample_root: float
+    robot: CCRobot, num_states: int, sample_root: float
 ) -> ConstantCurvatureState:
     theta = robot.config.lower_limits_theta + roberts_sequence(
         num_states, robot.config.num_sections, sample_root

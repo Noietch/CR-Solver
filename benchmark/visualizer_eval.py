@@ -11,11 +11,11 @@ def create_figure() -> Axes:
     ax.set_xlabel("X")
     ax.set_ylabel("Y")
     ax.set_zlabel("Z")
-    ax.set_title("PCC Model Visualization")
+    ax.set_title("CC Model Visualization")
     return ax
 
 
-def draw_pcc_3d(
+def draw_cc_3d(
     ax: Axes,
     pose: Array,
     target_position: Array = None,
@@ -99,5 +99,5 @@ def visualizer_forward_samples(
     save_path: str,
 ):
     for pose, target_position in zip(batch_pose, batch_target_position):
-        draw_pcc_3d(ax, pose, target_position, num_points)
+        draw_cc_3d(ax, pose, target_position, num_points)
     finalize_plot_3d(ax, save_path)

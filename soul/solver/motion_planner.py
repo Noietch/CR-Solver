@@ -7,7 +7,7 @@ import jaxlie
 import numpy as np
 import networkx as nx
 
-from ..robots.pcc_robot import PCCRobot, ConstantCurvatureState
+from ..robots.cc_robot import CCRobot, ConstantCurvatureState
 from ..geom import RobotCollision, CollGeom
 from ..costs import (
     pose_cost,
@@ -22,7 +22,7 @@ from .utils import sample_states, newton_raphson
 
 
 class MotionPlanner:
-    def __init__(self, robot: PCCRobot, coll: RobotCollision, timesteps: int):
+    def __init__(self, robot: CCRobot, coll: RobotCollision, timesteps: int):
         self.timesteps = timesteps
         self.robot = robot
         self.coll = coll

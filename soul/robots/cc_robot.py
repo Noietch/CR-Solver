@@ -10,8 +10,8 @@ from jaxtyping import Float
 
 
 @jdc.pytree_dataclass
-class PCCModelConfig:
-    """Configuration for the PCCModel."""
+class CCModelConfig:
+    """Configuration for the CCModel."""
 
     num_sections: jdc.Static[int]
     num_points_per_section: jdc.Static[int]
@@ -26,7 +26,7 @@ class PCCModelConfig:
     opt_mask: jdc.Static[jnp.ndarray]
 
     @classmethod
-    def from_config(cls, config_dict: dict | str) -> PCCModelConfig:
+    def from_config(cls, config_dict: dict | str) -> CCModelConfig:
         """Creates a config object from a dictionary."""
         if isinstance(config_dict, str):
             config_dict = json.load(open(config_dict))
@@ -52,8 +52,8 @@ class PCCModelConfig:
 @jdc.pytree_dataclass
 class ConstantCurvatureState:
     """
-    State of the PCC model (theta, phi per section).
-    Length is fixed by PCCModelConfig.
+    State of the CC model (theta, phi per section).
+    Length is fixed by CCModelConfig.
     """
 
     base_position: Float[Array, "3"]
@@ -103,19 +103,19 @@ class ConstantCurvatureState:
         )
 
 
-# --- PCCModel Class ---
+# --- CCModel Class ---
 @jdc.pytree_dataclass
-class PCCRobot:
-    """A differentiable Piecewise Constant Curvature (PCC) kinematic model."""
+class CCRobot:
+    """A differentiable Piecewise Constant Curvature (CC) kinematic model."""
 
-    config: PCCModelConfig
+    config: CCModelConfig
 
     var_cls: jdc.Static[type[jaxls.Var[ConstantCurvatureState]]]
 
     @staticmethod
-    def from_config(config_dict: dict) -> PCCRobot:
+    def from_config(config_dict: dict) -> CCRobot:
 
-        config = PCCModelConfig.from_config(config_dict)
+        config = CCModelConfig.from_config(config_dict)
 
         def retract_fn(
             cfg: ConstantCurvatureState, delta: Array
@@ -139,7 +139,7 @@ class PCCRobot:
             tangent_dim=3 + config.num_sections + config.num_sections,
         ): ...
 
-        robot = PCCRobot(
+        robot = CCRobot(
             config=config,
             var_cls=StateVar,
         )

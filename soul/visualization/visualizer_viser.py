@@ -2,10 +2,10 @@ import viser
 import numpy as np
 import jax.numpy as jnp
 import jaxlie
-from ..geom.collision_pcc_robot import RobotCollision
+from ..geom.collision_cc_robot import RobotCollision
 from ..geom.collision_world import WorldCollision
 from ..geom.geometry import Sphere
-from ..robots.pcc_robot import ConstantCurvatureState, PCCRobot
+from ..robots.cc_robot import ConstantCurvatureState, CCRobot
 
 
 class ViserSoftRobot:
@@ -57,7 +57,7 @@ class ViserSoftRobot:
             position = se3.translation()
             handle.position = np.array(position)
 
-    def visualize_traj_collisions(self, robot: PCCRobot, cfg: ConstantCurvatureState):
+    def visualize_traj_collisions(self, robot: CCRobot, cfg: ConstantCurvatureState):
         """Visualize a capsule."""
         for i in range(len(cfg) - 1):
             swept_capsules = self.robot_coll.get_swept_capsules(

@@ -24,7 +24,7 @@ def _plot_sphere(ax, center, radius):
     )
 
 
-def visualize_pcc_model_2d(
+def visualize_cc_model_2d(
     pose: Array,
     target_position: Array = None,
     num_points: int = None,
@@ -109,7 +109,7 @@ def visualize_pcc_model_2d(
         plt.savefig(save_path)
 
 
-def visualize_pcc_model_3d(
+def visualize_cc_model_3d(
     pose: Array,
     target_position: Array = None,
     num_points: int = None,

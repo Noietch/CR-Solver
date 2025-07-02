@@ -10,7 +10,7 @@ import json
 from jaxtyping import Array, Float, Int
 from loguru import logger
 
-from ..robots.pcc_robot import PCCRobot, ConstantCurvatureState
+from ..robots.cc_robot import CCRobot, ConstantCurvatureState
 from .collision import collide, pairwise_collide
 from .geometry import Capsule, Sphere, CollGeom
 
@@ -95,7 +95,7 @@ class RobotCollision:
         return jnp.array(active_idx_i), jnp.array(active_idx_j)
 
     @jdc.jit
-    def at_state(self, robot: PCCRobot, state: ConstantCurvatureState) -> CollGeom:
+    def at_state(self, robot: CCRobot, state: ConstantCurvatureState) -> CollGeom:
         all_poses = robot._forward_kinematics(state)
         all_poses_se3 = jaxlie.SE3.from_matrix(all_poses)
         return self.coll.set_transform(all_poses_se3)
@@ -103,7 +103,7 @@ class RobotCollision:
     @jdc.jit
     def get_swept_capsules(
         self,
-        robot: PCCRobot,
+        robot: CCRobot,
         state_prev: ConstantCurvatureState,
         state_next: ConstantCurvatureState,
     ) -> Capsule:
@@ -114,7 +114,7 @@ class RobotCollision:
 
     def compute_self_collision_distance(
         self,
-        robot: PCCRobot,
+        robot: CCRobot,
         cfg: Float[Array, "*batch actuated_count"],
     ) -> Float[Array, "*batch num_active_pairs"]:
         """
@@ -139,7 +139,7 @@ class RobotCollision:
 
     def compute_world_collision_distance(
         self,
-        robot: PCCRobot,
+        robot: CCRobot,
         state: ConstantCurvatureState,
         world_geom: CollGeom,  # Shape: (*batch_world, M, ...)
     ) -> Float[Array, "*batch_combined N M"]:
