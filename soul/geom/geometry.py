@@ -422,7 +422,7 @@ class BoundingBox(CollGeom):
     ) -> BoundingBox:
         """Create a BoundingBox geometry from a center and extents."""
         center, extents = jnp.array(center), jnp.array(extents)
-        batch_axes = jnp.broadcast_shapes(center.shape[:-1], extents.shape)
+        batch_axes = jnp.broadcast_shapes(center.shape[:-1], extents.shape[:-1])
         center = jnp.broadcast_to(center, batch_axes + (3,))
         extents = jnp.broadcast_to(extents, batch_axes + (3,))
         return BoundingBox(pose=jaxlie.SE3.from_translation(center), size=extents)
