@@ -31,7 +31,6 @@ class ViserSoftRobot:
         # This is a reasonable assumption based on how RobotCollision is initialized
         if isinstance(self.robot_coll.coll, Sphere):
             num_spheres = self.robot_coll.coll.radius.shape[0]
-            # breakpoint()
             # Create a mesh for each sphere in the model
             for i in range(num_spheres):
                 sphere_node_name = f"{self.root_node_name}/sphere_{i}"

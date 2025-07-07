@@ -115,7 +115,7 @@ def viser_main_prm():
     timesteps = 100
     traj_solver = SamplingBasedMotionPlanner(robot, robot_coll, timesteps)
     start_end_interpolate_jit = jax.jit(traj_solver.start_end_interpolate)
-    # optimize_jit = jax.jit(traj_solver.optimize)
+    optimize_jit = jax.jit(traj_solver.optimize)
 
     traj = None
 
@@ -130,19 +130,19 @@ def viser_main_prm():
             end_handle.wxyz,
             world_coll.collision_geoms,
         )
-        traj_solver.build_graph(
-            cfg[0],
-            cfg[1],
-            10,
-            world_coll.collision_geoms,
-        )
-        # cfg = optimize_jit(cfg, world_coll.collision_geoms)
-        # traj = robot.forward_kinematics(cfg)
-        # print("Finish planning....")
+        # traj_solver.build_graph(
+        #     cfg[0],
+        #     cfg[1],
+        #     10,
+        #     world_coll.collision_geoms,
+        # )
+        cfg = optimize_jit(cfg, world_coll.collision_geoms)
+        traj = robot.forward_kinematics(cfg)
+        print("Finish planning....")
         # # robot_vis.visualize_traj_collisions(robot, cfg)
-        # for i in range(timesteps):
-        #     time.sleep(0.01)
-        #     robot_vis.update_pose(traj[i])
+        for i in range(timesteps):
+            time.sleep(0.01)
+            robot_vis.update_pose(traj[i])
 
     def replay_callback(args):
         global traj

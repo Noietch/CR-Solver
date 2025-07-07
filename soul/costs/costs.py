@@ -5,9 +5,36 @@ from jax import Array
 from jaxls import Cost, Var, VarValues
 
 from ..robots.cc_robot import CCRobot, ConstantCurvatureState
+from ..robots.pcc_robot import PCCRobot, PCCState
 from ..geom.collision_cc_robot import RobotCollision
 from ..geom.geometry import CollGeom
 from ..geom.collision import colldist_from_sdf, collide
+
+
+@Cost.create_factory
+def tendon_similarity_cost(
+    vals: VarValues,
+    robot: PCCRobot,
+    robot_var: Var[ConstantCurvatureState],
+    tendon_target: Array,
+    weight: Array | float,
+) -> Array:
+    state = vals[robot_var]
+    tendon_lengths = robot.compute_tendon_lengths(state)
+    residual = tendon_lengths[0] - tendon_target[0]
+    return (residual * weight).flatten()
+
+
+@Cost.create_factory
+def elastic_energy_cost(
+    vals: VarValues,
+    robot_var: Var[PCCState],
+    weight: Array | float,
+) -> Array:
+    """Computes the elastic energy of the robot. Penalize large theta."""
+    kappa_x = vals[robot_var].kappa_x
+    kappa_y = vals[robot_var].kappa_y
+    return ((kappa_x * kappa_x + kappa_y * kappa_y) * weight).flatten()
 
 
 @Cost.create_factory
@@ -175,17 +202,6 @@ def boundary_cost(
     """Computes the residual penalizing start and end pose differences."""
     state = vals[robot_var]
     return ((state - start_end_cfg)).flatten() * weight
-
-
-@Cost.create_factory
-def elastic_energy_cost(
-    vals: VarValues,
-    robot_var: Var[ConstantCurvatureState],
-    weight: Array | float,
-) -> Array:
-    """Computes the elastic energy of the robot. Penalize large theta."""
-    theta = vals[robot_var].theta
-    return (theta * weight).flatten()
 
 
 @Cost.create_factory

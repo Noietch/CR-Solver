@@ -1,0 +1,11 @@
+{
+    "num_sections": 20,
+    "num_points_per_section": 2,
+    "length": 0.1,
+    "radius": 0.05,
+    "num_tendons": 2,
+    "opt_base_position_mask": [false, false, false],
+    "opt_kappa_x": true,
+    "opt_kappa_y": false,
+    "opt_epsilon": false
+}
