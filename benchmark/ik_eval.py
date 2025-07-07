@@ -14,9 +14,6 @@ from benchmark.visualizer_eval import create_figure, visualizer_forward_samples
 DISABLE_JIT = False
 
 if DISABLE_JIT:
-    import os
-    import jax
-
     os.environ["JAX_DISABLE_JIT"] = "True"
     jax.config.update("jax_disable_jit", True)
 
@@ -81,7 +78,7 @@ def eval_ik_with_no_coll(
     eval_num: int,
     batched_ik_solve: Callable[[Array, Array], Array],
     batched_fk: Callable[[ConstantCurvatureState], Array],
-    visualize: bool = False,
+    visualize: bool = True,
     save_path: str = None,
 ):
     """Main function for basic IK."""
@@ -97,13 +94,14 @@ def eval_ik_with_no_coll(
     tip_transform = jaxlie.SE3.from_matrix(target_transforms[:, -1, ...])
     target_wxyz = tip_transform.rotation().wxyz
     target_position = tip_transform.translation()
-    visualizer_forward_samples(
-        ax,
-        target_transforms,
-        target_position,
-        num_points=robot.config.num_points_per_section,
-        save_path=save_path,
-    )
+    if visualize:
+        visualizer_forward_samples(
+            ax,
+            target_transforms,
+            target_position,
+            num_points=robot.config.num_points_per_section,
+            save_path=save_path,
+        )
 
     # warmup
     print(f"finish forward, start warmup")

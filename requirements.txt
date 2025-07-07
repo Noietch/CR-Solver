@@ -6,4 +6,5 @@ viser
 jax_dataclasses
 jaxlie
 jaxtyping
+coacd
 git+https://github.com/brentyi/jaxls.git
