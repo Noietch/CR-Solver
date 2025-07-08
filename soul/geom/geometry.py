@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import abc
-from typing import cast, Self
-
+try:
+    from typing import cast, Self
+except:
+    from typing_extensions import cast, Self
 import trimesh
 
 import jax.numpy as jnp
