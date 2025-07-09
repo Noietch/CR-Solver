@@ -56,35 +56,58 @@ COLLISION_OBSTACLES = [
 ]
 
 
-def ik_metric(
+def ik_metric_with_coll(
     result_transform: jaxlie.SE3,
     target_position: Array,
     target_orientation: Array,
-) -> float:
-    result_position = result_transform.translation()
-    result_orientation = result_transform.rotation()
+    solution_collision_mask: Array,
+) -> tuple[float, float, float]:
+    """
+    Calculates IK success metrics considering both accuracy and collision avoidance.
 
-    position_error = jnp.linalg.norm(result_position - target_position, axis=-1)
-    position_threshold: float = 0.001
-    rotation_threshold: float = 0.05
+    Args:
+        result_transform: The resulting end-effector transforms from the IK solver.
+        target_position: The target positions.
+        target_orientation: The target orientations (as wxyz quaternions).
+        solution_collision_mask: A boolean array where True indicates a collision.
 
+    Returns:
+        A tuple containing:
+        - final_success_rate: The percentage of solutions that are both accurate and collision-free.
+        - final_pos_error: The mean position error for successful solutions.
+        - final_rot_error: The mean rotation error for successful solutions.
+    """
+    # Accuracy thresholds from the evaluation function
+    position_threshold: float = 0.5
+    rotation_threshold: float = 0.5
+
+    position_error = jnp.linalg.norm(
+        result_transform.translation() - target_position,
+        axis=-1,
+    )
     orientation_error = jnp.linalg.norm(
-        jnp.array(
-            (jaxlie.SO3(target_orientation).inverse() @ result_orientation).log()
-        ),
+        (jaxlie.SO3(target_orientation).inverse() @ result_transform.rotation()).log(),
         axis=-1,
     )
 
-    success_mask = jnp.logical_and(
+    # Original success mask (accuracy only)
+    accuracy_success_mask = jnp.logical_and(
         position_error < position_threshold,
         orientation_error < rotation_threshold,
     )
 
-    return (
-        jnp.mean(success_mask) * 100.0,
-        jnp.mean(position_error[success_mask]),
-        jnp.mean(orientation_error[success_mask]),
+    # Final success mask (accurate and collision-free)
+    final_success_mask = jnp.logical_and(
+        accuracy_success_mask,
+        ~solution_collision_mask,
     )
+
+    final_success_rate = jnp.mean(final_success_mask) * 100.0
+    # Use jnp.nanmean to avoid errors if no solutions are successful
+    final_pos_error = jnp.nan_to_num(jnp.mean(position_error[final_success_mask]))
+    final_rot_error = jnp.nan_to_num(jnp.mean(orientation_error[final_success_mask]))
+
+    return final_success_rate, final_pos_error, final_rot_error
 
 
 def sample_states_test(robot: CCRobot, num_states: int) -> ConstantCurvatureState:
@@ -210,31 +233,11 @@ def eval_ik_with_coll(
     # calculate accuracy metrics
     fk_result = robot.forward_kinematics(solution_states)
     tip_transforms = jaxlie.SE3.from_matrix(fk_result[:, -1, ...])
-    # Combine accuracy and collision results to get final success criteria
-    position_error = jnp.linalg.norm(
-        tip_transforms.translation() - target_position,
-        axis=-1,
-    )
-    orientation_error = jnp.linalg.norm(
-        (jaxlie.SO3(target_wxyz).inverse() @ tip_transforms.rotation()).log(),
-        axis=-1,
-    )
 
-    # Original success mask (accuracy only)
-    accuracy_success_mask = jnp.logical_and(
-        position_error < 0.5,
-        orientation_error < 0.5,
+    # Calculate final metrics using the dedicated function
+    final_success_rate, final_pos_error, final_rot_error = ik_metric_with_coll(
+        tip_transforms, target_position, target_wxyz, solution_collision_mask
     )
-
-    # Final success mask (accurate and collision-free)
-    final_success_mask = jnp.logical_and(
-        accuracy_success_mask,
-        ~solution_collision_mask,
-    )
-
-    final_success_rate = jnp.mean(final_success_mask) * 100.0
-    final_pos_error = jnp.mean(position_error[final_success_mask])
-    final_rot_error = jnp.mean(orientation_error[final_success_mask])
 
     print(f"--- With Collision Results ---")
     print(

@@ -2,10 +2,12 @@ import viser
 import numpy as np
 import jax.numpy as jnp
 import jaxlie
+import jax_dataclasses as jdc
 from ..geom.collision_cc_robot import RobotCollision
 from ..geom.collision_world import WorldCollision
 from ..geom.geometry import Sphere
 from ..robots.cc_robot import ConstantCurvatureState, CCRobot
+from functools import partial
 
 
 class ViserSoftRobot:
@@ -91,24 +93,53 @@ class ViserWorld:
         self,
         server: viser.ViserServer | viser.ClientHandle,
         world_coll: WorldCollision,
+        is_handle_able: bool = False,
     ):
         self.server = server
         self.world_coll = world_coll
+        self.is_handle_able = is_handle_able
+
+    def update_obstacle_pose(self, index, event):
+        new_pose_slice = np.concatenate([event.wxyz, event.position])
+        new_poses = self.world_coll.obstacles.pose.wxyz_xyz.at[index].set(
+            new_pose_slice
+        )
+
+        # Create a new pose object
+        new_pose = jaxlie.SE3(new_poses)
+
+        # Create a new obstacles object with the updated pose
+        new_obstacles = jdc.replace(self.world_coll.obstacles, pose=new_pose)
+
+        # Create a new world_coll object with the updated obstacles
+        self.world_coll = jdc.replace(self.world_coll, obstacles=new_obstacles)
 
     def create_mesh_visualizations(self):
         """Create mesh visualizations for the obstacles."""
         # add mesh visualizations
-        for i, mesh in enumerate(self.world_coll.mesh):
-            self.server.scene.add_mesh_trimesh(
-                name=f"obstacles/mesh_{i}",
-                mesh=mesh,
-            )
+        if self.is_handle_able:
+            for i, mesh in enumerate(self.world_coll.mesh):
+                obstacle_pose = self.world_coll.obstacles.pose.wxyz_xyz[i]
+                obstacle_handle = self.server.scene.add_transform_controls(
+                    f"obstacles/handle_{i}",
+                    scale=0.5,
+                    position=np.array(obstacle_pose[4:]),
+                    wxyz=np.array(obstacle_pose[:4]),
+                )
+                mesh.apply_translation(-obstacle_pose[4:])
+                # jax.debug.breakpoint()
+                self.server.scene.add_mesh_trimesh(
+                    name=f"obstacles/handle_{i}/mesh",
+                    mesh=mesh,
+                )
 
-        # add collision visualizations
-        self.server.scene.add_mesh_trimesh(
-            name=f"obstacles/collision",
-            mesh=self.world_coll.obstacles.to_trimesh(),
-        )
+                obstacle_handle.on_update(partial(self.update_obstacle_pose, i))
+
+        else:
+            self.server.scene.add_mesh_trimesh(
+                name=f"obstacles/collision",
+                mesh=self.world_coll.obstacles.to_trimesh(),
+            )
 
         # add ground visualizations
         self.server.scene.add_grid("/ground", width=6, height=6)
