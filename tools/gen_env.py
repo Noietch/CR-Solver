@@ -11,12 +11,14 @@ def main():
     robot_coll = RobotCollision.from_config("configs/robots/cc_mobile_z.json")
     world_coll = WorldCollision.from_config("configs/maps/obstacles_03.json")
     # jax.debug.breakpoint()
-
-    # Setup Visualization
+    config_path = "configs/maps/obstacles_N.json"
+     # Setup Visualization
     server = viser.ViserServer()
     robot_vis = ViserSoftRobot(server, robot_coll, root_node_name="/robot")
     robot_vis.create_sphere_visualizations()
-    obstacles_vis = ViserWorld(server, world_coll, is_handle_able=True)
+    obstacles_vis = ViserWorld(
+        server, world_coll, is_handle_able=True, config_path=config_path
+    )
     obstacles_vis.create_mesh_visualizations()
 
     while True:

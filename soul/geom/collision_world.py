@@ -7,7 +7,7 @@ import jaxlie
 import jax.numpy as jnp
 from jaxtyping import Float, Array
 
-from .geometry import BoundingBox, cat_geoms, HalfSpace, CollGeom
+from .geometry import BoundingBox, cat_geoms, HalfSpace, CollGeom, Sphere
 from .utils import load_mesh
 import jaxlie
 
@@ -48,6 +48,13 @@ class WorldCollision:
                 )
                 obstacles.append(BoundingBox.from_trimesh(decomposed_mesh))
                 meshes.append(original_mesh)
+            elif obstacle["type"] == "sphere":
+                sphere = Sphere.from_center_and_radius(
+                    obstacle["center"], obstacle["radius"]
+                )
+                obstacles.append(sphere)
+                meshes.append(sphere.to_trimesh())
+                
             else:
                 raise ValueError(f"Unknown obstacle type: {obstacle['type']}")
         if len(obstacles) == 1:
