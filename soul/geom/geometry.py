@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import abc
+
 try:
     from typing import cast, Self
 except:

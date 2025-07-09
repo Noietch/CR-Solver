@@ -125,10 +125,8 @@ def is_state_in_collision(
     world_dist = robot_coll.compute_world_collision_distance(robot, state, world_geom)
     world_cost = jnp.sum(colldist_from_sdf(world_dist, margin).flatten())
 
-    self_cost = 0.0
-
-    # 3. Sum costs and check for collision
-    total_cost = world_cost + self_cost
+    # 2. Sum costs and check for collision
+    total_cost = world_cost
     return total_cost > 1e-6
 
 
@@ -139,7 +137,6 @@ def eval_ik_with_coll(
     batched_fk: Callable[[ConstantCurvatureState], Array],
     robot_coll: RobotCollision,
     world_geom: CollGeom,
-    visualize: bool = False,
     save_path: str = None,
 ):
     """Main function for basic IK with collision avoidance."""
@@ -149,7 +146,7 @@ def eval_ik_with_coll(
         f"start solve ik WITH COLLISION of num sections {num_sections}, num eval {eval_num}"
     )
 
-    # 采样无碰撞的目标点
+    # Sample collision-free target points
     print(f"Sampling {eval_num} collision-free target states...")
     collision_free_states = []
     total_sampled = 0
@@ -157,7 +154,7 @@ def eval_ik_with_coll(
     num_free_states = 0
 
     while num_free_states < eval_num and total_sampled < max_sampling_attempts:
-        # 批量采样一批状态
+        # Batch sample a set of states
         candidate_states = sample_states_test(robot, eval_num)
         total_sampled += eval_num
 
@@ -284,7 +281,7 @@ def eval_ik_all_sections(section_list: list, eval_num_list: list):
             coll=robot_coll,
         )
         batched_ik_solve = jax.vmap(
-            solver.solve_ik_best_with_coll, in_axes=(0, 0, None)
+            jax.jit(solver.solve_ik_best_with_coll), in_axes=(0, 0, None)
         )
         for eval_num in eval_num_list:
             all_results_summary.append(

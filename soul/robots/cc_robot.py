@@ -213,8 +213,9 @@ class CCRobot:
 
         for i in range(self.config.num_sections):
             segment_transforms = transform_matrices[
-                i * self.config.num_points_per_section:
-                (i + 1) * self.config.num_points_per_section
+                i
+                * self.config.num_points_per_section : (i + 1)
+                * self.config.num_points_per_section
             ]
             segment_poses = jnp.matmul(prev_pose, segment_transforms)
             final_poses.append(segment_poses)
