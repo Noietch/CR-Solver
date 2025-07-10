@@ -24,35 +24,13 @@ if DISABLE_JIT:
     jax.config.update("jax_disable_jit", True)
 
 
+obstacle_json_path = "../configs/maps/obstacles_04.json"
+OBSTACLE_JSON_PATH = os.path.join(os.path.dirname(__file__), obstacle_json_path)
+with open(OBSTACLE_JSON_PATH, "r") as f:
+    obstacle_data = json.load(f)
 # [ (center_x, center_y, center_z, radius), ... ]
 COLLISION_OBSTACLES = [
-    (jnp.array([-1.0, -1.0, 1.5]), 0.15),
-    (jnp.array([-1.0, -1.0, 2.5]), 0.15),
-    (jnp.array([-1.0, -1.0, 3.5]), 0.15),
-    (jnp.array([-1.0, 0.0, 1.5]), 0.15),
-    (jnp.array([-1.0, 0.0, 2.5]), 0.15),
-    (jnp.array([-1.0, 0.0, 3.5]), 0.15),
-    (jnp.array([-1.0, 1.0, 1.5]), 0.15),
-    (jnp.array([-1.0, 1.0, 2.5]), 0.15),
-    (jnp.array([-1.0, 1.0, 3.5]), 0.15),
-    (jnp.array([0.0, -1.0, 1.5]), 0.15),
-    (jnp.array([0.0, -1.0, 2.5]), 0.15),
-    (jnp.array([0.0, -1.0, 3.5]), 0.15),
-    (jnp.array([0.0, 0.0, 1.5]), 0.15),
-    (jnp.array([0.0, 0.0, 2.5]), 0.15),
-    (jnp.array([0.0, 0.0, 3.5]), 0.15),
-    (jnp.array([0.0, 1.0, 1.5]), 0.15),
-    (jnp.array([0.0, 1.0, 2.5]), 0.15),
-    (jnp.array([0.0, 1.0, 3.5]), 0.15),
-    (jnp.array([1.0, -1.0, 1.5]), 0.15),
-    (jnp.array([1.0, -1.0, 2.5]), 0.15),
-    (jnp.array([1.0, -1.0, 3.5]), 0.15),
-    (jnp.array([1.0, 0.0, 1.5]), 0.15),
-    (jnp.array([1.0, 0.0, 2.5]), 0.15),
-    (jnp.array([1.0, 0.0, 3.5]), 0.15),
-    (jnp.array([1.0, 1.0, 1.5]), 0.15),
-    (jnp.array([1.0, 1.0, 2.5]), 0.15),
-    (jnp.array([1.0, 1.0, 3.5]), 0.15),
+    (jnp.array(ob["center"]), ob["radius"]) for ob in obstacle_data.values()
 ]
 
 

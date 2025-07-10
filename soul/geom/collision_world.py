@@ -54,7 +54,7 @@ class WorldCollision:
                 )
                 obstacles.append(sphere)
                 meshes.append(sphere.to_trimesh())
-                
+
             else:
                 raise ValueError(f"Unknown obstacle type: {obstacle['type']}")
         if len(obstacles) == 1:

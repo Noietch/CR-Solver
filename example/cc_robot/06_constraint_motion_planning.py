@@ -79,9 +79,9 @@ def get_sine_traj(
 
 def viser_main():
     # Setup Environment
-    robot = CCRobot.from_config("configs/robots/cc_mobile_z.json")
-    robot_coll = RobotCollision.from_config("configs/robots/cc_mobile_z.json")
-    world_coll = WorldCollision.from_config("configs/maps/obstacles_01.json")
+    robot = CCRobot.from_config("configs/robots/cc.json")
+    robot_coll = RobotCollision.from_config("configs/robots/cc.json")
+    world_coll = WorldCollision.from_config("configs/maps/obstacles_00.json")
 
     # Setup Visualization
     server = viser.ViserServer()

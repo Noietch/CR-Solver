@@ -1,18 +1,16 @@
 import jax.numpy as jnp
 import viser
-from soul.robots.cc_robot import CCRobot
 from soul.visualization.visualizer_viser import ViserSoftRobot, ViserWorld
 from soul.geom import WorldCollision, RobotCollision
 import time
 
 
 def main():
-    robot = CCRobot.from_config("configs/robots/cc_mobile_z.json")
     robot_coll = RobotCollision.from_config("configs/robots/cc_mobile_z.json")
-    world_coll = WorldCollision.from_config("configs/maps/obstacles_03.json")
+    world_coll = WorldCollision.from_config("configs/maps/obstacles_04.json")
     # jax.debug.breakpoint()
     config_path = "configs/maps/obstacles_N.json"
-     # Setup Visualization
+    # Setup Visualization
     server = viser.ViserServer()
     robot_vis = ViserSoftRobot(server, robot_coll, root_node_name="/robot")
     robot_vis.create_sphere_visualizations()

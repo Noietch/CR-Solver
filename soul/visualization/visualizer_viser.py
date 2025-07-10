@@ -11,6 +11,7 @@ from functools import partial
 import jax
 import json
 
+
 class ViserSoftRobot:
     def __init__(
         self,
@@ -40,7 +41,8 @@ class ViserSoftRobot:
                 sphere_handle = self.server.scene.add_mesh_trimesh(
                     name=sphere_node_name,
                     mesh=Sphere.from_center_and_radius(
-                        jnp.array([0, 0, 0]), jnp.array([self.robot_coll.coll.radius[i]])
+                        jnp.array([0, 0, 0]),
+                        jnp.array([self.robot_coll.coll.radius[i]]),
                     ).to_trimesh(),
                 )
                 self.sphere_handles.append(sphere_handle)
@@ -107,28 +109,34 @@ class ViserWorld:
         if self.is_handle_able:
             self.save_button = self.server.add_gui_button("Save Poses")
             if self.config_path is not None:
-                self.save_path_handle = self.server.add_gui_text("Save Path", initial_value=self.config_path)
+                self.save_path_handle = self.server.add_gui_text(
+                    "Save Path",
+                    initial_value=self.config_path,
+                )
             else:
-                self.save_path_handle = self.server.add_gui_text("Save Path", initial_value="configs/maps/obstacles_new.json")
+                self.save_path_handle = self.server.add_gui_text(
+                    "Save Path",
+                    initial_value="configs/maps/obstacles_new.json",
+                )
 
             @self.save_button.on_click
-            def _(_):
+            def on_click_save_button(args):
                 self.save_obstacle_poses(self.save_path_handle.value)
                 self.save_button.disabled = True
-        
+
     def update_obstacle_pose(self, index, event):
         new_pose_slice = np.concatenate([event.wxyz, event.position])
         new_poses = self.world_coll.obstacles.pose.wxyz_xyz.at[index].set(
             new_pose_slice
         )
-        
+
         # Create a new pose object
         new_pose = jaxlie.SE3(new_poses)
-        
+
         # Create a new obstacles object with the updated pose
         new_obstacles = jdc.replace(self.world_coll.obstacles, pose=new_pose)
 
-        # Create a new world_coll object with the updated obstacles
+        # Replace world_coll object with the updated obstacles
         self.world_coll = jdc.replace(self.world_coll, obstacles=new_obstacles)
         if self.save_button.disabled:
             self.save_button.disabled = False
@@ -152,7 +160,7 @@ class ViserWorld:
 
         with open(path, "w") as f:
             json.dump(obstacles_dict, f, indent=4)
-        
+
         print(f"Obstacle poses saved to {path}")
 
     def create_mesh_visualizations(self):
