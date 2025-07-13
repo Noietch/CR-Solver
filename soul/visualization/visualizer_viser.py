@@ -185,6 +185,11 @@ class ViserWorld:
                 obstacle_handle.on_update(partial(self.update_obstacle_pose, i))
 
         else:
+            for i, mesh in enumerate(self.world_coll.mesh):
+                self.server.scene.add_mesh_trimesh(
+                    name=f"obstacles/mesh_{i}",
+                    mesh=mesh,
+                )
             self.server.scene.add_mesh_trimesh(
                 name=f"obstacles/collision",
                 mesh=self.world_coll.obstacles.to_trimesh(),

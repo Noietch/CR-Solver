@@ -81,7 +81,7 @@ def viser_main():
     # Setup Environment
     robot = CCRobot.from_config("configs/robots/cc.json")
     robot_coll = RobotCollision.from_config("configs/robots/cc.json")
-    world_coll = WorldCollision.from_config("configs/maps/obstacles_00.json")
+    world_coll = WorldCollision.from_config("configs/maps/obstacles_05.json")
 
     # Setup Visualization
     server = viser.ViserServer()
@@ -103,6 +103,25 @@ def viser_main():
     plan_button = server.gui.add_button("Plan", disabled=False)
     replay_button = server.gui.add_button("Replay", disabled=False)
 
+    # Add GUI for showing handle poses
+    with server.gui.add_folder("Handles Tfs"):
+        start_pos_text = server.gui.add_text(
+            "Start Pos",
+            initial_value=str(np.round(start_handle.position, 2)),
+            disabled=True,
+        )
+        start_wxyz_text = server.gui.add_text(
+            "Start wxyz",
+            initial_value=str(np.round(start_handle.wxyz, 2)),
+            disabled=True,
+        )
+        end_pos_text = server.gui.add_text(
+            "End Pos", initial_value=str(np.round(end_handle.position, 2)), disabled=True
+        )
+        end_wxyz_text = server.gui.add_text(
+            "End wxyz", initial_value=str(np.round(end_handle.wxyz, 2)), disabled=True
+        )
+
     # Set up reference trajectory
     timesteps = 100
 
@@ -120,6 +139,14 @@ def viser_main():
         return reference_traj
 
     update_reference_traj(None)
+
+    def on_handle_update(handle: viser.TransformControlsHandle):
+        """Update GUI and reference trajectory when handles are moved."""
+        start_pos_text.value = str(np.round(start_handle.position, 2))
+        start_wxyz_text.value = str(np.round(start_handle.wxyz, 2))
+        end_pos_text.value = str(np.round(end_handle.position, 2))
+        end_wxyz_text.value = str(np.round(end_handle.wxyz, 2))
+        update_reference_traj(handle)
 
     # Set up trajopt parameters
     traj_solver = ConstrainedMotionPlanner(robot, robot_coll, timesteps)
@@ -158,8 +185,8 @@ def viser_main():
 
     plan_button.on_click(plan_callback)
     replay_button.on_click(replay_callback)
-    start_handle.on_update(update_reference_traj)
-    end_handle.on_update(update_reference_traj)
+    start_handle.on_update(on_handle_update)
+    end_handle.on_update(on_handle_update)
 
     while True:
         time.sleep(0.01)
