@@ -142,6 +142,7 @@ class RobotCollision:
         robot: CCRobot,
         state: ConstantCurvatureState,
         world_geom: CollGeom,  # Shape: (*batch_world, M, ...)
+        ignore_prefix: int = 0, 
     ) -> Float[Array, "*batch_combined N M"]:
         """
         Computes the signed distances between all robot links (N) and all world obstacles (M).
@@ -168,6 +169,12 @@ class RobotCollision:
         assert coll_robot_world.get_batch_axes()[-1] == N
         batch_cfg_shape = coll_robot_world.get_batch_axes()[:-1]
 
+        if ignore_prefix > 0:
+            coll_robot_world = jax.tree.map(
+                lambda x: x[..., ignore_prefix:, :] if x.ndim >= 2 else x[..., ignore_prefix:],
+                coll_robot_world
+            )
+
         # 2. Normalize world_geom shape and determine M
         world_axes = world_geom.get_batch_axes()
         if len(world_axes) == 0:  # Single world object
@@ -190,7 +197,8 @@ class RobotCollision:
         expected_batch_combined = jnp.broadcast_shapes(
             batch_cfg_shape, batch_world_shape
         )
-        expected_shape = (*expected_batch_combined, N, M)
+        N_filtered = N - ignore_prefix
+        expected_shape = (*expected_batch_combined, N_filtered, M)
 
         # Perform the assertion without try-except or complex logic
         assert dist_matrix.shape == expected_shape, (

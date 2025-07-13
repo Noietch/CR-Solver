@@ -67,6 +67,15 @@ class ConstantCurvatureState:
             phi=self.phi - other.phi,
         )
 
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, ConstantCurvatureState):
+            return False
+        return (
+            jnp.allclose(self.base_position, other.base_position, atol=1e-6)
+            and jnp.allclose(self.theta, other.theta, atol=1e-6)
+            and jnp.allclose(self.phi, other.phi, atol=1e-6)
+        )
+
     def __getitem__(self, indices: Array) -> ConstantCurvatureState:
         return ConstantCurvatureState(
             base_position=self.base_position[indices],
