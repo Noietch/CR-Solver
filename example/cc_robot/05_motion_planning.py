@@ -114,8 +114,8 @@ def viser_main_prm():
     # Set up trajopt parameters
     timesteps = 100
     traj_solver = SamplingBasedMotionPlanner(robot, robot_coll, timesteps)
-    start_end_interpolate_jit = jax.jit(traj_solver.start_end_interpolate)
-    optimize_jit = jax.jit(traj_solver.optimize)
+    # find_path_jit = jax.jit(traj_solver.find_path)
+    # optimize_jit = jax.jit(traj_solver.optimize)
 
     traj = None
 
@@ -123,20 +123,19 @@ def viser_main_prm():
         print("Start planning....")
         global traj
 
-        cfg = start_end_interpolate_jit(
-            start_handle.position,
+        cfg = traj_solver._ik_solver_best(
             start_handle.wxyz,
-            end_handle.position,
+            start_handle.position,
             end_handle.wxyz,
+            end_handle.position,
             world_coll.collision_geoms,
         )
-        # traj_solver.build_graph(
-        #     cfg[0],
-        #     cfg[1],
-        #     10,
-        #     world_coll.collision_geoms,
-        # )
-        cfg = optimize_jit(cfg, world_coll.collision_geoms)
+        cfg = traj_solver.find_path(
+            cfg[0],
+            cfg[1],
+            100,
+            world_coll.collision_geoms,
+        )
         traj = robot.forward_kinematics(cfg)
         print("Finish planning....")
         # # robot_vis.visualize_traj_collisions(robot, cfg)
@@ -152,14 +151,14 @@ def viser_main_prm():
             time.sleep(0.01)
             robot_vis.update_pose(traj[i])
 
-    # plan_button.on_click(plan_callback)
-    # replay_button.on_click(replay_callback)
+    plan_button.on_click(plan_callback)
+    replay_button.on_click(replay_callback)
 
     while True:
-        plan_callback(None)
+        # plan_callback(None)
         time.sleep(0.01)
 
 
 if __name__ == "__main__":
-    viser_main_trajopt()
-    # viser_main_prm()
+    # viser_main_trajopt()
+    viser_main_prm()
