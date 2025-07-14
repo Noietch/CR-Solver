@@ -69,6 +69,10 @@ class WorldCollision:
     def collision_geoms(self) -> list[CollGeom]:
         return [self.obstacles, self.ground]
 
+    @property
+    def collision_geoms_no_ground(self) -> list[CollGeom]:
+        return [self.obstacles]
+
     def transform(
         self, position: Float[Array, "*batch 3"], wxyz: Float[Array, "*batch 4"]
     ) -> WorldCollision:

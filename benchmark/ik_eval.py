@@ -133,7 +133,7 @@ def eval_ik_all_sections(section_list: list, eval_num_list: list):
         robot = CCRobot.from_config(config)
         batched_fk = jax.vmap(robot._forward_kinematics)
         solver = IKSolver(
-            robot, num_seeds_init=64, num_seeds_final=4, total_steps=1000, init_steps=10
+            robot, num_seeds_init=3, num_seeds_final=2, total_steps=100, init_steps=10
         )
         batched_ik_solve = jax.vmap(jax.jit(solver.solve_ik_best))
         for eval_num in eval_num_list:
@@ -157,6 +157,6 @@ def eval_ik_all_sections(section_list: list, eval_num_list: list):
 
 
 if __name__ == "__main__":
-    test_list = [2, 3, 4, 5, 6]
+    test_list = [3]
     eval_num_list = [1000]
     eval_ik_all_sections(test_list, eval_num_list)

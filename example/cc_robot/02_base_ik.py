@@ -30,7 +30,11 @@ def viser_main():
     ik_target_handle = server.scene.add_transform_controls(
         "/ik_target",
         scale=0.3,
-        position=(0.0, 0.0, robot.config.lower_limits_length * robot.config.num_sections),
+        position=(
+            0.0,
+            0.0,
+            robot.config.lower_limits_length * robot.config.num_sections,
+        ),
         wxyz=(1, 0, 0, 0),
     )
     server.scene.add_grid("/ground", width=6, height=6)

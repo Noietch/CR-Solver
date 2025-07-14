@@ -226,17 +226,18 @@ class SamplingBasedMotionPlanner(ConstrainedMotionPlanner):
 
         self.node_similarity_threshold: float = 0.05
         self.edge_interpolation_steps: int = 10
-        
+
         # jit
         self.distance_jit = jax.jit(self.distance)
-    
-    def check_collision(self,
-                        cfg: ConstantCurvatureState,
-                        world_coll: Sequence[CollGeom]
-                    ) -> bool:
+
+    def check_collision(
+        self, cfg: ConstantCurvatureState, world_coll: Sequence[CollGeom]
+    ) -> bool:
         # 1. check collision with the world
         for world_obj in world_coll:
-            dist_matrix = self.coll.compute_world_collision_distance(self.robot, cfg, world_obj, 1)
+            dist_matrix = self.coll.compute_world_collision_distance(
+                self.robot, cfg, world_obj, 1
+            )
             if jnp.any(dist_matrix < 0.0):
                 return True
 
@@ -244,13 +245,15 @@ class SamplingBasedMotionPlanner(ConstrainedMotionPlanner):
         # self_dist = self.coll.compute_self_collision_distance(self.robot, cfg)
         # if jnp.any(self_dist < 0.0):
         #     return True
-        
+
         return False
 
-    def connect_start_and_goal(self,
-                               start_cfg: ConstantCurvatureState,
-                               end_cfg: ConstantCurvatureState,
-                               world_coll: list[CollGeom]):
+    def connect_start_and_goal(
+        self,
+        start_cfg: ConstantCurvatureState,
+        end_cfg: ConstantCurvatureState,
+        world_coll: list[CollGeom],
+    ):
         self.add_nodes_to_graph([start_cfg, end_cfg], False)
 
         path_segment = self.steer_and_check(start_cfg, end_cfg, world_coll)
@@ -258,23 +261,22 @@ class SamplingBasedMotionPlanner(ConstrainedMotionPlanner):
             start_node_idx = self.nodes_data.index(start_cfg)
             end_node_idx = self.nodes_data.index(end_cfg)
             cost = self.distance_jit(start_cfg, end_cfg)
-            self.graph.add_edge(start_node_idx, end_node_idx, weight=cost, path_segment=path_segment)
-        
+            self.graph.add_edge(
+                start_node_idx, end_node_idx, weight=cost, path_segment=path_segment
+            )
+
             thetas = jnp.array([state.theta for state in path_segment])
             phis = jnp.array([state.phi for state in path_segment])
             base_positions = jnp.array([state.base_position for state in path_segment])
             path_segment = ConstantCurvatureState(
-                base_position=base_positions,
-                theta=thetas,
-                phi=phis
+                base_position=base_positions, theta=thetas, phi=phis
             )
-        
+
         return path_segment
-        
-    def sample_nodes_with_no_collision(self,
-                                       num_samples: int,
-                                       world_coll: Sequence[CollGeom]
-                                    ) -> list[ConstantCurvatureState]:
+
+    def sample_nodes_with_no_collision(
+        self, num_samples: int, world_coll: Sequence[CollGeom]
+    ) -> list[ConstantCurvatureState]:
         # TODO: speed up
         # sample the nodes with no collision
         collision_free_cfgs = []
@@ -319,14 +321,19 @@ class SamplingBasedMotionPlanner(ConstrainedMotionPlanner):
 
         return [all_cfgs[int(idx)] for idx in k_nearest_indices]
 
-    def add_nodes_to_graph(self, cfgs: list[ConstantCurvatureState], check_duplicate = True):
+    def add_nodes_to_graph(
+        self, cfgs: list[ConstantCurvatureState], check_duplicate=True
+    ):
         # Check for similarity to avoid adding nearly identical nodes
         # TODO： SPEED UP
         for cfg in cfgs:
             is_duplicate = False
             if check_duplicate:
                 for existing_cfg in self.nodes_data:
-                    if self.distance_jit(cfg, existing_cfg) < self.node_similarity_threshold:
+                    if (
+                        self.distance_jit(cfg, existing_cfg)
+                        < self.node_similarity_threshold
+                    ):
                         is_duplicate = True
                         break
             # If the node is not a duplicate, add it to the graph
@@ -335,11 +342,12 @@ class SamplingBasedMotionPlanner(ConstrainedMotionPlanner):
                 self.nodes_data.append(cfg)
                 self.graph.add_node(node_idx, cfg=cfg)
 
-    def steer_and_check(self,
-                         start_cfg: ConstantCurvatureState,
-                         end_cfg: ConstantCurvatureState,
-                         world_coll: Sequence[CollGeom]
-                        )-> Optional[list[ConstantCurvatureState]]:
+    def steer_and_check(
+        self,
+        start_cfg: ConstantCurvatureState,
+        end_cfg: ConstantCurvatureState,
+        world_coll: Sequence[CollGeom],
+    ) -> Optional[list[ConstantCurvatureState]]:
         # TODO: speed up, linspace
 
         interpolated_cfgs = []
@@ -389,23 +397,28 @@ class SamplingBasedMotionPlanner(ConstrainedMotionPlanner):
 
                 # check collision along the path segment
                 # if not collision, use the sampled path segment as attr for path searching
-                path_segment = self.steer_and_check(current_node_cfg, nearest_cfg, world_coll)
+                path_segment = self.steer_and_check(
+                    current_node_cfg, nearest_cfg, world_coll
+                )
                 if path_segment is not None:
                     cost = self.distance_jit(current_node_cfg, nearest_cfg)
-                    self.graph.add_edge(i, nearest_node_idx, weight=cost, path_segment=path_segment)
-        
+                    self.graph.add_edge(
+                        i, nearest_node_idx, weight=cost, path_segment=path_segment
+                    )
+
         return self.graph
 
     def clear_graph(self):
         self.graph.clear()
         self.nodes_data.clear()
 
-    def find_path(self,
-                  start_cfg: ConstantCurvatureState,
-                  end_cfg: ConstantCurvatureState,
-                  sampled_nodes: int,
-                  world_coll: list[CollGeom]
-                ) -> Optional[list[ConstantCurvatureState]]:
+    def find_path(
+        self,
+        start_cfg: ConstantCurvatureState,
+        end_cfg: ConstantCurvatureState,
+        sampled_nodes: int,
+        world_coll: list[CollGeom],
+    ) -> Optional[list[ConstantCurvatureState]]:
         if self.check_collision(start_cfg, world_coll):
             print("Start configuration is in collision.")
             return None
@@ -413,21 +426,25 @@ class SamplingBasedMotionPlanner(ConstrainedMotionPlanner):
             print("End configuration is in collision.")
             return None
 
-         # 1. build the graph if not be built
+        # 1. build the graph if not be built
         if self.graph.number_of_nodes() == 0:
             self.build_graph(sampled_nodes, world_coll)
 
         # 2. try connect directly start and end
-        start_end_path_segment = self.connect_start_and_goal(start_cfg, end_cfg, world_coll)
+        start_end_path_segment = self.connect_start_and_goal(
+            start_cfg, end_cfg, world_coll
+        )
         if start_end_path_segment is not None:
             return start_end_path_segment
 
         # 3. find the shortest path using Dijkstra's algorithm
         start_node_idx = self.nodes_data.index(start_cfg)
         end_node_idx = self.nodes_data.index(end_cfg)
-        path_node_indices = nx.shortest_path(self.graph, source=start_node_idx, target=end_node_idx, weight='weight')
+        path_node_indices = nx.shortest_path(
+            self.graph, source=start_node_idx, target=end_node_idx, weight="weight"
+        )
         discrete_path = [self.nodes_data[idx] for idx in path_node_indices]
-        
+
         # 4. find the shortest continuous path using interpolation
         interpolated_full_path = self.interpolate_path(discrete_path)
         return interpolated_full_path

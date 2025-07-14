@@ -1,11 +1,11 @@
 import os
-
+import json
 from jaxtyping import Array
 import numpy as np
 import matplotlib.pyplot as plt
 
 
-def _plot_sphere(ax, center, radius):
+def _plot_sphere(ax: plt.Axes, center, radius):
 
     # Create a mesh grid for the sphere
     u = np.linspace(0, 2 * np.pi, 100)
@@ -19,8 +19,8 @@ def _plot_sphere(ax, center, radius):
         x,
         y,
         z,
-        color=np.random.rand(3),
-        alpha=0.6,
+        color="whitesmoke",
+        alpha=0.4,
     )
 
 
@@ -110,45 +110,48 @@ def visualize_cc_model_2d(
 
 
 def visualize_cc_model_3d(
-    pose: Array,
+    pose: Array = None,
     target_position: Array = None,
     num_points: int = None,
     save_path: str = None,
+    world_coll_config: str = None,
 ):
     if not os.path.exists(save_path):
         dir_path = os.path.dirname(save_path)
         os.makedirs(dir_path, exist_ok=True)
 
-    if pose.ndim == 3:
-        if target_position is not None:
-            target_position = target_position[None, :]
-        transform = pose[None, :, :, :]
-    else:
-        transform = pose
-    positions = transform[:, :3, 3]
-
     ax = plt.figure().add_subplot(projection="3d")
-    batch_size = transform.shape[0]
-    for i in range(batch_size):
-        positions = transform[i, :, :3, 3]
-        colors = ["r", "g", "b", "y", "m", "c"]
-        if num_points is not None:
-            for i in range(len(positions) // num_points):
-                ax.plot(
-                    positions[i * num_points : (i + 1) * num_points, 0],
-                    positions[i * num_points : (i + 1) * num_points, 1],
-                    positions[i * num_points : (i + 1) * num_points, 2],
-                    c=colors[i % len(colors)],
-                    linewidth=2,
-                )
+
+    if pose is not None:
+        if pose.ndim == 3:
+            if target_position is not None:
+                target_position = target_position[None, :]
+            transform = pose[None, :, :, :]
         else:
-            ax.plot(
-                positions[:, 0],
-                positions[:, 1],
-                positions[:, 2],
-                c="black",
-                linewidth=3,
-            )
+            transform = pose
+        positions = transform[:, :3, 3]
+
+        batch_size = transform.shape[0]
+        for i in range(batch_size):
+            positions = transform[i, :, :3, 3]
+            colors = ["r", "g", "b", "y", "m", "c"]
+            if num_points is not None:
+                for i in range(len(positions) // num_points):
+                    ax.plot(
+                        positions[i * num_points : (i + 1) * num_points, 0],
+                        positions[i * num_points : (i + 1) * num_points, 1],
+                        positions[i * num_points : (i + 1) * num_points, 2],
+                        c=colors[i % len(colors)],
+                        linewidth=2,
+                    )
+            else:
+                ax.plot(
+                    positions[:, 0],
+                    positions[:, 1],
+                    positions[:, 2],
+                    c="black",
+                    linewidth=3,
+                )
 
     if target_position is not None:
         # draw target position
@@ -160,11 +163,18 @@ def visualize_cc_model_3d(
             marker="x",
         )
 
-        # draw obstacle spheres
-        # if goal.obstacle_sphere is not None:
-        #     for sphere in goal.obstacle_sphere:
-        #         x, y, z, r = sphere
-        #         _plot_sphere(ax, (x, y, z), r)
+    # draw obstacle spheres
+    if world_coll_config is not None:
+        if isinstance(world_coll_config, str):
+            world_coll = json.load(open(world_coll_config))
+        else:
+            world_coll = world_coll_config
+        for sphere in world_coll.values():
+            if sphere["type"] == "sphere":
+                x, y, z, r = *sphere["center"], sphere["radius"]
+                _plot_sphere(ax, (x, y, z), r)
+            else:
+                print(f"Unsupported obstacle type: {sphere['type']}")
 
     # Set equal aspect ratio for 3D plot
     # Get the current axis limits
@@ -195,6 +205,11 @@ def visualize_cc_model_3d(
 
     # Set equal aspect ratio
     ax.set_box_aspect([1, 1, 1])
+
+    # Reduce tick density
+    ax.xaxis.set_major_locator(plt.MaxNLocator(5))
+    ax.yaxis.set_major_locator(plt.MaxNLocator(5))
+    ax.zaxis.set_major_locator(plt.MaxNLocator(5))
 
     if save_path is not None:
         plt.savefig(save_path)

@@ -116,7 +116,9 @@ def viser_main():
             disabled=True,
         )
         end_pos_text = server.gui.add_text(
-            "End Pos", initial_value=str(np.round(end_handle.position, 2)), disabled=True
+            "End Pos",
+            initial_value=str(np.round(end_handle.position, 2)),
+            disabled=True,
         )
         end_wxyz_text = server.gui.add_text(
             "End wxyz", initial_value=str(np.round(end_handle.wxyz, 2)), disabled=True

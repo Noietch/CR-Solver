@@ -145,7 +145,7 @@ class RobotCollision:
         robot: CCRobot,
         state: ConstantCurvatureState,
         world_geom: CollGeom,  # Shape: (*batch_world, M, ...)
-        ignore_prefix: int = 0, 
+        ignore_prefix: int = 0,
     ) -> Float[Array, "*batch_combined N M"]:
         """
         Computes the signed distances between all robot links (N) and all world obstacles (M).
@@ -174,8 +174,10 @@ class RobotCollision:
 
         if ignore_prefix > 0:
             coll_robot_world = jax.tree.map(
-                lambda x: x[..., ignore_prefix:, :] if x.ndim >= 2 else x[..., ignore_prefix:],
-                coll_robot_world
+                lambda x: (
+                    x[..., ignore_prefix:, :] if x.ndim >= 2 else x[..., ignore_prefix:]
+                ),
+                coll_robot_world,
             )
 
         # 2. Normalize world_geom shape and determine M

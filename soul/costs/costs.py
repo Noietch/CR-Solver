@@ -9,6 +9,7 @@ from ..geom.collision_cc_robot import RobotCollision
 from ..geom.geometry import CollGeom
 from ..geom.collision import colldist_from_sdf, collide
 
+
 @Cost.create_factory
 def position_cost(
     vals: VarValues,
@@ -60,6 +61,7 @@ def pose_cost(
     ori_residual = residual[..., 3:] * ori_weight
     return jnp.concatenate([pos_residual, ori_residual]).flatten()
 
+
 @Cost.create_factory
 def limit_cost(
     vals: VarValues,
@@ -69,8 +71,12 @@ def limit_cost(
 ) -> Array:
     """Computes the residual penalizing joint limit violations."""
     state = vals[robot_var]
-    residual_upper_theta = jnp.maximum(0.0, state.theta - robot.config.upper_limits_theta)
-    residual_lower_theta = jnp.maximum(0.0, robot.config.lower_limits_theta - state.theta)
+    residual_upper_theta = jnp.maximum(
+        0.0, state.theta - robot.config.upper_limits_theta
+    )
+    residual_lower_theta = jnp.maximum(
+        0.0, robot.config.lower_limits_theta - state.theta
+    )
     residual_upper_phi = jnp.maximum(0.0, state.phi - robot.config.upper_limits_phi)
     residual_lower_phi = jnp.maximum(0.0, robot.config.lower_limits_phi - state.phi)
     return (

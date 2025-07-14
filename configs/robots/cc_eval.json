@@ -2,7 +2,7 @@
     "num_sections": 2,
     "num_points_per_section": 10,
     "length": 1.0,
-    "radius": 0.1,
+    "radius": 0.01,
     "lower_limits_theta": 0,
     "upper_limits_theta": 3.14, 
     "lower_limits_phi": 0,

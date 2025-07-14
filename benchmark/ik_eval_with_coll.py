@@ -1,17 +1,23 @@
 import jax
-from jaxtyping import Float, Array
+from jaxtyping import Array
+import numpy as np
 import jax.numpy as jnp
 import jaxlie
 import time
 import json
 import os
-from typing import Callable, List, Sequence
-from soul.robots.cc_robot import CCRobot, ConstantCurvatureState
-from soul.robots.cc_robot_extend import CCRobot as CCRobotExtend
+from typing import Callable, Sequence
+from soul.robots.cc_robot_extend import CCRobot, ConstantCurvatureState
 from soul.solver import IKSolver
-from soul.geom.collision_cc_robot import RobotCollision
-from soul.geom.geometry import CollGeom, Sphere, cat_geoms
-from soul.geom.collision import colldist_from_sdf
+from soul.geom import (
+    RobotCollision,
+    WorldCollision,
+    CollGeom,
+    colldist_from_sdf,
+)
+from soul.visualization.visualizer_plot import visualize_cc_model_3d
+
+jax.config.update("jax_default_matmul_precision", "highest")
 
 DISABLE_JIT = False
 
@@ -21,16 +27,6 @@ if DISABLE_JIT:
 
     os.environ["JAX_DISABLE_JIT"] = "True"
     jax.config.update("jax_disable_jit", True)
-
-
-obstacle_json_path = "../configs/maps/obstacles_04.json"
-OBSTACLE_JSON_PATH = os.path.join(os.path.dirname(__file__), obstacle_json_path)
-with open(OBSTACLE_JSON_PATH, "r") as f:
-    obstacle_data = json.load(f)
-# [ (center_x, center_y, center_z, radius), ... ]
-COLLISION_OBSTACLES = [
-    (jnp.array(ob["center"]), ob["radius"]) for ob in obstacle_data.values()
-]
 
 
 def ik_metric_with_coll(
@@ -55,8 +51,8 @@ def ik_metric_with_coll(
         - final_rot_error: The mean rotation error for successful solutions.
     """
     # Accuracy thresholds from the evaluation function
-    position_threshold: float = 0.01
-    rotation_threshold: float = 0.01
+    position_threshold: float = 0.03
+    rotation_threshold: float = 0.03
 
     position_error = jnp.linalg.norm(
         result_transform.translation() - target_position,
@@ -79,6 +75,26 @@ def ik_metric_with_coll(
         ~solution_collision_mask,
     )
 
+    # Calculate statistics for different failure modes
+    num_total = len(accuracy_success_mask)
+    num_accuracy_fail = num_total - jnp.sum(accuracy_success_mask)
+    num_collision_fail = jnp.sum(solution_collision_mask)
+    num_accuracy_only_success = jnp.sum(accuracy_success_mask) - jnp.sum(
+        final_success_mask
+    )
+
+    print(f"\nFailure Analysis:")
+    print(f"Total samples: {num_total}")
+    print(
+        f"Failed due to accuracy: {num_accuracy_fail} ({num_accuracy_fail/num_total*100:.1f}%)"
+    )
+    print(
+        f"Failed due to collision: {num_collision_fail} ({num_collision_fail/num_total*100:.1f}%)"
+    )
+    print(
+        f"Accurate but in collision: {num_accuracy_only_success} ({num_accuracy_only_success/num_total*100:.1f}%)"
+    )
+
     final_success_rate = jnp.mean(final_success_mask) * 100.0
     # Use jnp.nanmean to avoid errors if no solutions are successful
     final_pos_error = jnp.nan_to_num(jnp.mean(position_error[final_success_mask]))
@@ -87,7 +103,7 @@ def ik_metric_with_coll(
     return final_success_rate, final_pos_error, final_rot_error
 
 
-def sample_states_test(robot: CCRobot | CCRobotExtend, num_states: int) -> ConstantCurvatureState:
+def sample_states_test(robot: CCRobot, num_states: int) -> ConstantCurvatureState:
     random_key = jax.random.PRNGKey(42)
     random_key, subkey = jax.random.split(random_key)
     theta = jax.random.uniform(
@@ -103,26 +119,19 @@ def sample_states_test(robot: CCRobot | CCRobotExtend, num_states: int) -> Const
         maxval=robot.config.upper_limits_phi,
     )
 
-    if isinstance(robot, CCRobotExtend):
-        length = jax.random.uniform(
-            key=subkey,
-            shape=(num_states, robot.config.num_sections),
-            minval=robot.config.lower_limits_length,
-            maxval=robot.config.upper_limits_length,
-        )
+    length = jax.random.uniform(
+        key=subkey,
+        shape=(num_states, robot.config.num_sections),
+        minval=robot.config.lower_limits_length,
+        maxval=robot.config.upper_limits_length,
+    )
 
-        states = ConstantCurvatureState(
-            base_position=jnp.zeros((num_states, 3)),
-            theta=theta,
-            phi=phi,
-            length=length,
-        )
-    else:
-        states = ConstantCurvatureState(
-            base_position=jnp.zeros((num_states, 3)),
-            theta=theta,
-            phi=phi,
-        )
+    states = ConstantCurvatureState(
+        base_position=jnp.zeros((num_states, 3)),
+        theta=theta,
+        phi=phi,
+        length=length,
+    )
     return states
 
 
@@ -152,7 +161,7 @@ def eval_ik_with_coll(
     batched_fk: Callable[[ConstantCurvatureState], Array],
     robot_coll: RobotCollision,
     world_geom: CollGeom,
-    save_path: str = None,
+    save_path: str,
 ):
     """Main function for basic IK with collision avoidance."""
     num_sections = robot.config.num_sections
@@ -205,20 +214,32 @@ def eval_ik_with_coll(
     jax.block_until_ready(solution_states)
     total_time = time.time() - start
 
-    # Check if IK solutions have collision
-    is_solution_collision_vmap = jax.vmap(
-        is_state_in_collision, in_axes=(0, None, None, None)
-    )
-
-    solution_collision_mask = is_solution_collision_vmap(
-        solution_states, robot, robot_coll, world_geom
-    )  # True if collision
-
     # calculate accuracy metrics
     fk_result = robot.forward_kinematics(solution_states)
     tip_transforms = jaxlie.SE3.from_matrix(fk_result[:, -1, ...])
 
-    # Calculate final metrics using the dedicated function
+    # Save target and fk_result data
+    if save_path:
+        os.makedirs(os.path.dirname(save_path), exist_ok=True)
+        np.savez(
+            save_path,
+            target_position=np.array(target_position),
+            target_wxyz=np.array(target_wxyz),
+            fk_result=np.array(fk_result),
+            initial_states_theta=np.array(initial_states.theta),
+            initial_states_phi=np.array(initial_states.phi),
+            solution_states_theta=np.array(solution_states.theta),
+            solution_states_phi=np.array(solution_states.phi),
+        )
+        print(f"Saved target and fk_result data to {save_path}")
+
+    # metrics
+    is_solution_collision_vmap = jax.vmap(
+        is_state_in_collision, in_axes=(0, None, None, None)
+    )
+    solution_collision_mask = is_solution_collision_vmap(
+        solution_states, robot, robot_coll, world_geom
+    )
     final_success_rate, final_pos_error, final_rot_error = ik_metric_with_coll(
         tip_transforms, target_position, target_wxyz, solution_collision_mask
     )
@@ -241,29 +262,30 @@ def eval_ik_with_coll(
     }
 
 
-def eval_ik_all_sections(section_list: list, eval_num_list: list):
+def eval_ik_all_sections(
+    robot_config_path: str,
+    world_config_path: str,
+    section_list: list,
+    eval_num_list: list,
+    save_dir: str,
+):
     all_results_summary = []
     for num_sections in section_list:
-        config_path = f"configs/robots/cc_eval.json"
-        config = json.load(open(config_path))
+        # load robot config
+        config = json.load(open(robot_config_path))
         config["num_sections"] = num_sections
         robot = CCRobot.from_config(config)
-        # Pass the updated config dictionary, not the file path, to ensure consistency
         robot_coll = RobotCollision.from_config(config)
 
-        # Create world geometry from the list of obstacles
-        spheres: List[CollGeom] = [
-            Sphere.from_center_and_radius(center=obs[0], radius=jnp.array(obs[1]))
-            for obs in COLLISION_OBSTACLES
-        ]
-        world_geom = cat_geoms(spheres)
+        # load world config
+        world_coll = WorldCollision.from_config(world_config_path)
 
         batched_fk = jax.vmap(robot._forward_kinematics)
         solver = IKSolver(
             robot,
-            num_seeds_init=64,
-            num_seeds_final=4,
-            total_steps=1000,
+            num_seeds_init=128,
+            num_seeds_final=8,
+            total_steps=200,
             init_steps=10,
             coll=robot_coll,
         )
@@ -271,6 +293,12 @@ def eval_ik_all_sections(section_list: list, eval_num_list: list):
             jax.jit(solver.solve_ik_best_with_coll), in_axes=(0, 0, None)
         )
         for eval_num in eval_num_list:
+            # Create save path for this specific evaluation
+            if not os.path.exists(save_dir):
+                os.makedirs(save_dir, exist_ok=True)
+            save_path = (
+                f"{save_dir}/ik_with_coll_sections_{num_sections}_eval_{eval_num}.npz"
+            )
             all_results_summary.append(
                 eval_ik_with_coll(
                     robot,
@@ -278,7 +306,8 @@ def eval_ik_all_sections(section_list: list, eval_num_list: list):
                     batched_ik_solve,
                     batched_fk,
                     robot_coll,
-                    world_geom,
+                    world_coll.collision_geoms_no_ground[-1],
+                    save_path,
                 )
             )
 
@@ -297,7 +326,34 @@ def eval_ik_all_sections(section_list: list, eval_num_list: list):
         )
 
 
+def visualize_ik_with_coll(save_path: str, world_config_path: str):
+    data = np.load(save_path)
+    target_position = data["target_position"]
+    target_wxyz = data["target_wxyz"]
+    fk_result = data["fk_result"]
+    # Randomly select 3 solutions
+    num_solutions = len(fk_result)
+    selected_indices = np.random.choice(num_solutions, size=3, replace=False)
+    # Get the selected solutions
+    fk_result = fk_result[selected_indices]
+    target_position = target_position[selected_indices]
+    visualize_cc_model_3d(
+        pose=fk_result,
+        target_position=target_position,
+        world_coll_config=world_config_path,
+        save_path=save_path.replace(".npz", "_fk.png"),
+    )
+
+
 if __name__ == "__main__":
-    test_list = [2, 3, 4, 5, 6]
-    eval_num_list = [250]
-    eval_ik_all_sections(test_list, eval_num_list)
+    test_list = [3, 4, 5, 6]
+    eval_num_list = [100]
+    robot_config_path = "configs/robots/cc_extend_eval.json"
+    world_config_path = "configs/maps/ik_maps/obstacles_lattice.json"
+    result_dir = "results/ik_with_coll_lattice"
+    eval_ik_all_sections(
+        robot_config_path, world_config_path, test_list, eval_num_list, result_dir
+    )
+    visualize_ik_with_coll(
+        f"{result_dir}/ik_with_coll_sections_4_eval_100.npz", world_config_path
+    )
