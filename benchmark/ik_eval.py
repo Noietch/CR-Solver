@@ -1,5 +1,5 @@
 import jax
-from jaxtyping import Float, Array
+from jaxtyping import Array
 import jax.numpy as jnp
 import jaxlie
 import time
@@ -8,8 +8,6 @@ import os
 from typing import Callable
 from soul.robots.cc_robot import CCRobot, ConstantCurvatureState
 from soul.solver import IKSolver
-
-from benchmark.visualizer_eval import create_figure, visualizer_forward_samples
 
 DISABLE_JIT = False
 
@@ -78,11 +76,8 @@ def eval_ik_with_no_coll(
     eval_num: int,
     batched_ik_solve: Callable[[Array, Array], Array],
     batched_fk: Callable[[ConstantCurvatureState], Array],
-    visualize: bool = True,
-    save_path: str = None,
 ):
     """Main function for basic IK."""
-    ax = create_figure()
     num_sections = robot.config.num_sections
 
     print(f"start solve ik of num sections {num_sections}, num eval {eval_num}")
@@ -94,14 +89,6 @@ def eval_ik_with_no_coll(
     tip_transform = jaxlie.SE3.from_matrix(target_transforms[:, -1, ...])
     target_wxyz = tip_transform.rotation().wxyz
     target_position = tip_transform.translation()
-    if visualize:
-        visualizer_forward_samples(
-            ax,
-            target_transforms,
-            target_position,
-            num_points=robot.config.num_points_per_section,
-            save_path=save_path,
-        )
 
     # warmup
     print(f"finish forward, start warmup")

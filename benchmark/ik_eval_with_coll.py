@@ -7,12 +7,11 @@ import json
 import os
 from typing import Callable, List, Sequence
 from soul.robots.cc_robot import CCRobot, ConstantCurvatureState
+from soul.robots.cc_robot_extend import CCRobot as CCRobotExtend
 from soul.solver import IKSolver
 from soul.geom.collision_cc_robot import RobotCollision
 from soul.geom.geometry import CollGeom, Sphere, cat_geoms
 from soul.geom.collision import colldist_from_sdf
-
-from benchmark.visualizer_eval import create_figure, visualizer_forward_samples
 
 DISABLE_JIT = False
 
@@ -88,7 +87,7 @@ def ik_metric_with_coll(
     return final_success_rate, final_pos_error, final_rot_error
 
 
-def sample_states_test(robot: CCRobot, num_states: int) -> ConstantCurvatureState:
+def sample_states_test(robot: CCRobot | CCRobotExtend, num_states: int) -> ConstantCurvatureState:
     random_key = jax.random.PRNGKey(42)
     random_key, subkey = jax.random.split(random_key)
     theta = jax.random.uniform(
@@ -103,19 +102,27 @@ def sample_states_test(robot: CCRobot, num_states: int) -> ConstantCurvatureStat
         minval=robot.config.lower_limits_phi,
         maxval=robot.config.upper_limits_phi,
     )
-    length = jax.random.uniform(
-        key=subkey,
-        shape=(num_states, robot.config.num_sections),
-        minval=robot.config.lower_limits_length,
-        maxval=robot.config.upper_limits_length,
-    )
 
-    states = ConstantCurvatureState(
-        base_position=jnp.zeros((num_states, 3)),
-        theta=theta,
-        phi=phi,
-        length=length,
-    )
+    if isinstance(robot, CCRobotExtend):
+        length = jax.random.uniform(
+            key=subkey,
+            shape=(num_states, robot.config.num_sections),
+            minval=robot.config.lower_limits_length,
+            maxval=robot.config.upper_limits_length,
+        )
+
+        states = ConstantCurvatureState(
+            base_position=jnp.zeros((num_states, 3)),
+            theta=theta,
+            phi=phi,
+            length=length,
+        )
+    else:
+        states = ConstantCurvatureState(
+            base_position=jnp.zeros((num_states, 3)),
+            theta=theta,
+            phi=phi,
+        )
     return states
 
 
@@ -148,7 +155,6 @@ def eval_ik_with_coll(
     save_path: str = None,
 ):
     """Main function for basic IK with collision avoidance."""
-    ax = create_figure()
     num_sections = robot.config.num_sections
     print(
         f"start solve ik WITH COLLISION of num sections {num_sections}, num eval {eval_num}"
@@ -187,13 +193,6 @@ def eval_ik_with_coll(
     tip_transform = jaxlie.SE3.from_matrix(target_transforms[:, -1, ...])
     target_wxyz = tip_transform.rotation().wxyz
     target_position = tip_transform.translation()
-    visualizer_forward_samples(
-        ax,
-        target_transforms,
-        target_position,
-        num_points=robot.config.num_points_per_section,
-        save_path=save_path,
-    )
 
     # warmup
     print(f"finish forward, start warmup")
