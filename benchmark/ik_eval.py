@@ -27,8 +27,8 @@ def ik_metric(
     result_orientation = result_transform.rotation()
 
     position_error = jnp.linalg.norm(result_position - target_position, axis=-1)
-    position_threshold: float = 0.001
-    rotation_threshold: float = 0.05
+    position_threshold: float = 0.01
+    rotation_threshold: float = 0.01
 
     orientation_error = jnp.linalg.norm(
         jnp.array(

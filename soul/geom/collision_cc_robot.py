@@ -36,7 +36,10 @@ class RobotCollision:
         if isinstance(config_dict, str):
             config_dict = json.load(open(config_dict))
 
-        length = config_dict["length"]
+        if "length" in config_dict:
+            length = config_dict["length"]
+        else:
+            length = config_dict["lower_limits_length"]
         num_sections = config_dict["num_sections"]
         num_points_per_section = config_dict["num_points_per_section"]
         radius = config_dict["radius"]

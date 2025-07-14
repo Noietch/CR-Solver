@@ -56,8 +56,8 @@ def ik_metric_with_coll(
         - final_rot_error: The mean rotation error for successful solutions.
     """
     # Accuracy thresholds from the evaluation function
-    position_threshold: float = 0.5
-    rotation_threshold: float = 0.5
+    position_threshold: float = 0.01
+    rotation_threshold: float = 0.01
 
     position_error = jnp.linalg.norm(
         result_transform.translation() - target_position,
@@ -103,11 +103,18 @@ def sample_states_test(robot: CCRobot, num_states: int) -> ConstantCurvatureStat
         minval=robot.config.lower_limits_phi,
         maxval=robot.config.upper_limits_phi,
     )
+    length = jax.random.uniform(
+        key=subkey,
+        shape=(num_states, robot.config.num_sections),
+        minval=robot.config.lower_limits_length,
+        maxval=robot.config.upper_limits_length,
+    )
 
     states = ConstantCurvatureState(
         base_position=jnp.zeros((num_states, 3)),
         theta=theta,
         phi=phi,
+        length=length,
     )
     return states
 

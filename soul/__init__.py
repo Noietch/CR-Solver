@@ -1,3 +1,3 @@
-from .robots.cc_robot import *
+from .robots import *
 from .solver import *
 from .costs import *

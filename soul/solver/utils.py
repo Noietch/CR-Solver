@@ -3,7 +3,7 @@ import jax.numpy as jnp
 from jax import lax
 
 from ..robots.cc_robot import CCRobot, ConstantCurvatureState
-
+from ..robots.cc_robot_extend import CCRobot as CCRobotExtend
 
 def newton_raphson(f, x, iters):
     """Use the Newton-Raphson method to find a root of the given function."""
@@ -38,9 +38,21 @@ def sample_states(
         num_states, robot.config.num_sections, sample_root
     ) * (robot.config.upper_limits_phi - robot.config.lower_limits_phi)
 
-    states = ConstantCurvatureState(
-        base_position=jnp.zeros((num_states, 3)),
-        theta=theta * robot.config.opt_mask[3],
-        phi=phi * robot.config.opt_mask[3 + robot.config.num_sections],
-    )
+    if isinstance(robot, CCRobotExtend):
+        length = robot.config.lower_limits_length + roberts_sequence(
+            num_states, robot.config.num_sections, sample_root
+        ) * (robot.config.upper_limits_length - robot.config.lower_limits_length)
+
+        states = ConstantCurvatureState(
+            base_position=jnp.zeros((num_states, 3)),
+            theta=theta * robot.config.opt_mask[3],
+            phi=phi * robot.config.opt_mask[3 + robot.config.num_sections],
+            length=length * robot.config.opt_mask[3 + robot.config.num_sections * 2],
+        )
+    else:
+        states = ConstantCurvatureState(
+            base_position=jnp.zeros((num_states, 3)),
+            theta=theta * robot.config.opt_mask[3],
+            phi=phi * robot.config.opt_mask[3 + robot.config.num_sections],
+        )
     return states

@@ -5,37 +5,9 @@ from jax import Array
 from jaxls import Cost, Var, VarValues
 
 from ..robots.cc_robot import CCRobot, ConstantCurvatureState
-from ..robots.pcc_robot import PCCRobot, PCCState
 from ..geom.collision_cc_robot import RobotCollision
 from ..geom.geometry import CollGeom
 from ..geom.collision import colldist_from_sdf, collide
-
-
-@Cost.create_factory
-def tendon_similarity_cost(
-    vals: VarValues,
-    robot: PCCRobot,
-    robot_var: Var[ConstantCurvatureState],
-    tendon_target: Array,
-    weight: Array | float,
-) -> Array:
-    state = vals[robot_var]
-    tendon_lengths = robot.compute_tendon_lengths(state)
-    residual = tendon_lengths[0] - tendon_target[0]
-    return (residual * weight).flatten()
-
-
-@Cost.create_factory
-def elastic_energy_cost(
-    vals: VarValues,
-    robot_var: Var[PCCState],
-    weight: Array | float,
-) -> Array:
-    """Computes the elastic energy of the robot. Penalize large theta."""
-    kappa_x = vals[robot_var].kappa_x
-    kappa_y = vals[robot_var].kappa_y
-    return ((kappa_x * kappa_x + kappa_y * kappa_y) * weight).flatten()
-
 
 @Cost.create_factory
 def position_cost(
@@ -88,9 +60,32 @@ def pose_cost(
     ori_residual = residual[..., 3:] * ori_weight
     return jnp.concatenate([pos_residual, ori_residual]).flatten()
 
-
 @Cost.create_factory
 def limit_cost(
+    vals: VarValues,
+    robot: CCRobot,
+    robot_var: Var[ConstantCurvatureState],
+    weight: Array | float,
+) -> Array:
+    """Computes the residual penalizing joint limit violations."""
+    state = vals[robot_var]
+    residual_upper_theta = jnp.maximum(0.0, state.theta - robot.config.upper_limits_theta)
+    residual_lower_theta = jnp.maximum(0.0, robot.config.lower_limits_theta - state.theta)
+    residual_upper_phi = jnp.maximum(0.0, state.phi - robot.config.upper_limits_phi)
+    residual_lower_phi = jnp.maximum(0.0, robot.config.lower_limits_phi - state.phi)
+    return (
+        (
+            residual_upper_theta
+            + residual_lower_theta
+            + residual_upper_phi
+            + residual_lower_phi
+        )
+        * weight
+    ).flatten()
+
+
+@Cost.create_factory
+def limit_cost_extend(
     vals: VarValues,
     robot: CCRobot,
     robot_var: Var[ConstantCurvatureState],
@@ -106,12 +101,20 @@ def limit_cost(
     )
     residual_upper_phi = jnp.maximum(0.0, state.phi - robot.config.upper_limits_phi)
     residual_lower_phi = jnp.maximum(0.0, robot.config.lower_limits_phi - state.phi)
+    residual_upper_length = jnp.maximum(
+        0.0, state.length - robot.config.upper_limits_length
+    )
+    residual_lower_length = jnp.maximum(
+        0.0, robot.config.lower_limits_length - state.length
+    )
     return (
         (
             residual_upper_theta
             + residual_lower_theta
             + residual_upper_phi
             + residual_lower_phi
+            + residual_upper_length
+            + residual_lower_length
         )
         * weight
     ).flatten()

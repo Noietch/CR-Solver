@@ -6,6 +6,7 @@ from jaxtyping import Array
 from typing import Sequence
 
 from ..robots.cc_robot import CCRobot
+from ..robots.cc_robot_extend import CCRobot as CCRobotExtend
 from ..solver.utils import sample_states, newton_raphson
 from ..costs import (
     pose_cost,
@@ -16,6 +17,7 @@ from ..costs import (
     smoothness_cost,
     rest_base_cost,
     shape_cost,
+    limit_cost_extend,
 )
 from ..geom import RobotCollision, CollGeom
 
@@ -59,6 +61,10 @@ class IKSolver:
                     ori_weight=1.0,
                 ),
                 limit_cost(
+                    self.robot,
+                    robot_var,
+                    weight=100.0,
+                ) if isinstance(self.robot, CCRobotExtend) else limit_cost_extend(
                     self.robot,
                     robot_var,
                     weight=100.0,
@@ -143,6 +149,10 @@ class IKSolver:
                     ori_weight=1.0,
                 ),
                 limit_cost(
+                    self.robot,
+                    robot_var,
+                    weight=100.0,
+                ) if isinstance(self.robot, CCRobotExtend) else limit_cost_extend(
                     self.robot,
                     robot_var,
                     weight=100.0,

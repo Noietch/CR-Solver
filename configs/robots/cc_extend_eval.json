@@ -1,13 +1,15 @@
 {
-    "num_sections": 3,
+    "num_sections": 2,
     "num_points_per_section": 10,
-    "length": 1.0,
-    "radius": 0.1,
+    "radius": 0.05,
     "lower_limits_theta": 0,
     "upper_limits_theta": 3.14, 
     "lower_limits_phi": 0,
     "upper_limits_phi": 6.28,
+    "lower_limits_length": 0.5,
+    "upper_limits_length": 1.5,
+    "opt_length": true,
     "opt_theta": true,
     "opt_phi": true,
-    "opt_base_position_mask": [true, true, true]
+    "opt_base_position_mask": [false, false, false]
 }
