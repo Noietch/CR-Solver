@@ -17,33 +17,117 @@ if DISABLE_JIT:
 
 
 def ik_metric(
+    robot: CCRobot,
+    solution: ConstantCurvatureState,
     result_transform: jaxlie.SE3,
     target_position: Array,
     target_orientation: Array,
-) -> float:
+) -> tuple[float, float, float, dict]:
     result_position = result_transform.translation()
     result_orientation = result_transform.rotation()
 
-    position_error = jnp.linalg.norm(result_position - target_position, axis=-1)
+    # check the accuracy of the solution
     position_threshold: float = 0.01
     rotation_threshold: float = 0.01
-
+    position_error = jnp.linalg.norm(result_position - target_position, axis=-1)
     orientation_error = jnp.linalg.norm(
         jnp.array(
             (jaxlie.SO3(target_orientation).inverse() @ result_orientation).log()
         ),
         axis=-1,
     )
-
-    success_mask = jnp.logical_and(
+    
+    # Individual failure masks
+    position_fail_mask = position_error >= position_threshold
+    rotation_fail_mask = orientation_error >= rotation_threshold
+    acc_mask = jnp.logical_and(
         position_error < position_threshold,
         orientation_error < rotation_threshold,
     )
 
+    # check the limit constraint
+    theta_mask = jnp.all(
+        jnp.logical_and(
+            solution.theta >= robot.config.lower_limits_theta,
+            solution.theta <= robot.config.upper_limits_theta,
+        ),
+        axis=-1
+    )
+    phi_mask = jnp.all(
+        jnp.logical_and(
+            solution.phi >= robot.config.lower_limits_phi,
+            solution.phi <= robot.config.upper_limits_phi,
+        ),
+        axis=-1
+    )
+    
+    # Individual constraint violation masks
+    theta_fail_mask = ~theta_mask
+    phi_fail_mask = ~phi_mask
+
+    # Overall success mask
+    mask = acc_mask & theta_mask & phi_mask
+    
+    # Calculate detailed failure statistics
+    total_samples = len(mask)
+    num_success = jnp.sum(mask)
+    num_fail = total_samples - num_success
+    
+    # Detailed failure breakdown
+    num_position_fail = jnp.sum(position_fail_mask)
+    num_rotation_fail = jnp.sum(rotation_fail_mask)
+    num_theta_fail = jnp.sum(theta_fail_mask)
+    num_phi_fail = jnp.sum(phi_fail_mask)
+    
+    # Combined failure categories
+    num_accuracy_fail = jnp.sum(~acc_mask)  # Failed due to position OR rotation
+    num_limit_fail = jnp.sum(~(theta_mask & phi_mask))  # Failed due to theta OR phi limits
+    
+    # Only accuracy failed (limits OK)
+    num_accuracy_only_fail = jnp.sum(~acc_mask & theta_mask & phi_mask)
+    
+    # Only limits failed (accuracy OK) 
+    num_limit_only_fail = jnp.sum(acc_mask & ~(theta_mask & phi_mask))
+    
+    # Both accuracy and limits failed
+    num_both_fail = jnp.sum(~acc_mask & ~(theta_mask & phi_mask))
+
+    failure_stats = {
+        "total_samples": int(total_samples),
+        "num_success": int(num_success),
+        "num_fail": int(num_fail),
+        "success_rate": float(jnp.mean(mask) * 100.0),
+        
+        # Individual failure types
+        "num_position_fail": int(num_position_fail),
+        "num_rotation_fail": int(num_rotation_fail), 
+        "num_theta_fail": int(num_theta_fail),
+        "num_phi_fail": int(num_phi_fail),
+        
+        # Combined failure categories
+        "num_accuracy_fail": int(num_accuracy_fail),
+        "num_limit_fail": int(num_limit_fail),
+        "num_accuracy_only_fail": int(num_accuracy_only_fail),
+        "num_limit_only_fail": int(num_limit_only_fail),
+        "num_both_fail": int(num_both_fail),
+        
+        # Percentages
+        "position_fail_rate": float(num_position_fail / total_samples * 100),
+        "rotation_fail_rate": float(num_rotation_fail / total_samples * 100),
+        "theta_fail_rate": float(num_theta_fail / total_samples * 100),
+        "phi_fail_rate": float(num_phi_fail / total_samples * 100),
+        "accuracy_fail_rate": float(num_accuracy_fail / total_samples * 100),
+        "limit_fail_rate": float(num_limit_fail / total_samples * 100),
+        "accuracy_only_fail_rate": float(num_accuracy_only_fail / total_samples * 100),
+        "limit_only_fail_rate": float(num_limit_only_fail / total_samples * 100),
+        "both_fail_rate": float(num_both_fail / total_samples * 100),
+    }
+
     return (
-        jnp.mean(success_mask) * 100.0,
-        jnp.mean(position_error[success_mask]),
-        jnp.mean(orientation_error[success_mask]),
+        jnp.mean(mask) * 100.0,
+        jnp.mean(position_error[mask]),
+        jnp.mean(orientation_error[mask]),
+        failure_stats,
     )
 
 
@@ -106,11 +190,31 @@ def eval_ik_with_no_coll(
     tip_transforms = jaxlie.SE3.from_matrix(fk_result[:, -1, ...])
 
     # compute metric
-    metric = ik_metric(tip_transforms, target_position, target_wxyz)
+    metric = ik_metric(robot, solution, tip_transforms, target_position, target_wxyz)
     print(f"finish solve ik of num sections {num_sections}, total time: {total_time}s")
     print(f"success rate: {metric[0]:.2f}%")
     print(f"position error: {metric[1]}m")
     print(f"rotation error: {metric[2]}rad")
+    
+    # Print detailed failure analysis
+    failure_stats = metric[3]
+    print("\n--- Detailed Failure Analysis ---")
+    print(f"Total samples: {failure_stats['total_samples']}")
+    print(f"Successful: {failure_stats['num_success']} ({failure_stats['success_rate']:.2f}%)")
+    print(f"Failed: {failure_stats['num_fail']} ({100 - failure_stats['success_rate']:.2f}%)")
+    
+    if failure_stats['num_fail'] > 0:
+        print("\nFailure breakdown by type:")
+        print(f"  Position accuracy failed: {failure_stats['num_position_fail']} ({failure_stats['position_fail_rate']:.2f}%)")
+        print(f"  Rotation accuracy failed: {failure_stats['num_rotation_fail']} ({failure_stats['rotation_fail_rate']:.2f}%)")
+        print(f"  Theta joint limits violated: {failure_stats['num_theta_fail']} ({failure_stats['theta_fail_rate']:.2f}%)")
+        print(f"  Phi joint limits violated: {failure_stats['num_phi_fail']} ({failure_stats['phi_fail_rate']:.2f}%)")
+        
+        print("\nFailure breakdown by category:")
+        print(f"  Only accuracy failed: {failure_stats['num_accuracy_only_fail']} ({failure_stats['accuracy_only_fail_rate']:.2f}%)")
+        print(f"  Only joint limits violated: {failure_stats['num_limit_only_fail']} ({failure_stats['limit_only_fail_rate']:.2f}%)")
+        print(f"  Both accuracy and limits failed: {failure_stats['num_both_fail']} ({failure_stats['both_fail_rate']:.2f}%)")
+    
     position_error = metric[1]
     rotation_error = metric[2]
     success_rate = round(metric[0], 2)
@@ -122,6 +226,7 @@ def eval_ik_with_no_coll(
         "rotation error": rotation_error,
         "success rate": success_rate,
         "total time": total_time,
+        "failure_stats": failure_stats,
     }
 
 
@@ -133,7 +238,7 @@ def eval_ik_all_sections(section_list: list, eval_num_list: list):
         robot = CCRobot.from_config(config)
         batched_fk = jax.vmap(robot._forward_kinematics)
         solver = IKSolver(
-            robot, num_seeds_init=3, num_seeds_final=2, total_steps=100, init_steps=10
+            robot, num_seeds_init=128, num_seeds_final=8, total_steps=100, init_steps=10
         )
         batched_ik_solve = jax.vmap(jax.jit(solver.solve_ik_best))
         for eval_num in eval_num_list:

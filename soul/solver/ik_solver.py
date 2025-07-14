@@ -53,7 +53,7 @@ class IKSolver:
                     jaxlie.SE3.from_rotation_and_translation(
                         jaxlie.SO3(target_wxyz), target_position
                     ),
-                    pos_weight=5.0,
+                    pos_weight=50.0,
                     ori_weight=1.0,
                 ),
                 (
@@ -89,7 +89,7 @@ class IKSolver:
             )
             return sol[robot_var], summary
 
-        vmapped_solve = jax.vmap(jax.jit(solve_one), in_axes=(0, 0, None))
+        vmapped_solve = jax.vmap(solve_one, in_axes=(0, 0, None))
 
         # Create initial seeds, but this time with quasi-random sequence.
         initial_states = sample_states(
@@ -152,13 +152,13 @@ class IKSolver:
                     limit_cost(
                         self.robot,
                         robot_var,
-                        weight=100.0,
+                        weight=1000.0,
                     )
                     if isinstance(self.robot, CCRobot)
                     else limit_cost_extend(
                         self.robot,
                         robot_var,
-                        weight=100.0,
+                        weight=1000.0,
                     )
                 ),
                 # self_collision_cost(self.robot, self.coll, robot_var, 0.05, 10.0),
@@ -190,7 +190,7 @@ class IKSolver:
             )
             return sol[robot_var], summary
 
-        vmapped_solve = jax.vmap(jax.jit(solve_one), in_axes=(0, 0, None))
+        vmapped_solve = jax.vmap(solve_one, in_axes=(0, 0, None))
 
         # Create initial seeds, but this time with quasi-random sequence.
         initial_states = sample_states(
