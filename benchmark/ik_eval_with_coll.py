@@ -435,34 +435,14 @@ def eval_ik_all_sections(
         )
 
 
-def visualize_ik_with_coll(save_path: str, world_config_path: str):
-    data = np.load(save_path)
-    target_position = data["target_position"]
-    target_wxyz = data["target_wxyz"]
-    fk_result = data["fk_result"]
-    # Randomly select 3 solutions
-    num_solutions = len(fk_result)
-    selected_indices = np.random.choice(num_solutions, size=3, replace=False)
-    # Get the selected solutions
-    fk_result = fk_result[selected_indices]
-    target_position = target_position[selected_indices]
-    visualize_cc_model_3d(
-        pose=fk_result,
-        target_position=target_position,
-        world_coll_config=world_config_path,
-        save_path=save_path.replace(".npz", "_fk.png"),
-    )
-
-
 if __name__ == "__main__":
     test_list = [3, 4, 5, 6]
     eval_num_list = [100]
-    robot_config_path = "configs/robots/cc_eval.json"
-    world_config_path = "configs/maps/ik_maps/obstacles_lattice.json"
-    result_dir = "results/ik_with_coll_lattice"
-    eval_ik_all_sections(
-        robot_config_path, world_config_path, test_list, eval_num_list, "cc", result_dir
-    )
-    visualize_ik_with_coll(
-        f"{result_dir}/ik_with_coll_sections_4_eval_100.npz", world_config_path
-    )
+    robot_config_path = "configs/robots/cc_extend_eval.json"
+    # world_config_path = "configs/maps/ik_maps/obstacles_lattice.json"
+    world_config_path = "configs/maps/ik_maps/obstacles_icosahedron.json"
+    result_dir = "results/ik_with_coll_icosahedron"
+    # result_dir = "results/ik_with_coll_lattice"
+    # eval_ik_all_sections(
+    #     robot_config_path, world_config_path, test_list, eval_num_list, "cc", result_dir
+    # )
