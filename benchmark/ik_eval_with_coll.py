@@ -294,6 +294,9 @@ def eval_ik_with_coll(
         if isinstance(robot, CCRobotExtend):
             np.savez(
                 save_path,
+                sampled_theta=np.array(initial_states.theta),
+                sampled_phi=np.array(initial_states.phi),
+                sampled_length=np.array(initial_states.length),
                 target_position=np.array(target_position),
                 target_wxyz=np.array(target_wxyz),
                 fk_result=np.array(fk_result),
@@ -304,6 +307,8 @@ def eval_ik_with_coll(
         else:
             np.savez(
                 save_path,
+                sampled_theta=np.array(initial_states.theta),
+                sampled_phi=np.array(initial_states.phi),
                 target_position=np.array(target_position),
                 target_wxyz=np.array(target_wxyz),
                 fk_result=np.array(fk_result),
