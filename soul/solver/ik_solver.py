@@ -54,7 +54,7 @@ class IKSolver:
                         jaxlie.SO3(target_wxyz), target_position
                     ),
                     pos_weight=50.0,
-                    ori_weight=1.0,
+                    ori_weight=10.0,
                 ),
                 (
                     limit_cost(

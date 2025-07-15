@@ -7,6 +7,7 @@ import json
 import os
 from typing import Callable
 from soul.robots.cc_robot import CCRobot, ConstantCurvatureState
+from soul.robots.cc_robot_extend import CCRobot as CCRobotExtend, ConstantCurvatureState as ConstantCurvatureStateExtend
 from soul.solver import IKSolver
 
 DISABLE_JIT = False
@@ -36,7 +37,7 @@ def ik_metric(
         ),
         axis=-1,
     )
-    
+
     # Individual failure masks
     position_fail_mask = position_error >= position_threshold
     rotation_fail_mask = orientation_error >= rotation_threshold
@@ -46,49 +47,52 @@ def ik_metric(
     )
 
     # check the limit constraint
+    delta = 0.01
     theta_mask = jnp.all(
         jnp.logical_and(
-            solution.theta >= robot.config.lower_limits_theta,
-            solution.theta <= robot.config.upper_limits_theta,
+            solution.theta >= robot.config.lower_limits_theta - delta,
+            solution.theta <= robot.config.upper_limits_theta + delta,
         ),
-        axis=-1
+        axis=-1,
     )
     phi_mask = jnp.all(
         jnp.logical_and(
-            solution.phi >= robot.config.lower_limits_phi,
-            solution.phi <= robot.config.upper_limits_phi,
+            solution.phi >= robot.config.lower_limits_phi - delta,
+            solution.phi <= robot.config.upper_limits_phi + delta,
         ),
-        axis=-1
+        axis=-1,
     )
-    
+
     # Individual constraint violation masks
     theta_fail_mask = ~theta_mask
     phi_fail_mask = ~phi_mask
 
     # Overall success mask
     mask = acc_mask & theta_mask & phi_mask
-    
+
     # Calculate detailed failure statistics
     total_samples = len(mask)
     num_success = jnp.sum(mask)
     num_fail = total_samples - num_success
-    
+
     # Detailed failure breakdown
     num_position_fail = jnp.sum(position_fail_mask)
     num_rotation_fail = jnp.sum(rotation_fail_mask)
     num_theta_fail = jnp.sum(theta_fail_mask)
     num_phi_fail = jnp.sum(phi_fail_mask)
-    
+
     # Combined failure categories
     num_accuracy_fail = jnp.sum(~acc_mask)  # Failed due to position OR rotation
-    num_limit_fail = jnp.sum(~(theta_mask & phi_mask))  # Failed due to theta OR phi limits
-    
+    num_limit_fail = jnp.sum(
+        ~(theta_mask & phi_mask)
+    )  # Failed due to theta OR phi limits
+
     # Only accuracy failed (limits OK)
     num_accuracy_only_fail = jnp.sum(~acc_mask & theta_mask & phi_mask)
-    
-    # Only limits failed (accuracy OK) 
+
+    # Only limits failed (accuracy OK)
     num_limit_only_fail = jnp.sum(acc_mask & ~(theta_mask & phi_mask))
-    
+
     # Both accuracy and limits failed
     num_both_fail = jnp.sum(~acc_mask & ~(theta_mask & phi_mask))
 
@@ -97,20 +101,17 @@ def ik_metric(
         "num_success": int(num_success),
         "num_fail": int(num_fail),
         "success_rate": float(jnp.mean(mask) * 100.0),
-        
         # Individual failure types
         "num_position_fail": int(num_position_fail),
-        "num_rotation_fail": int(num_rotation_fail), 
+        "num_rotation_fail": int(num_rotation_fail),
         "num_theta_fail": int(num_theta_fail),
         "num_phi_fail": int(num_phi_fail),
-        
         # Combined failure categories
         "num_accuracy_fail": int(num_accuracy_fail),
         "num_limit_fail": int(num_limit_fail),
         "num_accuracy_only_fail": int(num_accuracy_only_fail),
         "num_limit_only_fail": int(num_limit_only_fail),
         "num_both_fail": int(num_both_fail),
-        
         # Percentages
         "position_fail_rate": float(num_position_fail / total_samples * 100),
         "rotation_fail_rate": float(num_rotation_fail / total_samples * 100),
@@ -147,11 +148,27 @@ def sample_states_test(robot: CCRobot, num_states: int) -> ConstantCurvatureStat
         maxval=robot.config.upper_limits_phi,
     )
 
-    states = ConstantCurvatureState(
-        base_position=jnp.zeros((num_states, 3)),
-        theta=theta,
-        phi=phi,
-    )
+    if isinstance(robot, CCRobotExtend):
+        length = jax.random.uniform(
+            key=subkey,
+            shape=(num_states, robot.config.num_sections),
+            minval=robot.config.lower_limits_length,
+            maxval=robot.config.upper_limits_length,
+        )
+
+        states = ConstantCurvatureStateExtend(
+            base_position=jnp.zeros((num_states, 3)),
+            theta=theta,
+            phi=phi,
+            length=length,
+        )
+    else:
+        states = ConstantCurvatureState(
+            base_position=jnp.zeros((num_states, 3)),
+            theta=theta,
+            phi=phi,
+        )
+
     return states
 
 
@@ -195,26 +212,44 @@ def eval_ik_with_no_coll(
     print(f"success rate: {metric[0]:.2f}%")
     print(f"position error: {metric[1]}m")
     print(f"rotation error: {metric[2]}rad")
-    
+
     # Print detailed failure analysis
     failure_stats = metric[3]
     print("\n--- Detailed Failure Analysis ---")
     print(f"Total samples: {failure_stats['total_samples']}")
-    print(f"Successful: {failure_stats['num_success']} ({failure_stats['success_rate']:.2f}%)")
-    print(f"Failed: {failure_stats['num_fail']} ({100 - failure_stats['success_rate']:.2f}%)")
-    
-    if failure_stats['num_fail'] > 0:
+    print(
+        f"Successful: {failure_stats['num_success']} ({failure_stats['success_rate']:.2f}%)"
+    )
+    print(
+        f"Failed: {failure_stats['num_fail']} ({100 - failure_stats['success_rate']:.2f}%)"
+    )
+
+    if failure_stats["num_fail"] > 0:
         print("\nFailure breakdown by type:")
-        print(f"  Position accuracy failed: {failure_stats['num_position_fail']} ({failure_stats['position_fail_rate']:.2f}%)")
-        print(f"  Rotation accuracy failed: {failure_stats['num_rotation_fail']} ({failure_stats['rotation_fail_rate']:.2f}%)")
-        print(f"  Theta joint limits violated: {failure_stats['num_theta_fail']} ({failure_stats['theta_fail_rate']:.2f}%)")
-        print(f"  Phi joint limits violated: {failure_stats['num_phi_fail']} ({failure_stats['phi_fail_rate']:.2f}%)")
-        
+        print(
+            f"  Position accuracy failed: {failure_stats['num_position_fail']} ({failure_stats['position_fail_rate']:.2f}%)"
+        )
+        print(
+            f"  Rotation accuracy failed: {failure_stats['num_rotation_fail']} ({failure_stats['rotation_fail_rate']:.2f}%)"
+        )
+        print(
+            f"  Theta joint limits violated: {failure_stats['num_theta_fail']} ({failure_stats['theta_fail_rate']:.2f}%)"
+        )
+        print(
+            f"  Phi joint limits violated: {failure_stats['num_phi_fail']} ({failure_stats['phi_fail_rate']:.2f}%)"
+        )
+
         print("\nFailure breakdown by category:")
-        print(f"  Only accuracy failed: {failure_stats['num_accuracy_only_fail']} ({failure_stats['accuracy_only_fail_rate']:.2f}%)")
-        print(f"  Only joint limits violated: {failure_stats['num_limit_only_fail']} ({failure_stats['limit_only_fail_rate']:.2f}%)")
-        print(f"  Both accuracy and limits failed: {failure_stats['num_both_fail']} ({failure_stats['both_fail_rate']:.2f}%)")
-    
+        print(
+            f"  Only accuracy failed: {failure_stats['num_accuracy_only_fail']} ({failure_stats['accuracy_only_fail_rate']:.2f}%)"
+        )
+        print(
+            f"  Only joint limits violated: {failure_stats['num_limit_only_fail']} ({failure_stats['limit_only_fail_rate']:.2f}%)"
+        )
+        print(
+            f"  Both accuracy and limits failed: {failure_stats['num_both_fail']} ({failure_stats['both_fail_rate']:.2f}%)"
+        )
+
     position_error = metric[1]
     rotation_error = metric[2]
     success_rate = round(metric[0], 2)
@@ -230,15 +265,20 @@ def eval_ik_with_no_coll(
     }
 
 
-def eval_ik_all_sections(section_list: list, eval_num_list: list):
+def eval_ik_all_sections(robot_config_path: str, section_list: list, eval_num_list: list, eval_type: str):
     all_results_summary = []
     for num_sections in section_list:
-        config = json.load(open(f"configs/robots/cc_eval.json"))
+        config = json.load(open(robot_config_path))
         config["num_sections"] = num_sections
-        robot = CCRobot.from_config(config)
+        if eval_type == "cc":
+            robot = CCRobot.from_config(config)
+        elif eval_type == "cc_extend":
+            robot = CCRobotExtend.from_config(config)
+        else:
+            raise ValueError(f"Invalid eval type: {eval_type}")
         batched_fk = jax.vmap(robot._forward_kinematics)
         solver = IKSolver(
-            robot, num_seeds_init=128, num_seeds_final=8, total_steps=100, init_steps=10
+            robot, num_seeds_init=128, num_seeds_final=8, total_steps=200, init_steps=10
         )
         batched_ik_solve = jax.vmap(jax.jit(solver.solve_ik_best))
         for eval_num in eval_num_list:
@@ -262,6 +302,8 @@ def eval_ik_all_sections(section_list: list, eval_num_list: list):
 
 
 if __name__ == "__main__":
-    test_list = [3]
+    section_list = [3]
     eval_num_list = [1000]
-    eval_ik_all_sections(test_list, eval_num_list)
+    robot_config_path = "configs/robots/cc_eval.json"
+    eval_type = "cc"
+    eval_ik_all_sections(robot_config_path, section_list, eval_num_list, eval_type)
