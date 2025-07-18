@@ -5,7 +5,7 @@ import jaxlie
 import jax_dataclasses as jdc
 from ..geom.collision_cc_robot import RobotCollision
 from ..geom.collision_world import WorldCollision
-from ..geom.geometry import Sphere
+from ..geom.geometry import Sphere, BoundingBox
 from ..robots.cc_robot import ConstantCurvatureState, CCRobot
 from functools import partial
 import jax
@@ -116,7 +116,7 @@ class ViserWorld:
             else:
                 self.save_path_handle = self.server.add_gui_text(
                     "Save Path",
-                    initial_value="configs/maps/obstacles_new.json",
+                    initial_value="configs/maps/obstacles_generated.json",
                 )
 
             @self.save_button.on_click
@@ -144,19 +144,28 @@ class ViserWorld:
     def save_obstacle_poses(self, path: str):
         """Saves the current obstacle poses to a JSON file."""
         # Assuming obstacles are spheres, which is consistent with the config format
-        if not isinstance(self.world_coll.obstacles, Sphere):
-            print("Saving only supported for Sphere obstacles.")
-            return
-
-        obstacles_dict = {}
-        centers = self.world_coll.obstacles.pose.translation()
-        radii = self.world_coll.obstacles.radius
-        for i in range(len(centers)):
-            obstacles_dict[f"obstacle_{i+1}"] = {
-                "type": "sphere",
-                "center": [round(float(center), 2) for center in centers[i]],
-                "radius": round(float(radii[i]), 2),
-            }
+        if isinstance(self.world_coll.obstacles, Sphere):
+            obstacles_dict = {}
+            centers = self.world_coll.obstacles.pose.translation()
+            radii = self.world_coll.obstacles.radius
+            for i in range(len(centers)):
+                obstacles_dict[f"obstacle_{i+1}"] = {
+                    "type": "sphere",
+                    "center": [round(float(center), 2) for center in centers[i]],
+                    "radius": round(float(radii[i]), 2),
+                }
+        elif isinstance(self.world_coll.obstacles, BoundingBox):
+            obstacles_dict = {}
+            centers = self.world_coll.obstacles.pose.translation()
+            extents = self.world_coll.obstacles.extents
+            for i in range(len(centers)):
+                obstacles_dict[f"obstacle_{i+1}"] = {
+                    "type": "bbox",
+                    "center": [round(float(center), 2) for center in centers[i]],
+                    "extents": [round(float(extent), 2) for extent in extents[i]],
+                }
+        else:
+            raise ValueError(f"Unsupported obstacle type: {type(self.world_coll.obstacles)}")
 
         with open(path, "w") as f:
             json.dump(obstacles_dict, f, indent=4)
@@ -167,19 +176,30 @@ class ViserWorld:
         """Create mesh visualizations for the obstacles."""
         # add mesh visualizations
         if self.is_handle_able:
-            for i, mesh in enumerate(self.world_coll.mesh):
-                obstacle_pose = self.world_coll.obstacles.pose.wxyz_xyz[i]
+            obstacles_coll = self.world_coll.obstacles
+            for i in range(len(obstacles_coll.pose.wxyz_xyz)):
+                obstacle_i = jax.tree_util.tree_map(lambda x: x[i], obstacles_coll)
+                
+                obstacle_pose = obstacles_coll.pose.wxyz_xyz[i]
                 obstacle_handle = self.server.scene.add_transform_controls(
                     f"obstacles/handle_{i}",
                     scale=0.5,
                     position=np.array(obstacle_pose[4:]),
                     wxyz=np.array(obstacle_pose[:4]),
                 )
+                
+                mesh = self.world_coll.mesh[i]
                 mesh.apply_translation(-obstacle_pose[4:])
-                # jax.debug.breakpoint()
                 self.server.scene.add_mesh_trimesh(
                     name=f"obstacles/handle_{i}/mesh",
                     mesh=mesh,
+                )
+
+                coll_mesh = obstacle_i.to_trimesh()
+                coll_mesh.apply_translation(-obstacle_pose[4:])
+                collision_handle = self.server.scene.add_mesh_trimesh(
+                    name=f"obstacles/handle_{i}/collision",
+                    mesh=coll_mesh,
                 )
 
                 obstacle_handle.on_update(partial(self.update_obstacle_pose, i))

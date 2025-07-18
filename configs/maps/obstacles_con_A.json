@@ -1,0 +1,20 @@
+{
+    "obstacle_1": {
+        "type": "sphere",
+        "center": [
+            0.16,
+            -0.95,
+            0.39
+        ],
+        "radius": 0.3
+    },
+    "obstacle_2": {
+        "type": "sphere",
+        "center": [
+            0.63,
+            -0.6,
+            1.12
+        ],
+        "radius": 0.3
+    }
+}

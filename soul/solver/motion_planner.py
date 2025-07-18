@@ -148,8 +148,8 @@ class ConstrainedMotionPlanner(MotionPlanner):
                 self._robot_batch,
                 traj_vars,
                 reference_traj,
-                jnp.array([5.0])[None],
-                jnp.array([1.0])[None],
+                jnp.array([100.0])[None],
+                jnp.array([50.0])[None],
             ),
             limit_cost(
                 self._robot_batch,
@@ -159,32 +159,32 @@ class ConstrainedMotionPlanner(MotionPlanner):
             smoothness_cost(
                 self.robot.var_cls(jnp.arange(1, self.timesteps)),
                 self.robot.var_cls(jnp.arange(0, self.timesteps - 1)),
-                jnp.array([10.0])[None],
+                jnp.array([40.0])[None],
             ),
-            rest_base_cost(
-                traj_vars,
-                jnp.array([10.0])[None],
-            ),
+            # rest_base_cost(
+            #     traj_vars,
+            #     jnp.array([10.0])[None],
+            # ),
         ]
         # 2. Add start and end pose constraints.
-        factors.extend(
-            [
-                jaxls.Cost(
-                    lambda vals, var: ((vals[var] - init_traj[0])).flatten() * 100.0,
-                    (self.robot.var_cls(jnp.arange(0, 2)),),
-                    name="start_pose_constraint",
-                ),
-                jaxls.Cost(
-                    lambda vals, var: ((vals[var] - init_traj[-1])).flatten() * 100.0,
-                    (
-                        self.robot.var_cls(
-                            jnp.arange(self.timesteps - 2, self.timesteps)
-                        ),
-                    ),
-                    name="end_pose_constraint",
-                ),
-            ]
-        )
+        # factors.extend(
+        #     [
+        #         jaxls.Cost(
+        #             lambda vals, var: ((vals[var] - init_traj[0])).flatten() * 100.0,
+        #             (self.robot.var_cls(jnp.arange(0, 2)),),
+        #             name="start_pose_constraint",
+        #         ),
+        #         jaxls.Cost(
+        #             lambda vals, var: ((vals[var] - init_traj[-1])).flatten() * 100.0,
+        #             (
+        #                 self.robot.var_cls(
+        #                     jnp.arange(self.timesteps - 2, self.timesteps)
+        #                 ),
+        #             ),
+        #             name="end_pose_constraint",
+        #         ),
+        #     ]
+        # )
         # 3. Add collision avoidance costs.
         for world_coll_obj in world_coll:
             factors.append(
