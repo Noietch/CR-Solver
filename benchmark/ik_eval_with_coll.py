@@ -151,7 +151,11 @@ def ik_metric_with_coll(
         "rotation_fail_rate": float(num_rotation_fail / total_samples * 100),
         "theta_fail_rate": float(num_theta_fail / total_samples * 100),
         "phi_fail_rate": float(num_phi_fail / total_samples * 100),
-        "length_fail_rate": float(num_length_fail / total_samples * 100) if isinstance(robot, CCRobotExtend) else 0,
+        "length_fail_rate": (
+            float(num_length_fail / total_samples * 100)
+            if isinstance(robot, CCRobotExtend)
+            else 0
+        ),
         "collision_fail_rate": float(num_collision_fail / total_samples * 100),
         "accuracy_fail_rate": float(num_accuracy_fail / total_samples * 100),
         "limit_fail_rate": float(num_limit_fail / total_samples * 100),

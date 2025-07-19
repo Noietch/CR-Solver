@@ -3,7 +3,10 @@ import matplotlib.pyplot as plt
 
 from soul.visualization.visualizer_plot import visualize_cc_model_3d
 
-def visualize_ik_with_coll(save_path: str, world_config_path: str, ax: plt.Axes, selected_indices: list[int]):
+
+def visualize_ik_with_coll(
+    save_path: str, world_config_path: str, ax: plt.Axes, selected_indices: list[int]
+):
     data = np.load(save_path)
     target_position = data["target_position"]
     target_wxyz = data["target_wxyz"]
@@ -24,29 +27,31 @@ def visualize_ik_with_coll(save_path: str, world_config_path: str, ax: plt.Axes,
         target_position=target_position,
         world_coll_config=world_config_path,
         save_path=save_path.replace(".npz", "_fk.png"),
-        ax=ax
+        ax=ax,
     )
 
+
 def main():
-    fig = plt.figure(facecolor='white', figsize=(8, 4))
-    ax1 = fig.add_subplot(121, projection="3d") 
+    fig = plt.figure(facecolor="white", figsize=(8, 4))
+    ax1 = fig.add_subplot(121, projection="3d")
     ax2 = fig.add_subplot(122, projection="3d")
 
     visualize_ik_with_coll(
         "results/ik_with_coll_lattice/ik_with_coll_sections_3_eval_100.npz",
         "configs/maps/ik_maps/obstacles_lattice.json",
         ax=ax1,
-        selected_indices=[15, 16]
+        selected_indices=[15, 16],
     )
     visualize_ik_with_coll(
-        "results/ik_with_coll_icosahedron/ik_with_coll_sections_6_eval_100.npz", 
+        "results/ik_with_coll_icosahedron/ik_with_coll_sections_6_eval_100.npz",
         "configs/maps/ik_maps/obstacles_icosahedron.json",
         ax=ax2,
-        selected_indices=[83, 32, 90]
+        selected_indices=[83, 32, 90],
     )
     plt.tight_layout()
     plt.savefig("results/ik_examples.png")
     plt.close()
+
 
 if __name__ == "__main__":
     main()

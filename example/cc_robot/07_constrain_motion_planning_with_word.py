@@ -23,18 +23,22 @@ if DISABLE_JIT:
 LETTER_HEIGHT = 2.5
 LETTER_WIDTH = 1.5
 
+
 def create_I():
     """Generates path points for the letter 'I'."""
-    return [
-        (LETTER_WIDTH / 2, 0), (LETTER_WIDTH / 2, LETTER_HEIGHT)
-    ]
+    return [(LETTER_WIDTH / 2, 0), (LETTER_WIDTH / 2, LETTER_HEIGHT)]
+
 
 def create_C():
     """Generates path points for a curved letter 'C'."""
     return [
-        (LETTER_WIDTH / 2 + (LETTER_WIDTH / 2) * np.cos(t), LETTER_HEIGHT / 2 + (LETTER_HEIGHT / 2) * np.sin(t))
+        (
+            LETTER_WIDTH / 2 + (LETTER_WIDTH / 2) * np.cos(t),
+            LETTER_HEIGHT / 2 + (LETTER_HEIGHT / 2) * np.sin(t),
+        )
         for t in np.linspace(0.4 * np.pi, 1.6 * np.pi, 20)
     ]
+
 
 def create_R():
     """Generates path points for a curvy letter 'R'."""
@@ -51,15 +55,21 @@ def create_R():
     leg = [leg_start_point, leg_end_point]
     return stem + [None] + curve + leg
 
+
 def create_A():
     """Generates path points for the letter 'A'."""
     return [
-        (0, 0), (LETTER_WIDTH / 2, LETTER_HEIGHT), (LETTER_WIDTH, 0),
+        (0, 0),
+        (LETTER_WIDTH / 2, LETTER_HEIGHT),
+        (LETTER_WIDTH, 0),
         None,
-        (LETTER_WIDTH * 0.3, LETTER_HEIGHT / 3), (LETTER_WIDTH * 0.8, LETTER_HEIGHT / 3)
+        (LETTER_WIDTH * 0.3, LETTER_HEIGHT / 3),
+        (LETTER_WIDTH * 0.8, LETTER_HEIGHT / 3),
     ]
 
+
 # --- 2. Trajectory Generation Functions ---
+
 
 def get_icra_traj(
     start_position: np.ndarray,
@@ -74,7 +84,7 @@ def get_icra_traj(
     The height is controlled by the y-difference between handles.
     """
     # word_funcs = {'I': create_I, 'C': create_C, 'R': create_R, 'A': create_A}
-    word_funcs = {'A': create_A}
+    word_funcs = {"A": create_A}
     word_str = "ICRA"
     letter_spacing = LETTER_WIDTH * 1.8
 
@@ -85,7 +95,7 @@ def get_icra_traj(
         if char in word_funcs:
             points = word_funcs[char]()
             if all_points_2d and points:
-                 all_points_2d.append(None)
+                all_points_2d.append(None)
             for p in points:
                 if p is None:
                     all_points_2d.append(None)
@@ -97,16 +107,20 @@ def get_icra_traj(
     path_2d_array = np.array([p for p in all_points_2d if p is not None])
 
     if path_2d_array.shape[0] < 2:
-        return get_linear_traj(start_position, start_wxyz, start_position, start_wxyz, timesteps)
+        return get_linear_traj(
+            start_position, start_wxyz, start_position, start_wxyz, timesteps
+        )
 
     # 2. Determine target dimensions from handle positions
     handle_diff = np.array(end_position) - np.array(start_position)
     target_width = abs(handle_diff[0])
     target_height = abs(handle_diff[1])
-    
+
     # Use small default values to prevent collapsing the shape
-    if target_width < 0.1: target_width = 0.1
-    if target_height < 0.1: target_height = 0.1
+    if target_width < 0.1:
+        target_width = 0.1
+    if target_height < 0.1:
+        target_height = 0.1
 
     # 3. Calculate and apply non-uniform scaling
     natural_width = path_2d_array[:, 0].max() - path_2d_array[:, 0].min()
@@ -124,8 +138,10 @@ def get_icra_traj(
     scaled_path_2d[:, 1] *= scale_y
 
     # 4. Lift to 3D and align the path's start to the local origin
-    local_points_3d = np.hstack([scaled_path_2d, np.zeros((scaled_path_2d.shape[0], 1))])
-    
+    local_points_3d = np.hstack(
+        [scaled_path_2d, np.zeros((scaled_path_2d.shape[0], 1))]
+    )
+
     # No offset needed now as the first point of the shape is at (0,0) due to min_coords subtraction
 
     # 5. Define the world transformation from the start handle's pose
@@ -139,7 +155,7 @@ def get_icra_traj(
     # 7. Resample the final 3D path for a smooth trajectory
     distances = np.cumsum(np.linalg.norm(np.diff(world_points, axis=0), axis=1))
     distances = np.insert(distances, 0, 0)
-    
+
     new_distances = np.linspace(0, distances[-1], timesteps)
     interp_x = np.interp(new_distances, distances, world_points[:, 0])
     interp_y = np.interp(new_distances, distances, world_points[:, 1])
@@ -190,7 +206,7 @@ def get_sine_traj(
     y_coords = np.linspace(start_position[1], end_position[1], timesteps)
     z_coords = np.linspace(start_position[2], end_position[2], timesteps)
     x_base = np.linspace(start_position[0], end_position[0], timesteps)
-    
+
     t = np.linspace(0, 2 * np.pi, timesteps)
     x_amplitude = 0.5
     x_sine = x_base + x_amplitude * np.sin(t)
@@ -214,7 +230,12 @@ def viser_main():
     server = viser.ViserServer()
     robot_vis = ViserSoftRobot(server, robot_coll, root_node_name="/robot")
     robot_vis.create_sphere_visualizations()
-    obstacles_vis = ViserWorld(server, world_coll, is_handle_able=True, config_path="configs/maps/obstacles_con.json")
+    obstacles_vis = ViserWorld(
+        server,
+        world_coll,
+        is_handle_able=True,
+        config_path="configs/maps/obstacles_con.json",
+    )
     obstacles_vis.create_mesh_visualizations()
 
     # Setup GUI
@@ -238,16 +259,30 @@ def viser_main():
         replay_button = server.gui.add_button("Replay", disabled=True)
 
     with server.gui.add_folder("Handles Tfs"):
-        start_pos_text = server.gui.add_text("Start Pos", initial_value=str(np.round(start_handle.position, 2)), disabled=True)
-        start_wxyz_text = server.gui.add_text("Start wxyz", initial_value=str(np.round(start_handle.wxyz, 2)), disabled=True)
-        end_pos_text = server.gui.add_text("End Pos", initial_value=str(np.round(end_handle.position, 2)), disabled=True)
-        end_wxyz_text = server.gui.add_text("End wxyz", initial_value=str(np.round(end_handle.wxyz, 2)), disabled=True)
+        start_pos_text = server.gui.add_text(
+            "Start Pos",
+            initial_value=str(np.round(start_handle.position, 2)),
+            disabled=True,
+        )
+        start_wxyz_text = server.gui.add_text(
+            "Start wxyz",
+            initial_value=str(np.round(start_handle.wxyz, 2)),
+            disabled=True,
+        )
+        end_pos_text = server.gui.add_text(
+            "End Pos",
+            initial_value=str(np.round(end_handle.position, 2)),
+            disabled=True,
+        )
+        end_wxyz_text = server.gui.add_text(
+            "End wxyz", initial_value=str(np.round(end_handle.wxyz, 2)), disabled=True
+        )
 
     # Set up trajopt parameters
     timesteps = 150
     traj_solver = ConstrainedMotionPlanner(robot, robot_coll, timesteps)
     traj_follow_jit = jax.jit(traj_solver.tip_traj_follow)
-    
+
     global_traj = None
 
     def plan_and_visualize(ref_traj_func):
@@ -273,16 +308,16 @@ def viser_main():
         cfg = traj_follow_jit(reference_traj, [obstacles_vis.world_coll.obstacles])
         global_traj = robot.forward_kinematics(cfg)
         print("Finish planning....")
-        
+
         robot_vis.visualize_traj_collisions(robot, cfg)
         robot_vis.visualize_traj(
             global_traj, color=np.array([0.0, 0.0, 1.0]), name="planned_traj"
         )
-        
+
         for i in range(timesteps):
             time.sleep(0.02)
             robot_vis.update_pose(global_traj[i])
-        
+
         replay_button.disabled = False
         print("Animation finished. Ready to replay or plan new trajectory.")
 
@@ -292,7 +327,7 @@ def viser_main():
         start_wxyz_text.value = str(np.round(start_handle.wxyz, 2))
         end_pos_text.value = str(np.round(end_handle.position, 2))
         end_wxyz_text.value = str(np.round(end_handle.wxyz, 2))
-    
+
     def replay_callback(_: viser.GuiButtonHandle):
         nonlocal global_traj
         if global_traj is None:
@@ -316,6 +351,7 @@ def viser_main():
 
     while True:
         time.sleep(0.01)
+
 
 if __name__ == "__main__":
     viser_main()

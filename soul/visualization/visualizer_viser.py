@@ -165,7 +165,9 @@ class ViserWorld:
                     "extents": [round(float(extent), 2) for extent in extents[i]],
                 }
         else:
-            raise ValueError(f"Unsupported obstacle type: {type(self.world_coll.obstacles)}")
+            raise ValueError(
+                f"Unsupported obstacle type: {type(self.world_coll.obstacles)}"
+            )
 
         with open(path, "w") as f:
             json.dump(obstacles_dict, f, indent=4)
@@ -179,7 +181,7 @@ class ViserWorld:
             obstacles_coll = self.world_coll.obstacles
             for i in range(len(obstacles_coll.pose.wxyz_xyz)):
                 obstacle_i = jax.tree_util.tree_map(lambda x: x[i], obstacles_coll)
-                
+
                 obstacle_pose = obstacles_coll.pose.wxyz_xyz[i]
                 obstacle_handle = self.server.scene.add_transform_controls(
                     f"obstacles/handle_{i}",
@@ -187,7 +189,7 @@ class ViserWorld:
                     position=np.array(obstacle_pose[4:]),
                     wxyz=np.array(obstacle_pose[:4]),
                 )
-                
+
                 mesh = self.world_coll.mesh[i]
                 mesh.apply_translation(-obstacle_pose[4:])
                 self.server.scene.add_mesh_trimesh(

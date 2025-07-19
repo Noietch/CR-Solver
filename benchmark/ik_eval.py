@@ -7,7 +7,10 @@ import json
 import os
 from typing import Callable
 from soul.robots.cc_robot import CCRobot, ConstantCurvatureState
-from soul.robots.cc_robot_extend import CCRobot as CCRobotExtend, ConstantCurvatureState as ConstantCurvatureStateExtend
+from soul.robots.cc_robot_extend import (
+    CCRobot as CCRobotExtend,
+    ConstantCurvatureState as ConstantCurvatureStateExtend,
+)
 from soul.solver import IKSolver
 
 DISABLE_JIT = False
@@ -265,7 +268,9 @@ def eval_ik_with_no_coll(
     }
 
 
-def eval_ik_all_sections(robot_config_path: str, section_list: list, eval_num_list: list, eval_type: str):
+def eval_ik_all_sections(
+    robot_config_path: str, section_list: list, eval_num_list: list, eval_type: str
+):
     all_results_summary = []
     for num_sections in section_list:
         config = json.load(open(robot_config_path))

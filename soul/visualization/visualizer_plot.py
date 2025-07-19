@@ -8,11 +8,13 @@ import matplotlib.pyplot as plt
 def _quaternion_to_rotation_matrix(wxyz):
     """Convert quaternion (w, x, y, z) to rotation matrix."""
     w, x, y, z = wxyz
-    return np.array([
-        [1 - 2*(y**2 + z**2), 2*(x*y - w*z), 2*(x*z + w*y)],
-        [2*(x*y + w*z), 1 - 2*(x**2 + z**2), 2*(y*z - w*x)],
-        [2*(x*z - w*y), 2*(y*z + w*x), 1 - 2*(x**2 + y**2)]
-    ])
+    return np.array(
+        [
+            [1 - 2 * (y**2 + z**2), 2 * (x * y - w * z), 2 * (x * z + w * y)],
+            [2 * (x * y + w * z), 1 - 2 * (x**2 + z**2), 2 * (y * z - w * x)],
+            [2 * (x * z - w * y), 2 * (y * z + w * x), 1 - 2 * (x**2 + y**2)],
+        ]
+    )
 
 
 def _plot_coordinate_frame(ax, position, rotation_matrix, scale=0.4):
@@ -22,17 +24,44 @@ def _plot_coordinate_frame(ax, position, rotation_matrix, scale=0.4):
     x_axis = rotation_matrix @ np.array([scale, 0, 0])
     y_axis = rotation_matrix @ np.array([0, scale, 0])
     z_axis = rotation_matrix @ np.array([0, 0, scale])
-    
+
     # Plot axes
-    ax.quiver(origin[0], origin[1], origin[2], 
-              x_axis[0], x_axis[1], x_axis[2], 
-              color='red', arrow_length_ratio=0.1, linewidth=2, label='X')
-    ax.quiver(origin[0], origin[1], origin[2], 
-              y_axis[0], y_axis[1], y_axis[2], 
-              color='green', arrow_length_ratio=0.1, linewidth=2, label='Y')
-    ax.quiver(origin[0], origin[1], origin[2], 
-              z_axis[0], z_axis[1], z_axis[2], 
-              color='blue', arrow_length_ratio=0.1, linewidth=2, label='Z')
+    ax.quiver(
+        origin[0],
+        origin[1],
+        origin[2],
+        x_axis[0],
+        x_axis[1],
+        x_axis[2],
+        color="red",
+        arrow_length_ratio=0.1,
+        linewidth=2,
+        label="X",
+    )
+    ax.quiver(
+        origin[0],
+        origin[1],
+        origin[2],
+        y_axis[0],
+        y_axis[1],
+        y_axis[2],
+        color="green",
+        arrow_length_ratio=0.1,
+        linewidth=2,
+        label="Y",
+    )
+    ax.quiver(
+        origin[0],
+        origin[1],
+        origin[2],
+        z_axis[0],
+        z_axis[1],
+        z_axis[2],
+        color="blue",
+        arrow_length_ratio=0.1,
+        linewidth=2,
+        label="Z",
+    )
 
 
 def _plot_sphere(ax: plt.Axes, center, radius):
@@ -154,7 +183,7 @@ def visualize_cc_model_3d(
         os.makedirs(dir_path, exist_ok=True)
 
     if ax is None:
-        fig = plt.figure(facecolor='white')
+        fig = plt.figure(facecolor="white")
         ax = fig.add_subplot(projection="3d")
 
     if pose is not None:
@@ -182,7 +211,14 @@ def visualize_cc_model_3d(
                     )
                 for i in range(len(positions) // num_points):
                     end_point = positions[(i + 1) * num_points - 1]
-                    ax.scatter(end_point[0], end_point[1], end_point[2], c=colors[i % len(colors)], marker='o', s=2)
+                    ax.scatter(
+                        end_point[0],
+                        end_point[1],
+                        end_point[2],
+                        c=colors[i % len(colors)],
+                        marker="o",
+                        s=2,
+                    )
             else:
                 ax.plot(
                     positions[:, 0],
@@ -204,15 +240,14 @@ def visualize_cc_model_3d(
                 scale = np.max(scene_range) * 0.1  # 10% of scene range
             else:
                 scale = 0.1  # Default scale
-            
+
             # Use target_position if available, otherwise use origin
             if target_position is not None:
                 frame_position = target_position[i]
             else:
                 frame_position = np.array([0.0, 0.0, 0.0])  # Place at origin
-            
-            _plot_coordinate_frame(ax, frame_position, rotation_matrix, scale=scale)
 
+            _plot_coordinate_frame(ax, frame_position, rotation_matrix, scale=scale)
 
     # draw obstacle spheres
     if world_coll_config is not None:
