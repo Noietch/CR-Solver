@@ -11,7 +11,7 @@ from soul.robots.cc_robot_extend import CCRobot as CCRobotExtend
 from soul.geom import RobotCollision, WorldCollision
 from soul.solver import ConstrainedMotionPlanner
 from soul.visualization.visualizer_viser import ViserSoftRobot, ViserWorld
-from benchmark.constrain_motion_planning_plot import visualize_trajectory
+from benchmark.ik_plot import visualize_constrain_motion_planning
 
 
 DISABLE_JIT = False
@@ -24,7 +24,6 @@ if DISABLE_JIT:
     jax.config.update("jax_disable_jit", True)
 
 
-# --- 1. Letter Generation Functions (from get_ICRA.py) ---
 LETTER_HEIGHT = 2.5
 LETTER_WIDTH = 1.5
 
@@ -45,8 +44,8 @@ def create_C():
     ]
 
 
-def create_R_curvy():
-    """Generates path points for a curvy letter 'R'."""
+def create_R():
+    """Generates path points for curved letter 'R'."""
     stem = [(0, 0), (0, LETTER_HEIGHT)]
     curve_center_y = LETTER_HEIGHT * 0.75
     curve_radius_y = LETTER_HEIGHT * 0.25
@@ -73,9 +72,6 @@ def create_A():
     ]
 
 
-# --- 2. Trajectory Generation Functions ---
-
-
 def get_icra_traj(
     start_position: np.ndarray,
     start_wxyz: np.ndarray,
@@ -88,7 +84,7 @@ def get_icra_traj(
     The width is controlled by the x-difference between handles.
     The height is controlled by the y-difference between handles.
     """
-    # word_funcs = {'I': create_I, 'C': create_C, 'R': create_R_curvy, 'A': create_A}
+    # word_funcs = {'I': create_I, 'C': create_C, 'R': create_R, 'A': create_A}
     word_funcs = {"I": create_I}
     word_str = "ICRA"
     letter_spacing = LETTER_WIDTH * 1.8
@@ -146,8 +142,6 @@ def get_icra_traj(
     local_points_3d = np.hstack(
         [scaled_path_2d, np.zeros((scaled_path_2d.shape[0], 1))]
     )
-
-    # No offset needed now as the first point of the shape is at (0,0) due to min_coords subtraction
 
     # 5. Define the world transformation from the start handle's pose
     start_pose = jaxlie.SE3.from_rotation_and_translation(
@@ -260,7 +254,7 @@ def get_sine_traj(
 
 
 def viser_main():
-    world_coll_config_path = "configs/maps/obstacles_con.json"
+    world_coll_config_path = "configs/maps/constrain_motion_planning/obstacles_con.json"
     # Setup Environment
     robot = CCRobot.from_config("configs/robots/cc_con_eval.json")
     robot_coll = RobotCollision.from_config("configs/robots/cc_con_eval.json")
@@ -274,25 +268,26 @@ def viser_main():
         server, world_coll, is_handle_able=True, config_path=world_coll_config_path
     )
     obstacles_vis.create_mesh_visualizations()
-    """ for letter "A"
+    """  Handle settings for words
+    for letter "A"
     start_handle_position = (-0.01, -2.51, 0.76)
     start_handle_wxyz = (0.82, 0.47, 0.25, 0.2)
     end_handle_position = (1.23, -1.25, 2.75)
     end_handle_wxyz = (1.0, 0, 0, 0)
-    """
-    """ for letter "R"
+    
+    for letter "R"
     start_handle_position = (-0.04, -2.53, 0.78)
     start_handle_wxyz = (0.83, 0.48, 0.22, 0.18)
     end_handle_position = (0.79, -1.26, 2.75)
     end_handle_wxyz = (1.0, 0, 0, 0)
-    """
-    """ for letter "C"
+    
+    for letter "C"
     start_handle_position = (-0.01, -2.46, 0.9)
     start_handle_wxyz = (0.83, 0.54, 0.06, 0.1)
     end_handle_position = (0.75, -1.31, 2.75)
     end_handle_wxyz = (1.0, 0, 0, 0)
-    """
-    """ for letter "I"
+    
+    for letter "I"
     start_handle_position = (-0.01, -2.46, 0.9)
     start_handle_wxyz = (0.83, 0.54, 0.06, 0.1)
     end_handle_position = (0.75, -1.31, 2.75)
@@ -372,8 +367,7 @@ def viser_main():
         )
 
         print("Start planning....")
-        # Use the updated obstacle information from the visualizer
-        # Wrap the obstacles object in a list to make it iterable for the solver.
+        # Update obstacle information from the visualizer
         cfg = traj_follow_jit(reference_traj, [obstacles_vis.world_coll.obstacles])
         global_traj = robot.forward_kinematics(cfg)
         print("Finish planning....")
@@ -392,11 +386,10 @@ def viser_main():
         # Save results
         save_dir = os.path.join("results", "traj_following", ref_traj_func.__name__)
         os.makedirs(save_dir, exist_ok=True)
-        # Use a more consistent naming scheme for the output file
         filename = f"{ref_traj_func.__name__}.npz"
         save_path = os.path.join(save_dir, filename)
 
-        # Get obstacle information for saving. Note that the obstacle configurations are saved, not just positions.
+        # Get obstacle information for saving.
         obstacles_for_saving = obstacles_vis.world_coll.obstacles
 
         if isinstance(robot, CCRobotExtend):
@@ -430,7 +423,7 @@ def viser_main():
         fig = plt.figure(facecolor="white", figsize=(12, 6))
         ax = fig.add_subplot(111, projection="3d")
 
-        visualize_trajectory(
+        visualize_constrain_motion_planning(
             save_path="results/traj_following/get_icra_traj/get_icra_traj.npz",
             world_config_path=world_coll_config_path,
             ax=ax,

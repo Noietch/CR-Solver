@@ -57,8 +57,8 @@ class WorldCollision:
 
             else:
                 raise ValueError(f"Unknown obstacle type: {obstacle['type']}")
-        if len(obstacles) == 1:
-            obstacles = obstacles[0]
+        # if len(obstacles) == 1:
+        #     obstacles = obstacles[0]
         obstacles = cat_geoms(obstacles)
         ground = HalfSpace.from_point_and_normal(
             jnp.array([0.0, 0.0, 0.0]), jnp.array([0.0, 0.0, 1.0])

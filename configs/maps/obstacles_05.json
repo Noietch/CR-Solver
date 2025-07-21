@@ -1,18 +1,13 @@
 {
   "obstacle_1": {
     "type": "mesh",
-    "path": "assets/scene/1. desk&cup.glb",
-    "scale": 3,
+    "path": "assets/scene_trans/9.pick_from_shelf_with_drawer/9.pick_from_shelf_with_drawer.glb",
+    "scale": 0.01,
     "wxyz": [0.707, 0.707, 0, 0],
     "position": [0.0, -0.5, 1],
     "decompose_type": "voxel",
     "decompose_params": {
-      "pitch": 0.08
+      "pitch": 10
     }
-  },
-  "obstacle_2": {
-    "type": "bbox",
-    "position": [1.0, 0.0, 1.5],
-    "extents": [0.2, 0.2, 0.2]
   }
 }
