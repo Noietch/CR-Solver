@@ -1,0 +1,13 @@
+{
+  "obstacle_2": {
+    "type": "mesh",
+    "path": "assets/objects/warehouse_shelf.glb",
+    "scale": 0.4,
+    "wxyz": [0.707, 0.707, 0, 0],
+    "position": [0.0, 1.5, 0],
+    "decompose_type": "convex",
+    "decompose_params": {
+      "max_convex_hull": 15
+    }
+  }
+}
