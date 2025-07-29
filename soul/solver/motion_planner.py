@@ -600,9 +600,8 @@ class RRTMotionPlanner(SamplingBasedMotionPlanner):
             if jnp.any(dist_matrix < 0.0):
                 return True
 
-
         return False
-    
+
     def sample_goal_biased(
         self, goal_cfg: ConstantCurvatureState
     ) -> ConstantCurvatureState:

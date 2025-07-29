@@ -17,11 +17,7 @@ from soul.geom import (
 )
 
 jax.config.update("jax_default_matmul_precision", "highest")
-## 改命名
-## 改距离计算 done
-## 调用motion_planner done
-## 只考虑不可变长 done
-## 清除无用代码（！去掉extend的东西） done
+
 DISABLE_JIT = False
 
 if DISABLE_JIT:

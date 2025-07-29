@@ -13,6 +13,8 @@ from soul.solver import ConstrainedMotionPlanner
 from soul.visualization.visualizer_viser import ViserSoftRobot, ViserWorld
 from benchmark.ik_plot import visualize_constrain_motion_planning
 
+# TODO: 移动到example，只保留运行代码
+# TODO: 美化图像
 
 DISABLE_JIT = False
 

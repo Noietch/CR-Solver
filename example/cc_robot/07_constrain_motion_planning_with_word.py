@@ -19,7 +19,6 @@ if DISABLE_JIT:
     jax.config.update("jax_disable_jit", True)
 
 
-# --- 1. Letter Generation Functions (from get_ICRA.py) ---
 LETTER_HEIGHT = 2.5
 LETTER_WIDTH = 1.5
 
@@ -41,7 +40,7 @@ def create_C():
 
 
 def create_R():
-    """Generates path points for a curvy letter 'R'."""
+    """Generates path points for curved letter 'R'."""
     stem = [(0, 0), (0, LETTER_HEIGHT)]
     curve_center_y = LETTER_HEIGHT * 0.75
     curve_radius_y = LETTER_HEIGHT * 0.25
@@ -68,9 +67,6 @@ def create_A():
     ]
 
 
-# --- 2. Trajectory Generation Functions ---
-
-
 def get_icra_traj(
     start_position: np.ndarray,
     start_wxyz: np.ndarray,
@@ -84,7 +80,7 @@ def get_icra_traj(
     The height is controlled by the y-difference between handles.
     """
     # word_funcs = {'I': create_I, 'C': create_C, 'R': create_R, 'A': create_A}
-    word_funcs = {"A": create_A}
+    word_funcs = {"I": create_I}
     word_str = "ICRA"
     letter_spacing = LETTER_WIDTH * 1.8
 
@@ -141,8 +137,6 @@ def get_icra_traj(
     local_points_3d = np.hstack(
         [scaled_path_2d, np.zeros((scaled_path_2d.shape[0], 1))]
     )
-
-    # No offset needed now as the first point of the shape is at (0,0) due to min_coords subtraction
 
     # 5. Define the world transformation from the start handle's pose
     start_pose = jaxlie.SE3.from_rotation_and_translation(
@@ -221,33 +215,62 @@ def get_sine_traj(
 
 
 def viser_main():
+    world_coll_config_path = "configs/maps/constrain_motion_planning/obstacles_con.json"
     # Setup Environment
     robot = CCRobot.from_config("configs/robots/cc_con_eval.json")
     robot_coll = RobotCollision.from_config("configs/robots/cc_con_eval.json")
-    world_coll = WorldCollision.from_config("configs/maps/obstacles_con.json")
+    world_coll = WorldCollision.from_config(world_coll_config_path)
 
     # Setup Visualization
     server = viser.ViserServer()
     robot_vis = ViserSoftRobot(server, robot_coll, root_node_name="/robot")
     robot_vis.create_sphere_visualizations()
     obstacles_vis = ViserWorld(
-        server,
-        world_coll,
-        is_handle_able=True,
-        config_path="configs/maps/obstacles_con.json",
+        server, world_coll, is_handle_able=True, config_path=world_coll_config_path
     )
     obstacles_vis.create_mesh_visualizations()
+    """  Handle settings for words
+    for letter "A"
+    start_handle_position = (-0.01, -2.51, 0.76)
+    start_handle_wxyz = (0.82, 0.47, 0.25, 0.2)
+    end_handle_position = (1.23, -1.25, 2.75)
+    end_handle_wxyz = (1.0, 0, 0, 0)
+    
+    for letter "R"
+    start_handle_position = (-0.04, -2.53, 0.78)
+    start_handle_wxyz = (0.83, 0.48, 0.22, 0.18)
+    end_handle_position = (0.79, -1.26, 2.75)
+    end_handle_wxyz = (1.0, 0, 0, 0)
+    
+    for letter "C"
+    start_handle_position = (-0.01, -2.46, 0.9)
+    start_handle_wxyz = (0.83, 0.54, 0.06, 0.1)
+    end_handle_position = (0.75, -1.31, 2.75)
+    end_handle_wxyz = (1.0, 0, 0, 0)
+    
+    for letter "I"
+    start_handle_position = (-0.01, -2.46, 0.9)
+    start_handle_wxyz = (0.83, 0.54, 0.06, 0.1)
+    end_handle_position = (0.75, -1.31, 2.75)
+    end_handle_wxyz = (1.0, 0, 0, 0)
+    """
+
+    start_handle_position = (-0.01, -2.46, 0.9)
+    start_handle_wxyz = (0.83, 0.54, 0.06, 0.1)
+    end_handle_position = (0.75, -1.31, 2.75)
+    end_handle_wxyz = (1.0, 0, 0, 0)
+    radius = robot.config.length * robot.config.num_sections
 
     # Setup GUI
     start_handle = server.scene.add_transform_controls(
-        "/start", scale=0.3, position=(-0.17, -1.0, 2.6), wxyz=(0.99, 0.16, 0.01, -0.02)
+        "/start", scale=0.3, position=start_handle_position, wxyz=start_handle_wxyz
     )
     end_handle = server.scene.add_transform_controls(
-        "/end", scale=0.3, position=(0.08, -0.57, 2.76), wxyz=(1.0, 0, 0, 0)
+        "/end", scale=0.3, position=end_handle_position, wxyz=end_handle_wxyz
     )
     server.scene.add_icosphere(
         "/target_sphere",
-        radius=2.1,
+        radius=radius,
         color=(1.0, 0.8, 0.8),
         position=(0.0, 0.0, 0.0),
     )
@@ -261,21 +284,23 @@ def viser_main():
     with server.gui.add_folder("Handles Tfs"):
         start_pos_text = server.gui.add_text(
             "Start Pos",
-            initial_value=str(np.round(start_handle.position, 2)),
+            initial_value=str(tuple(np.round(start_handle.position, 2))),
             disabled=True,
         )
         start_wxyz_text = server.gui.add_text(
             "Start wxyz",
-            initial_value=str(np.round(start_handle.wxyz, 2)),
+            initial_value=str(tuple(np.round(start_handle.wxyz, 2))),
             disabled=True,
         )
         end_pos_text = server.gui.add_text(
             "End Pos",
-            initial_value=str(np.round(end_handle.position, 2)),
+            initial_value=str(tuple(np.round(end_handle.position, 2))),
             disabled=True,
         )
         end_wxyz_text = server.gui.add_text(
-            "End wxyz", initial_value=str(np.round(end_handle.wxyz, 2)), disabled=True
+            "End wxyz",
+            initial_value=str(tuple(np.round(end_handle.wxyz, 2))),
+            disabled=True,
         )
 
     # Set up trajopt parameters
@@ -303,8 +328,7 @@ def viser_main():
         )
 
         print("Start planning....")
-        # Use the updated obstacle information from the visualizer
-        # Wrap the obstacles object in a list to make it iterable for the solver.
+        # Update obstacle information from the visualizer
         cfg = traj_follow_jit(reference_traj, [obstacles_vis.world_coll.obstacles])
         global_traj = robot.forward_kinematics(cfg)
         print("Finish planning....")
