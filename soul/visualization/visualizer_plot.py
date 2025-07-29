@@ -302,7 +302,7 @@ def visualize_cc_model_3d(
 
 def visualize_mp_scene(
     pose: Array = None,
-    initial_pose: Array = None,
+    start_end_poses: list[Array, Array] = None,
     target_wxyz: Array = None,
     target_position: Array = None,
     num_points: int = None,
@@ -320,12 +320,14 @@ def visualize_mp_scene(
         fig = plt.figure(facecolor="white")
         ax = fig.add_subplot(projection="3d")
 
-    # Draw final poses (blue)
-    if pose is not None:
-        if pose.ndim == 3:
-            transform = pose[None, :, :, :]
+    def _draw_poses(poses, color, style, label_prefix):
+        if poses is None:
+            return
+        if poses.ndim == 3:
+            transform = poses[None, :, :, :]
         else:
-            transform = pose
+            transform = poses
+
         batch_size = transform.shape[0]
         for i in range(batch_size):
             positions = transform[i, :, :3, 3]
@@ -336,51 +338,26 @@ def visualize_mp_scene(
                         positions[j * num_points : (j + 1) * num_points, 0],
                         positions[j * num_points : (j + 1) * num_points, 1],
                         positions[j * num_points : (j + 1) * num_points, 2],
-                        c="blue",
+                        c=color,
                         linewidth=2,
-                        label="Final Pose (Solution)" if i == 0 and j == 0 else None,
+                        linestyle=style,
+                        label=f"{label_prefix}" if i == 0 and j == 0 else None,
                     )
             else:
                 ax.plot(
                     positions[:, 0],
                     positions[:, 1],
                     positions[:, 2],
-                    c="blue",
+                    c=color,
                     linewidth=3,
-                    label="Final Pose (Solution)" if i == 0 else None,
+                    linestyle=style,
+                    label=f"{label_prefix}" if i == 0 else None,
                 )
 
-    # Draw initial poses (green)
-    if initial_pose is not None:
-        if initial_pose.ndim == 3:
-            transform = initial_pose[None, :, :, :]
-        else:
-            transform = initial_pose
-        batch_size = transform.shape[0]
-        for i in range(batch_size):
-            positions = transform[i, :, :3, 3]
-            if num_points is not None:
-                num_sections = len(positions) // num_points
-                for j in range(num_sections):
-                    ax.plot(
-                        positions[j * num_points : (j + 1) * num_points, 0],
-                        positions[j * num_points : (j + 1) * num_points, 1],
-                        positions[j * num_points : (j + 1) * num_points, 2],
-                        c="green",
-                        linewidth=2,
-                        linestyle="--",
-                        label="Initial Pose (Target)" if i == 0 and j == 0 else None,
-                    )
-            else:
-                ax.plot(
-                    positions[:, 0],
-                    positions[:, 1],
-                    positions[:, 2],
-                    c="green",
-                    linewidth=3,
-                    linestyle="--",
-                    label="Initial Pose (Target)" if i == 0 else None,
-                )
+    _draw_poses(pose, "grey", "-", "Pose")
+    if start_end_poses is not None:
+        _draw_poses(start_end_poses[0], "green", "--", "Start Pose")
+        _draw_poses(start_end_poses[1], "red", "-", "Final Pose")
 
     # draw target orientation
     if target_wxyz is not None:
@@ -436,7 +413,9 @@ def visualize_mp_scene(
     ax.set_xlim3d(-1.3, 1.3)
     ax.set_ylim3d(-1.3, 1.3)
     ax.set_zlim3d(-1.3, 1.3)
+
     ax.set_box_aspect([1, 1, 1])
+
     ax.xaxis.set_major_locator(plt.MaxNLocator(3))
     ax.yaxis.set_major_locator(plt.MaxNLocator(3))
     ax.zaxis.set_major_locator(plt.MaxNLocator(3))

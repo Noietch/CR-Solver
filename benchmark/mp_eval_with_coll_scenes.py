@@ -510,7 +510,7 @@ def _eval_planner(
     """Generic evaluation function for a single motion planning problem."""
     method_name_upper = planner_name.upper()
 
-    # 1. Get start and end poses from the states via FK
+    # Get start and end poses from the states via FK
     start_transforms = batched_fk(start_states)
     start_tip_transform = jaxlie.SE3.from_matrix(start_transforms[0, -1, ...])
     start_wxyz = start_tip_transform.rotation().wxyz
@@ -521,12 +521,12 @@ def _eval_planner(
     target_wxyz = target_tip_transform.rotation().wxyz
     target_position = target_tip_transform.translation()
 
-    # 2. Call the specific solver function
+    # Call the specific solver function
     path_cfg, total_time = solve_fn(
         solver, start_position, start_wxyz, target_position, target_wxyz, world_geom
     )
 
-    # 3. Process results
+    # Process results
     is_valid = path_cfg is not None and path_cfg.theta.shape[0] > 0
     if is_valid:
         solution_states = jax.tree_util.tree_map(lambda x: x[-1:], path_cfg)
@@ -534,9 +534,10 @@ def _eval_planner(
             lambda x: jnp.expand_dims(x, axis=0), path_cfg
         )
         paths_are_valid = jnp.array([True])
+
     else:
         print(
-            f"No solution found by {method_name_upper}, using start state as placeholder."
+            f"[Warning] No solution found by {method_name_upper}, using start state as placeholder."
         )
         solution_states = start_states
         # Return dummy values to match the expected structure
@@ -546,31 +547,29 @@ def _eval_planner(
         )
         paths_are_valid = jnp.array([False])
 
-    # 4. Calculate accuracy metrics
-    fk_result = batched_fk(solution_states)
-    tip_transforms = jaxlie.SE3.from_matrix(fk_result[:, -1, ...])
+    fk_result = batched_fk(path_cfg)
+    planned_tip_traj = jaxlie.SE3.from_matrix(fk_result[:, -1, ...])
 
-    # 5. Save results
+    # Save results
     if save_path:
         os.makedirs(os.path.dirname(save_path), exist_ok=True)
         np.savez(
             save_path,
-            start_states_theta=np.array(start_states.theta),
-            start_states_phi=np.array(start_states.phi),
-            end_states_theta=np.array(end_states.theta),
-            end_states_phi=np.array(end_states.phi),
-            start_fk_result=np.array(start_transforms),
-            target_position=np.array(target_position),
-            target_wxyz=np.array(target_wxyz),
-            target_fk_result=np.array(target_transforms),
-            fk_result=np.array(fk_result),
-            solution_states_theta=np.array(solution_states.theta),
-            solution_states_phi=np.array(solution_states.phi),
-            planned_tip_traj=np.array(tip_transforms.as_matrix()),
+            start_states_theta=np.asarray(start_states.theta),
+            start_states_phi=np.asarray(start_states.phi),
+            end_states_theta=np.asarray(end_states.theta),
+            end_states_phi=np.asarray(end_states.phi),
+            target_position=np.asarray(target_position),
+            target_wxyz=np.asarray(target_wxyz),
+            fk_result=np.asarray(fk_result),
+            solution_states_theta=np.asarray(solution_states.theta),
+            solution_states_phi=np.asarray(solution_states.phi),
+            planned_tip_traj=np.asarray(planned_tip_traj.as_matrix()),
         )
         print(f"Saved {method_name_upper} results data to {save_path}")
 
-    # 6. Calculate collision mask
+    tip_transforms = jax.tree_util.tree_map(lambda x: x[-1:], planned_tip_traj)
+    # Calculate collision mask
     vmapped_is_trajectory_in_collision = jax.vmap(
         is_trajectory_in_collision, in_axes=(0, None, None, None)
     )
@@ -579,7 +578,7 @@ def _eval_planner(
     )
     solution_collision_mask = jnp.logical_or(path_collision_results, ~paths_are_valid)
 
-    # 7. Calculate final metrics
+    # Calculate final metrics
     (
         final_success_rate,
         kinematic_reachability_rate,
@@ -595,7 +594,7 @@ def _eval_planner(
         solution_collision_mask,
     )
 
-    # 8. Print and return results
+    # Print and return results
     print(f"--- {method_name_upper} With Collision Results ---")
     print(
         f"Kinematic Reachability Rate (accurate AND within limits): {kinematic_reachability_rate:.2f}%"
@@ -640,8 +639,6 @@ def eval_mp_all_sections(
         "prm": (_solve_with_prm, SamplingBasedMotionPlanner),
         "rrt": (_solve_with_rrt, RRTMotionPlanner),
     }
-    if planner_type == "mp":  # For backward compatibility
-        planner_type = "trajopt"
 
     if planner_type not in planner_map:
         raise ValueError(
@@ -674,7 +671,7 @@ def eval_mp_all_sections(
                 f"\n--- Starting Eval {i+1}/{len(eval_num_list)} for {planner_type.upper()} with {num_sections} sections ---"
             )
 
-            # 1. Sample collision-free start and end points
+            # Sample collision-free start and end points
             start_states, end_states = sample_collision_free_start_end_states(
                 robot,
                 1,
@@ -722,5 +719,5 @@ if __name__ == "__main__":
         eval_num_list,
         result_dir,
         min_sample_dist_ratio=0.1,
-        planner_type="rrt",  # trajopt / prm / rrt
+        planner_type="trajopt",  # trajopt / prm / rrt
     )
