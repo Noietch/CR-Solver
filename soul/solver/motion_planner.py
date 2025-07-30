@@ -80,13 +80,13 @@ class MotionPlanner:
             smoothness_cost(
                 self.robot.var_cls(jnp.arange(1, self.timesteps)),
                 self.robot.var_cls(jnp.arange(0, self.timesteps - 1)),
-                jnp.array([3.0])[None],
+                jnp.array([12.0])[None],
             ),
             trajectory_length_cost(
                 self._robot_batch,
                 self.robot.var_cls(jnp.arange(1, self.timesteps)),
                 self.robot.var_cls(jnp.arange(0, self.timesteps - 1)),
-                jnp.array([5.0])[None],
+                jnp.array([15.0])[None],
             ),
         ]
         # 2. Add start and end pose constraints.
@@ -117,7 +117,7 @@ class MotionPlanner:
                     jax.tree.map(lambda x: x[None], world_coll_obj),
                     self.robot.var_cls(jnp.arange(0, self.timesteps - 1)),
                     self.robot.var_cls(jnp.arange(1, self.timesteps)),
-                    jnp.array([20.0])[None],
+                    jnp.array([40.0])[None],
                 )
             )
         # 5. Solve the optimization problem.

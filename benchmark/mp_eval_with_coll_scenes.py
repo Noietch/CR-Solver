@@ -148,18 +148,40 @@ def sample_collision_free_start_end_states(
     batched_fk: Callable[[ConstantCurvatureState], Array],
     min_distance: float = 0.1,
     batch_size: int = 256,
+    save_load_path: str = None,
 ) -> tuple[ConstantCurvatureState, ConstantCurvatureState]:
     """
     Samples a specified number of pairs of collision-free start and end states,
     ensuring their end-effector positions are separated by a minimum distance.
+
+    If a `save_load_path` is provided and the file exists, it loads the states.
+    Otherwise, it samples the states and saves them to the path if provided.
     """
+    if save_load_path and os.path.exists(save_load_path):
+        print(f"Loading pre-sampled states from {save_load_path}...")
+        data = np.load(save_load_path)
+        start_states = ConstantCurvatureState(
+            theta=jnp.array(data["start_theta"]),
+            phi=jnp.array(data["start_phi"]),
+            base_position=jnp.zeros((data["start_theta"].shape[0], 3)),
+        )
+        end_states = ConstantCurvatureState(
+            theta=jnp.array(data["end_theta"]),
+            phi=jnp.array(data["end_phi"]),
+            base_position=jnp.zeros((data["end_theta"].shape[0], 3)),
+        )
+        print(
+            f"Loaded {start_states.theta.shape[0]} start/end pairs."
+        )
+        return start_states, end_states
+
     print(
         f"Sampling {eval_num} collision-free start-end pairs with min distance {min_distance}..."
     )
 
     is_collision_vmap = jax.vmap(is_state_in_collision, in_axes=(0, None, None, None))
 
-    # 1. Sample a large pool of collision-free states first.
+    # Sample a large pool of collision-free states first.
     pool_size = eval_num * 10  # Sample more to have options for pairing
     accepted_states = []
     total_sampled = 0
@@ -209,12 +231,12 @@ def sample_collision_free_start_end_states(
                 "Not enough collision-free states in the pool to form any pairs."
             )
 
-    # 2. Pre-compute FK for the entire pool
+    # Pre-compute FK for the entire pool
     fk_transforms_pool = batched_fk(state_pool)
     tip_transforms_pool = jaxlie.SE3.from_matrix(fk_transforms_pool[:, -1, ...])
     positions_pool = tip_transforms_pool.translation()
 
-    # 3. Pair states from the pool
+    # Pair states from the pool
     final_start_states_list = []
     final_end_states_list = []
     used_indices = np.zeros(state_pool.theta.shape[0], dtype=bool)
@@ -271,6 +293,18 @@ def sample_collision_free_start_end_states(
     final_end_states = jax.tree_util.tree_map(
         lambda *x: jnp.concatenate(x, axis=0), *final_end_states_list
     )
+
+    # Save the states if a path is provided
+    if save_load_path:
+        print(f"Saving sampled states to {save_load_path}...")
+        os.makedirs(os.path.dirname(save_load_path), exist_ok=True)
+        np.savez(
+            save_load_path,
+            start_theta=np.asarray(final_start_states.theta),
+            start_phi=np.asarray(final_start_states.phi),
+            end_theta=np.asarray(final_end_states.theta),
+            end_phi=np.asarray(final_end_states.phi),
+        )
 
     print(f"Finished sampling {final_start_states.theta.shape[0]} start/end pairs.")
     return final_start_states, final_end_states
@@ -385,20 +419,35 @@ def is_trajectory_in_collision(
 
 def summarize_results(all_results_summary: list):
     """Prints a summary table of the evaluation results."""
-    print("\n\n--- MP test resume ---")
-    header = f"{'Method':<10} | {'num sections':<15} | {'eval num':<10} | {'Reachable (%)':<15} | {'Success (%)':<15} | {'Pos Error':<15} | {'Rot Error':<15} | {'Time (s)':<18} "
+    print("\n\n--- MP Evaluation Summary ---")
+    header = (
+        f"{'Method':<10} | {'Sections':<10} | {'Eval Num':<10} | "
+        f"{'Success (%)':<18} | {'Reachable (%)':<20} | "
+        f"{'Pos Error (m)':<20} | {'Rot Error (rad)':<20} | {'Time (s)':<20}"
+    )
     print(header)
     print("-" * len(header))
+
     for res_item in all_results_summary:
         method_str = res_item.get("method", "MP")
-        eval_num_str = f"{res_item['eval num']}"
-        kr_str = f"{res_item['kinematic_reachability_rate']:.2f}"
-        ps_error_str = f"{res_item['position error']:.4f}"
-        rt_error_str = f"{res_item['rotation error']:.4f}"
-        sr_str = f"{res_item['success rate']:.2f}"
-        time_str = f"{res_item['total time']:.3f}"
+        sections_str = str(res_item.get("num sections", "N/A"))
+        eval_num_str = str(res_item.get("eval num", "N/A"))
+
+        # Format statistics with mean ± std
+        sr_str = f"{res_item['success_rate_mean']:.2f} ± {res_item['success_rate_std']:.2f}"
+        kr_str = f"{res_item['kinematic_rate_mean']:.2f} ± {res_item['kinematic_rate_std']:.2f}"
+        ps_error_str = (
+            f"{res_item['pos_error_mean']:.4f} ± {res_item['pos_error_std']:.4f}"
+        )
+        rt_error_str = (
+            f"{res_item['rot_error_mean']:.4f} ± {res_item['rot_error_std']:.4f}"
+        )
+        time_str = f"{res_item['time_mean']:.3f} ± {res_item['time_std']:.3f}"
+
         print(
-            f"{method_str:<10} | {res_item['num sections']:<15} | {eval_num_str:<10} | {kr_str:<15} | {sr_str:<15} | {ps_error_str:<15} | {rt_error_str:<15} | {time_str:<18}"
+            f"{method_str:<10} | {sections_str:<10} | {eval_num_str:<10} | "
+            f"{sr_str:<18} | {kr_str:<20} | "
+            f"{ps_error_str:<20} | {rt_error_str:<20} | {time_str:<20}"
         )
 
 
@@ -539,13 +588,31 @@ def _eval_planner(
         print(
             f"[Warning] No solution found by {method_name_upper}, using start state as placeholder."
         )
-        solution_states = start_states
-        # Return dummy values to match the expected structure
-        all_paths = jax.tree_util.tree_map(
-            lambda x: jnp.empty((0, solver.timesteps) + x.shape[1:], dtype=x.dtype),
-            start_states,
-        )
-        paths_are_valid = jnp.array([False])
+        return {
+            "method": method_name_upper,
+            "eval num": 1,
+            "actual eval num": 1,
+            "num sections": robot.config.num_sections,
+            "kinematic_reachability_rate": 0.0,
+            "position error": np.nan,
+            "rotation error": np.nan,
+            "success rate": 0.0,
+            "total time": total_time,
+            "failure_stats": {
+                "total_samples": 1,
+                "num_success": 0,
+                "num_fail": 1,
+                "success_rate": 0.0,
+                "kinematic_reachability_rate": 0.0,
+                "position_fail_rate": 100.0,
+                "rotation_fail_rate": 100.0,
+                "theta_fail_rate": 100.0,
+                "phi_fail_rate": 100.0,
+                "collision_fail_rate": 100.0,
+                "accuracy_fail_rate": 100.0,
+                "limit_fail_rate": 100.0,
+            },
+        }
 
     fk_result = batched_fk(path_cfg)
     planned_tip_traj = jaxlie.SE3.from_matrix(fk_result[:, -1, ...])
@@ -627,11 +694,11 @@ def eval_mp_all_sections(
     robot_config_path: str,
     world_config_path: str,
     section_list: list,
-    eval_num_list: list,
+    eval_num: int,
     save_dir: str,
     min_sample_dist_ratio: float,
     planner_type: str = "trajopt",
-):
+) -> list:
     all_results_summary = []
 
     planner_map = {
@@ -654,38 +721,55 @@ def eval_mp_all_sections(
 
         robot = CCRobot.from_config(config)
         robot_coll = RobotCollision.from_config(config)
-        robot_length = robot.config.length * robot.config.num_sections
+        robot_total_length = robot.config.length * robot.config.num_sections
         # load world config
         world_coll = WorldCollision.from_config(world_config_path)
 
-        batched_fk = jax.vmap(robot._forward_kinematics)
+        batched_fk = robot.forward_kinematics
 
         solver = solver_class(robot, robot_coll, timesteps=100)
         world_geom = world_coll.collision_geoms_no_ground[-1]
 
-        for i, eval_num in enumerate(eval_num_list):
-            if not os.path.exists(save_dir):
-                os.makedirs(save_dir, exist_ok=True)
+        # Sample all pairs first
+        print(
+            f"\n--- Sampling {eval_num} pairs for {planner_type.upper()} with {num_sections} sections ---"
+        )
+        sample_data_path = (
+            f"{save_dir}/sampled_states/sections_{num_sections}_eval_{eval_num}.npz"
+        )
+        start_states, end_states = sample_collision_free_start_end_states(
+            robot=robot,
+            eval_num=eval_num,
+            robot_coll=robot_coll,
+            world_geom=world_geom,
+            batched_fk=batched_fk,
+            min_distance=robot_total_length * min_sample_dist_ratio,
+            save_load_path=sample_data_path,
+        )
 
+        actual_eval_num = start_states.theta.shape[0]
+        if actual_eval_num < eval_num:
             print(
-                f"\n--- Starting Eval {i+1}/{len(eval_num_list)} for {planner_type.upper()} with {num_sections} sections ---"
+                f"[Warning] Could only sample {actual_eval_num}/{eval_num} pairs. Continuing with fewer pairs."
+            )
+        if actual_eval_num == 0:
+            print("Failed to sample any valid start/end pairs. Skipping evaluation.")
+            continue
+
+        trial_results = []
+        for i in range(actual_eval_num):
+            print(
+                f"\n--- Evaluating Pair {i+1}/{actual_eval_num} for {planner_type.upper()} with {num_sections} sections ---"
             )
 
-            # Sample collision-free start and end points
-            start_states, end_states = sample_collision_free_start_end_states(
-                robot,
-                1,
-                robot_coll,
-                world_geom,
-                batched_fk,
-                robot_length * min_sample_dist_ratio,
+            # Select the i-th start and end state from the sampled pairs
+            start_state_i = jax.tree_util.tree_map(
+                lambda x: x[i : i + 1], start_states
             )
+            end_state_i = jax.tree_util.tree_map(lambda x: x[i : i + 1], end_states)
 
-            if start_states.theta.shape[0] == 0:
-                print("Failed to sample a valid start/end pair. Skipping evaluation.")
-                continue
-
-            save_path = f"{save_dir}/{planner_type}_with_coll_sections_{num_sections}_eval_{i}.npz"
+            # Save the detailed trajectory of each trial
+            save_path = f"{save_dir}/{planner_type}_sections_{num_sections}_trial_{i}.npz"
 
             result = _eval_planner(
                 planner_name=planner_type,
@@ -695,29 +779,85 @@ def eval_mp_all_sections(
                 batched_fk=batched_fk,
                 robot_coll=robot_coll,
                 world_geom=world_geom,
-                start_states=start_states,
-                end_states=end_states,
+                start_states=start_state_i,
+                end_states=end_state_i,
                 save_path=save_path,
             )
-            all_results_summary.append(result)
+            trial_results.append(result)
 
-    summarize_results(all_results_summary)
+        if not trial_results:
+            continue
+
+        # Extract metrics from the list of result dictionaries
+        success_rates = np.array([r["success rate"] for r in trial_results])
+        kinematic_rates = np.array(
+            [r["kinematic_reachability_rate"] for r in trial_results]
+        )
+        pos_errors = np.array([r["position error"] for r in trial_results])
+        rot_errors = np.array([r["rotation error"] for r in trial_results])
+        times = np.array([r["total time"] for r in trial_results])
+
+        # Save the collected raw results to a single npz file for this configuration
+        full_results_path = f"{save_dir}/all_trials_results/{planner_type}_sections_{num_sections}_all_trials_results.npz"
+        np.savez(
+            full_results_path,
+            success_rates=success_rates,
+            kinematic_rates=kinematic_rates,
+            pos_errors=pos_errors,
+            rot_errors=rot_errors,
+            times=times,
+            failure_stats=[r["failure_stats"] for r in trial_results],
+        )
+        print(
+            f"\nSaved full results for {planner_type.upper()} with {num_sections} sections to {full_results_path}"
+        )
+
+        # Create the aggregated summary dictionary
+        summary = {
+            "method": planner_type.upper(),
+            "num sections": num_sections,
+            "eval num": actual_eval_num,
+            "success_rate_mean": np.mean(success_rates),
+            "success_rate_std": np.std(success_rates),
+            "kinematic_rate_mean": np.mean(kinematic_rates),
+            "kinematic_rate_std": np.std(kinematic_rates),
+            "pos_error_mean": np.mean(pos_errors),
+            "pos_error_std": np.std(pos_errors),
+            "rot_error_mean": np.mean(rot_errors),
+            "rot_error_std": np.std(rot_errors),
+            "time_mean": np.mean(times),
+            "time_std": np.std(times),
+        }
+        all_results_summary.append(summary)
+
+    return all_results_summary
 
 
 if __name__ == "__main__":
-    test_list = [3, 4, 5, 6]
-    eval_num_list = [1]  # Evaluate 5 times for each configuration
+    test_list = [3,4,5,6]
+    repeat_num = 50  # Evaluate 10 times for each configuration
     robot_config_path = "configs/robots/cc_scene_eval.json"
     # world_config_path = "configs/maps/mp_maps/obstacles_lattice.json"
-    world_config_path = "configs/maps/mp_scene/obstacles_test.json"
+    world_config_path = "configs/maps/mp_scene/obstacles_13.pick_from_shelf.json"
     # result_dir = "results/2.pick_from_box"
-    result_dir = "results/test"
-    eval_mp_all_sections(
-        robot_config_path,
-        world_config_path,
-        test_list,
-        eval_num_list,
-        result_dir,
-        min_sample_dist_ratio=0.1,
-        planner_type="trajopt",  # trajopt / prm / rrt
-    )
+
+    # TODO: change the result_dir to the scene name
+    result_dir = "results/13.pick_from_shelf"
+    os.makedirs(result_dir, exist_ok=True)
+    planner_types = ["rrt"] # ["trajopt", "prm", "rrt"]
+    result_summarys = []
+
+    for planner_type in planner_types:
+        result_summary = eval_mp_all_sections(
+            robot_config_path=robot_config_path,
+            world_config_path=world_config_path,
+            section_list=test_list,
+            eval_num=repeat_num,
+            save_dir=result_dir,
+            min_sample_dist_ratio=0.1,
+            planner_type=planner_type,
+        )
+        result_summarys.extend(result_summary)
+
+    summarize_results(result_summarys)
+

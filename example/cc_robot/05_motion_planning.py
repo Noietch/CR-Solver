@@ -19,9 +19,9 @@ if DISABLE_JIT:
 
 def viser_main_trajopt():
     # Setup Environment
-    robot = CCRobot.from_config("configs/robots/cc.json")
-    robot_coll = RobotCollision.from_config("configs/robots/cc.json")
-    world_coll = WorldCollision.from_config("configs/maps/obstacles_00.json")
+    robot = CCRobot.from_config("configs/robots/cc_scene_eval.json")
+    robot_coll = RobotCollision.from_config("configs/robots/cc_scene_eval.json")
+    world_coll = WorldCollision.from_config("configs/maps/mp_scene/obstacles_13.pick_from_shelf.json")
 
     # Setup Visualization
     server = viser.ViserServer()
@@ -34,12 +34,35 @@ def viser_main_trajopt():
     start_handle = server.scene.add_transform_controls(
         "/start",
         scale=0.3,
-        position=(1.0, 0.0, 2.5),
+        position=(-0.3, -1.26, 2.51),
         wxyz=(1, 0, 0, 0),
     )
     end_handle = server.scene.add_transform_controls(
-        "/end", scale=0.3, position=(0.0, -1.0, 2.5), wxyz=(1, 0, 0, 0)
+        "/end", scale=0.3, position=(-0.4, 1.45, 0.89), wxyz=(1, 0, 0, 0)
     )
+
+    with server.gui.add_folder("Handles Tfs"):
+        start_pos_text = server.gui.add_text(
+            "Start Pos",
+            initial_value=str(tuple(np.round(start_handle.position, 2))),
+            disabled=True,
+        )
+        start_wxyz_text = server.gui.add_text(
+            "Start wxyz",
+            initial_value=str(tuple(np.round(start_handle.wxyz, 2))),
+            disabled=True,
+        )
+        end_pos_text = server.gui.add_text(
+            "End Pos",
+            initial_value=str(tuple(np.round(end_handle.position, 2))),
+            disabled=True,
+        )
+        end_wxyz_text = server.gui.add_text(
+            "End wxyz",
+            initial_value=str(tuple(np.round(end_handle.wxyz, 2))),
+            disabled=True,
+        )
+
     plan_button = server.gui.add_button("Plan", disabled=False)
     replay_button = server.gui.add_button("Replay", disabled=False)
 
@@ -65,7 +88,7 @@ def viser_main_trajopt():
         cfg = optimize_jit(cfg, world_coll.collision_geoms)
         traj = robot.forward_kinematics(cfg)
         print("Finish planning....")
-        # robot_vis.visualize_traj_collisions(robot, cfg)
+        robot_vis.visualize_traj_collisions(robot, cfg)
         for i in range(timesteps):
             time.sleep(0.01)
             robot_vis.update_pose(traj[i])
@@ -77,9 +100,19 @@ def viser_main_trajopt():
         for i in range(timesteps):
             time.sleep(0.01)
             robot_vis.update_pose(traj[i])
+    
+    def on_handle_update(handle: viser.TransformControlsHandle):
+        """Update GUI when handles are moved."""
+        start_pos_text.value = str(np.round(start_handle.position, 2))
+        start_wxyz_text.value = str(np.round(start_handle.wxyz, 2))
+        end_pos_text.value = str(np.round(end_handle.position, 2))
+        end_wxyz_text.value = str(np.round(end_handle.wxyz, 2))
 
     plan_button.on_click(plan_callback)
     replay_button.on_click(replay_callback)
+    start_handle.on_update(on_handle_update)
+    end_handle.on_update(on_handle_update)
+    on_handle_update(start_handle)
 
     while True:
         time.sleep(0.01)
@@ -239,6 +272,6 @@ def viser_main_rrt():
 
 
 if __name__ == "__main__":
-    # viser_main_trajopt()
+    viser_main_trajopt()
     # viser_main_prm()
-    viser_main_rrt()
+    # viser_main_rrt()

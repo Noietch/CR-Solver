@@ -1,20 +1,22 @@
 import numpy as np
+import os
 import matplotlib.pyplot as plt
 from soul.visualization.visualizer_plot import visualize_cc_model_3d, visualize_mp_scene
 
 
 def visualize_motion_planning(
-    save_path: str,
+    save_dir: str,
+    file_name: str,
     world_config_path: str,
     ax: plt.Axes,
     sample_indices: list[int] = None,
     num_pose: int = 5,
 ):
-
+    file_path = f"{save_dir}/{file_name}"
     try:
-        data = np.load(save_path)
+        data = np.load(file_path)
     except FileNotFoundError:
-        print(f"Warning: Data file not found at {save_path}. Skipping plot.")
+        print(f"Warning: Data file not found at {file_path}. Skipping plot.")
         ax.text(
             0.5,
             0.5,
@@ -45,6 +47,7 @@ def visualize_motion_planning(
         planned_tip_traj[:, 0], planned_tip_traj[:, 1], planned_tip_traj[:, 2], "b-"
     )
 
+    save_path = os.path.join(save_dir, "result_plot", file_name.replace(".npz", "_fk.png"))
     visualize_mp_scene(
         pose=selected_poses,
         start_end_poses=start_end_poses,
@@ -53,7 +56,7 @@ def visualize_motion_planning(
         num_points=10,
         ax=ax,
         world_coll_config=world_config_path,
-        save_path=save_path.replace(".npz", "_fk.png"),
+        save_path=save_path,
     )
 
 
@@ -123,13 +126,15 @@ def visualize_constrain_motion_planning(
     print(f"Rotation Error (std):  {np.rad2deg(data['rot_error_std']):.4f}deg")
 
 
-def plot_mp_with_coll_scene():
+def plot_mp_with_coll_scene(
+    save_dir: str,
+    file_name: str,
+    world_config_path: str,
+):
     fig = plt.figure(facecolor="white", figsize=(8, 8))
     ax1 = fig.add_subplot(111, projection="3d")
 
-    save_path = "results/test/trajopt_with_coll_sections_3_eval_0.npz"
-    world_config_path = "configs/maps/mp_scene/obstacles_test.json"
-    visualize_motion_planning(save_path, world_config_path, ax1, num_pose=5)
+    visualize_motion_planning(save_dir, file_name, world_config_path, ax1, num_pose=80)
 
     ax1.text2D(
         0.05,
@@ -181,5 +186,21 @@ def plot_constrain_motion_planning():
 
 
 if __name__ == "__main__":
-    plot_mp_with_coll_scene()
-    plot_constrain_motion_planning()
+    save_dir = "results/inject"
+    world_config_path = "configs/maps/mp_scene/obstacles_13.pick_from_shelf.json"
+
+    error_path_list = []
+    for save_path in os.listdir(save_dir):
+        if save_path.endswith(".npz") and "all_trials_results" not in save_path:
+            try:
+                plot_mp_with_coll_scene(
+                    save_dir=save_dir,
+                    file_name=save_path,
+                    world_config_path=world_config_path,
+                )
+            except Exception as e:
+                error_path_list.append(save_path)
+                print(f"Error in plot_mp_with_coll_scene: {e}, {save_path}")
+    print("--------------ERROR PATH LIST--------------")
+    print(error_path_list)
+    # plot_constrain_motion_planning()

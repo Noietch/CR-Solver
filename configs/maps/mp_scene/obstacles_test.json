@@ -1,5 +1,5 @@
 {
-  "obstacle_2": {
+  "obstacle_1": {
     "type": "mesh",
     "path": "assets/objects/warehouse_shelf.glb",
     "scale": 0.4,
