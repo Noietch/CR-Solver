@@ -17,13 +17,16 @@ OUTPUT_MODIFIED_FILE = "results/inject/sampled_states/sections_3_eval_1_injected
 # Robot and world configuration files
 ROBOT_CONFIG_PATH = "configs/robots/cc_scene_eval.json"
 WORLD_CONFIG_PATH = "configs/maps/mp_scene/obstacles_13.pick_from_shelf.json"
-NUM_SECTIONS = 3  # The number of sections must match the robot config in the sampled file
+NUM_SECTIONS = (
+    3  # The number of sections must match the robot config in the sampled file
+)
 
 # The specific start and end poses you want to inject at the first position
 INJECTED_START_POSE = jnp.array([-0.3, -1.26, 2.51])
 INJECTED_START_WXYZ = jnp.array([1, 0, 0, 0])
 INJECTED_TARGET_POSE = jnp.array([-0.4, 1.45, 0.89])
 INJECTED_TARGET_WXYZ = jnp.array([1, 0, 0, 0])
+
 
 def inject_pose_into_sampled_file():
     """
@@ -72,11 +75,10 @@ def inject_pose_into_sampled_file():
 
     start_state_ik = jax.tree_util.tree_map(lambda x: x[0], cfg)
     end_state_ik = jax.tree_util.tree_map(lambda x: x[-1], cfg)
-    
+
     print("IK solution found successfully.")
     print(f"  - Start IK Theta: {start_state_ik.theta}")
     print(f"  - End IK Theta:   {end_state_ik.theta}")
-
 
     # Replace the first entry in the loaded data arrays
     print("Replacing the first sample in the dataset...")
@@ -97,8 +99,10 @@ def inject_pose_into_sampled_file():
     )
 
     print("--- Injection complete! ---")
-    print(f"The new file is ready at '{OUTPUT_MODIFIED_FILE}'. "
-          f"You can now use this file for evaluation.")
+    print(
+        f"The new file is ready at '{OUTPUT_MODIFIED_FILE}'. "
+        f"You can now use this file for evaluation."
+    )
 
 
 if __name__ == "__main__":

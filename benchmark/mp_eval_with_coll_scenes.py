@@ -170,9 +170,7 @@ def sample_collision_free_start_end_states(
             phi=jnp.array(data["end_phi"]),
             base_position=jnp.zeros((data["end_theta"].shape[0], 3)),
         )
-        print(
-            f"Loaded {start_states.theta.shape[0]} start/end pairs."
-        )
+        print(f"Loaded {start_states.theta.shape[0]} start/end pairs.")
         return start_states, end_states
 
     print(
@@ -434,7 +432,9 @@ def summarize_results(all_results_summary: list):
         eval_num_str = str(res_item.get("eval num", "N/A"))
 
         # Format statistics with mean ± std
-        sr_str = f"{res_item['success_rate_mean']:.2f} ± {res_item['success_rate_std']:.2f}"
+        sr_str = (
+            f"{res_item['success_rate_mean']:.2f} ± {res_item['success_rate_std']:.2f}"
+        )
         kr_str = f"{res_item['kinematic_rate_mean']:.2f} ± {res_item['kinematic_rate_std']:.2f}"
         ps_error_str = (
             f"{res_item['pos_error_mean']:.4f} ± {res_item['pos_error_std']:.4f}"
@@ -452,7 +452,7 @@ def summarize_results(all_results_summary: list):
 
 
 def _solve_with_trajopt(
-    solver: MotionPlanner,
+    solver: tuple[Callable, Callable],
     start_position: Array,
     start_wxyz: Array,
     target_position: Array,
@@ -460,9 +460,8 @@ def _solve_with_trajopt(
     world_geom: CollGeom,
 ):
     """Specific solving logic for TrajOpt."""
-    # JIT compile and warm-up
-    start_end_interpolate_jit = jax.jit(solver.start_end_interpolate)
-    optimize_traj_jit = jax.jit(solver.optimize)
+    start_end_interpolate_jit = solver[0]
+    optimize_traj_jit = solver[1]
 
     print("Warm-up run for TrajOpt solver...")
     path_cfg = start_end_interpolate_jit(
@@ -730,6 +729,12 @@ def eval_mp_all_sections(
         solver = solver_class(robot, robot_coll, timesteps=100)
         world_geom = world_coll.collision_geoms_no_ground[-1]
 
+        # Replace solver for trajopt
+        if planner_type == "trajopt":
+            start_end_interpolate_jit = jax.jit(solver.start_end_interpolate)
+            optimize_traj_jit = jax.jit(solver.optimize)
+            solver = (start_end_interpolate_jit, optimize_traj_jit)
+
         # Sample all pairs first
         print(
             f"\n--- Sampling {eval_num} pairs for {planner_type.upper()} with {num_sections} sections ---"
@@ -763,13 +768,13 @@ def eval_mp_all_sections(
             )
 
             # Select the i-th start and end state from the sampled pairs
-            start_state_i = jax.tree_util.tree_map(
-                lambda x: x[i : i + 1], start_states
-            )
+            start_state_i = jax.tree_util.tree_map(lambda x: x[i : i + 1], start_states)
             end_state_i = jax.tree_util.tree_map(lambda x: x[i : i + 1], end_states)
 
             # Save the detailed trajectory of each trial
-            save_path = f"{save_dir}/{planner_type}_sections_{num_sections}_trial_{i}.npz"
+            save_path = (
+                f"{save_dir}/{planner_type}_sections_{num_sections}_trial_{i}.npz"
+            )
 
             result = _eval_planner(
                 planner_name=planner_type,
@@ -799,6 +804,7 @@ def eval_mp_all_sections(
 
         # Save the collected raw results to a single npz file for this configuration
         full_results_path = f"{save_dir}/all_trials_results/{planner_type}_sections_{num_sections}_all_trials_results.npz"
+        os.makedirs(os.path.dirname(full_results_path), exist_ok=True)
         np.savez(
             full_results_path,
             success_rates=success_rates,
@@ -844,7 +850,7 @@ if __name__ == "__main__":
     # TODO: change the result_dir to the scene name
     result_dir = "results/13.pick_from_shelf"
     os.makedirs(result_dir, exist_ok=True)
-    planner_types = ["rrt"] # ["trajopt", "prm", "rrt"]
+    planner_types = ["trajopt", "prm", "rrt"]  # ["trajopt", "prm", "rrt"]
     result_summarys = []
 
     for planner_type in planner_types:
@@ -860,4 +866,3 @@ if __name__ == "__main__":
         result_summarys.extend(result_summary)
 
     summarize_results(result_summarys)
-

@@ -21,7 +21,9 @@ def viser_main_trajopt():
     # Setup Environment
     robot = CCRobot.from_config("configs/robots/cc_scene_eval.json")
     robot_coll = RobotCollision.from_config("configs/robots/cc_scene_eval.json")
-    world_coll = WorldCollision.from_config("configs/maps/mp_scene/obstacles_13.pick_from_shelf.json")
+    world_coll = WorldCollision.from_config(
+        "configs/maps/mp_scene/obstacles_13.pick_from_shelf.json"
+    )
 
     # Setup Visualization
     server = viser.ViserServer()
@@ -100,7 +102,7 @@ def viser_main_trajopt():
         for i in range(timesteps):
             time.sleep(0.01)
             robot_vis.update_pose(traj[i])
-    
+
     def on_handle_update(handle: viser.TransformControlsHandle):
         """Update GUI when handles are moved."""
         start_pos_text.value = str(np.round(start_handle.position, 2))

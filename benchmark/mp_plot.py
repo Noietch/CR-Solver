@@ -47,7 +47,9 @@ def visualize_motion_planning(
         planned_tip_traj[:, 0], planned_tip_traj[:, 1], planned_tip_traj[:, 2], "b-"
     )
 
-    save_path = os.path.join(save_dir, "result_plot", file_name.replace(".npz", "_fk.png"))
+    save_path = os.path.join(
+        save_dir, "result_plot", file_name.replace(".npz", "_fk.png")
+    )
     visualize_mp_scene(
         pose=selected_poses,
         start_end_poses=start_end_poses,
@@ -186,7 +188,7 @@ def plot_constrain_motion_planning():
 
 
 if __name__ == "__main__":
-    save_dir = "results/inject"
+    save_dir = "results/13.pick_from_shelf"
     world_config_path = "configs/maps/mp_scene/obstacles_13.pick_from_shelf.json"
 
     error_path_list = []
