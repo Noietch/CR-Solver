@@ -223,8 +223,8 @@ def viser_main():
 
     # Setup Visualization
     server = viser.ViserServer()
-    robot_vis = ViserSoftRobot(server, robot_coll, root_node_name="/robot")
-    robot_vis.create_sphere_visualizations()
+    robot_vis = ViserSoftRobot(server, robot, robot_coll, root_node_name="/robot")
+    robot_vis.create_robot_visualizations()
     obstacles_vis = ViserWorld(
         server, world_coll, is_handle_able=True, config_path=world_coll_config_path
     )
@@ -323,7 +323,7 @@ def viser_main():
             end_handle.wxyz,
             timesteps,
         )
-        robot_vis.visualize_traj(
+        robot_vis.visualize_tip_traj(
             reference_traj, color=np.array([1.0, 0.0, 0.0]), name="reference_traj"
         )
 
@@ -334,7 +334,7 @@ def viser_main():
         print("Finish planning....")
 
         robot_vis.visualize_traj_collisions(robot, cfg)
-        robot_vis.visualize_traj(
+        robot_vis.visualize_tip_traj(
             global_traj, color=np.array([0.0, 0.0, 1.0]), name="planned_traj"
         )
 

@@ -23,8 +23,8 @@ def viser_main():
 
     # Setup Visualization
     server = viser.ViserServer()
-    robot_vis = ViserSoftRobot(server, robot_coll, root_node_name="/robot")
-    robot_vis.create_sphere_visualizations()
+    robot_vis = ViserSoftRobot(server, robot, robot_coll, root_node_name="/robot")
+    robot_vis.create_robot_visualizations()
     obstacles_vis = ViserWorld(server, world_coll)
     obstacles_vis.create_mesh_visualizations()
 

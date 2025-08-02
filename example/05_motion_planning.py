@@ -19,17 +19,17 @@ if DISABLE_JIT:
 
 def viser_main_trajopt():
     # Setup Environment
-    robot = CCRobot.from_config("configs/robots/cc_scene_eval.json")
-    robot_coll = RobotCollision.from_config("configs/robots/cc_scene_eval.json")
+    robot = CCRobot.from_config("configs/robots/cc.json")
+    robot_coll = RobotCollision.from_config("configs/robots/cc.json")
     world_coll = WorldCollision.from_config(
         "configs/maps/mp_scene/mp_demo.json"
     )
 
     # Setup Visualization
     server = viser.ViserServer()
-    robot_vis = ViserSoftRobot(server, robot_coll, root_node_name="/robot")
-    robot_vis.create_sphere_visualizations()
-    obstacles_vis = ViserWorld(server, world_coll)
+    robot_vis = ViserSoftRobot(server, robot, robot_coll, root_node_name="/robot")
+    robot_vis.create_robot_visualizations()
+    obstacles_vis = ViserWorld(server, world_coll, enable_collision=False)
     obstacles_vis.create_mesh_visualizations()
 
     # Setup GUI
@@ -92,7 +92,7 @@ def viser_main_trajopt():
         print("Finish planning....")
         # robot_vis.visualize_traj_collisions(robot, cfg)
         for i in range(timesteps):
-            time.sleep(0.01)
+            time.sleep(1/60.0)
             robot_vis.update_pose(traj[i])
 
     def replay_callback(args):
@@ -100,7 +100,7 @@ def viser_main_trajopt():
         if traj is None:
             return
         for i in range(timesteps):
-            time.sleep(0.01)
+            time.sleep(1/60.0)
             robot_vis.update_pose(traj[i])
 
     def on_handle_update(handle: viser.TransformControlsHandle):
@@ -117,7 +117,7 @@ def viser_main_trajopt():
     on_handle_update(start_handle)
 
     while True:
-        time.sleep(0.01)
+        time.sleep(1/60.0)
 
 
 def viser_main_prm():
@@ -128,8 +128,8 @@ def viser_main_prm():
 
     # Setup Visualization
     server = viser.ViserServer()
-    robot_vis = ViserSoftRobot(server, robot_coll, root_node_name="/robot")
-    robot_vis.create_sphere_visualizations()
+    robot_vis = ViserSoftRobot(server, robot, robot_coll, root_node_name="/robot")
+    robot_vis.create_robot_visualizations()
     obstacles_vis = ViserWorld(server, world_coll)
     obstacles_vis.create_mesh_visualizations()
 
@@ -178,7 +178,7 @@ def viser_main_prm():
         print("Finish planning....")
         robot_vis.visualize_traj_collisions(robot, cfg)
         for i in range(timesteps):
-            time.sleep(0.01)
+            time.sleep(1/60.0)
             robot_vis.update_pose(traj[i])
 
     def replay_callback(args):
@@ -186,7 +186,7 @@ def viser_main_prm():
         if traj is None:
             return
         for i in range(timesteps):
-            time.sleep(0.01)
+            time.sleep(1/60.0)
             robot_vis.update_pose(traj[i])
 
     plan_button.on_click(plan_callback)
@@ -194,7 +194,7 @@ def viser_main_prm():
 
     while True:
         # plan_callback(None)
-        time.sleep(0.01)
+        time.sleep(1/60.0)
 
 
 def viser_main_rrt():
@@ -205,8 +205,8 @@ def viser_main_rrt():
 
     # Setup Visualization
     server = viser.ViserServer()
-    robot_vis = ViserSoftRobot(server, robot_coll, root_node_name="/robot")
-    robot_vis.create_sphere_visualizations()
+    robot_vis = ViserSoftRobot(server, robot, robot_coll, root_node_name="/robot")
+    robot_vis.create_robot_visualizations()
     obstacles_vis = ViserWorld(server, world_coll)
     obstacles_vis.create_mesh_visualizations()
 
@@ -254,7 +254,7 @@ def viser_main_rrt():
         print("Finish planning....")
         # robot_vis.visualize_traj_collisions(robot, cfg)
         for i in range(timesteps):
-            time.sleep(0.01)
+            time.sleep(1/60.0)
             robot_vis.update_pose(traj[i])
 
     def replay_callback(args):
@@ -262,7 +262,7 @@ def viser_main_rrt():
         if traj is None:
             return
         for i in range(timesteps):
-            time.sleep(0.01)
+            time.sleep(1/60.0)
             robot_vis.update_pose(traj[i])
 
     plan_button.on_click(plan_callback)
@@ -270,7 +270,7 @@ def viser_main_rrt():
 
     while True:
         # plan_callback(None)
-        time.sleep(0.01)
+        time.sleep(1/60.0)
 
 
 if __name__ == "__main__":

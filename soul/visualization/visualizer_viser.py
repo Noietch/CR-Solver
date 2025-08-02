@@ -6,12 +6,13 @@ import numpy as np
 import jax.numpy as jnp
 import jaxlie
 import jax_dataclasses as jdc
+from functools import partial
 
 from ..geom.collision_cc_robot import RobotCollision
 from ..geom.collision_world import WorldCollision
 from ..geom.geometry import Sphere, BoundingBox
 from ..robots.cc_robot import ConstantCurvatureState, CCRobot
-from functools import partial
+
 
 
 class ViserSoftRobot:
@@ -21,20 +22,33 @@ class ViserSoftRobot:
         robot: CCRobot,
         robot_coll: RobotCollision,
         root_node_name: str,
+        enable_backbone: bool = True,
     ):
         self.server = server
+        self.robot = robot  # 保存robot实例
         self.robot_coll = robot_coll
         self.root_node_name = root_node_name
         self.robot_config = robot.config
-        self.cylinder_handles = []
+        self.robot_cylinder_handles = []
+        self.robot_backbone_cylinder_handles = []
+        self.enable_backbone = enable_backbone
+        self._update_counter = 0  # For frame skipping optimization
+
+    def reset_pose(self):
+        default_state = ConstantCurvatureState(
+            base_position=jnp.array([0.0, 0.0, 0.0]),
+            theta=jnp.zeros(self.robot_config.num_sections) + 1e-6,
+            phi=jnp.zeros(self.robot_config.num_sections) + 1e-6,
+        )
+        poses = self.robot.forward_kinematics(default_state)
+        return poses
 
     def _generate_section_colors(self, num_sections):
-        """为每个section生成不同的颜色。"""
         colors = []
         for i in range(num_sections):
-            # 使用HSV色彩空间生成均匀分布的颜色
+            # use HSV to generate uniform colors    
             hue = i / num_sections
-            # 转换为RGB (简化的HSV到RGB转换，S=1, V=1)
+            # convert to RGB (simplified HSV to RGB conversion, S=1, V=1)
             c = 1.0
             x = c * (1 - abs((hue * 6) % 2 - 1))
             m = 0
@@ -55,115 +69,158 @@ class ViserSoftRobot:
             colors.append((r + m, g + m, b + m))
         return colors
 
-    def create_robot_visualizations(self):
-        """创建机器人的圆柱体可视化，每个圆柱连接相邻的两个机器人节点。"""
-        # 清除已有的圆柱体
-        for handle in self.cylinder_handles:
-            handle.remove()
-        self.cylinder_handles = []
+    def _create_cylinder_mesh(self, radius: float, sections: int, color: tuple):
+        """Create a cylinder mesh with specified radius, sections and color."""
+        mesh = trimesh.creation.cylinder(
+            radius=radius,
+            height=1.0,  # unit length, adjusted later through transformation
+            sections=sections
+        )
+        mesh.visual.face_colors = [int(c * 255) for c in color] + [255]  # RGBA
+        return mesh
+
+    def _get_section_index(self, point_index: int):
+        """Get the section index for a given point index."""
+        current_point_section = point_index // self.robot_config.num_points_per_section
+        next_point_section = (point_index + 1) // self.robot_config.num_points_per_section
         
-        # 计算机器人总节点数
+        section_idx = max(current_point_section, next_point_section)
+        section_idx = min(section_idx, self.robot_config.num_sections - 1)  # prevent out of bounds
+        return section_idx
+
+    def create_robot_visualizations(self):
+        # clear existing cylinders
+        for handle in self.robot_cylinder_handles:
+            handle.remove()
+        self.robot_cylinder_handles = []
+        
+        # clear existing backbone cylinders
+        for handle in self.robot_backbone_cylinder_handles:
+            handle.remove()
+        self.robot_backbone_cylinder_handles = []
+        
+        # calculate total number of points
         total_points = self.robot_config.num_sections * self.robot_config.num_points_per_section
         cylinder_radius = self.robot_config.radius * 0.8
+        backbone_radius = self.robot_config.radius * 0.1  # smaller radius for backbone
         
-        # 生成每个section的颜色
+        # generate colors for each section
         section_colors = self._generate_section_colors(self.robot_config.num_sections)
+        black_color = (0.0, 0.0, 0.0)  # black color for backbone
         
-        # 创建 n-1 个圆柱体连接 n 个节点
+        # create n-1 cylinders connecting n nodes
         for i in range(total_points - 1):
-            # 确定当前圆柱体属于哪个section
-            current_point_section = i // self.robot_config.num_points_per_section
-            next_point_section = (i + 1) // self.robot_config.num_points_per_section
+            section_idx = self._get_section_index(i)
             
-            # 如果两个点属于同一个section，使用该section的颜色
-            # 如果跨越section边界，使用下一个section的颜色
-            section_idx = max(current_point_section, next_point_section)
-            section_idx = min(section_idx, self.robot_config.num_sections - 1)  # 防止越界
-            
-            cylinder_mesh = trimesh.creation.cylinder(
-                radius=cylinder_radius,
-                height=1.0,  # 单位长度，后续通过变换调整
-                sections=16
-            )
-            
-            # 设置圆柱体颜色
+            # create robot body cylinder
             color = section_colors[section_idx]
-            cylinder_mesh.visual.face_colors = [int(c * 255) for c in color] + [255]  # RGBA
-            
+            cylinder_mesh = self._create_cylinder_mesh(cylinder_radius, 16, color)
             cylinder_handle = self.server.scene.add_mesh_trimesh(
                 name=f"{self.root_node_name}/cylinder_{i}",
                 mesh=cylinder_mesh,
             )
-            self.cylinder_handles.append(cylinder_handle)
+            self.robot_cylinder_handles.append(cylinder_handle)
+            
+            # create backbone cylinder (black) - only if enabled
+            if self.enable_backbone:
+                backbone_mesh = self._create_cylinder_mesh(backbone_radius, 8, black_color)
+                backbone_handle = self.server.scene.add_mesh_trimesh(
+                    name=f"{self.root_node_name}/backbone_{i}",
+                    mesh=backbone_mesh,
+                )
+                self.robot_backbone_cylinder_handles.append(backbone_handle)
+        # set the initial pose of the robot
+        self.update_pose(self.reset_pose())
 
-    def update_pose(self, all_poses):
-        """根据机器人状态更新圆柱体的位置和方向。
+    def _update_cylinder_pose(self, handle, all_poses, i, scale_factor=0.6, cylinder_type="cylinder"):
+        """Update a single cylinder's position, rotation and scale."""
+        # get the positions of the two adjacent nodes - convert to numpy immediately
+        pos1 = np.array(jaxlie.SE3.from_matrix(all_poses[i]).translation())
+        pos2 = np.array(jaxlie.SE3.from_matrix(all_poses[i + 1]).translation())
+        
+        # calculate the center position and direction of the cylinder
+        center = (pos1 + pos2) / 2.0
+        direction = pos2 - pos1
+        length = np.linalg.norm(direction)
+        
+        if length > 1e-6:
+            # calculate the rotation from the Z-axis to the target direction
+            z_axis = np.array([0., 0., 1.])
+            direction_unit = direction / length
+            rotation = self._compute_rotation_z_to_direction(z_axis, direction_unit)
+            
+            # check if the rotation is valid
+            if np.any(np.isnan(rotation.wxyz)):
+                print(f"Warning: NaN rotation for {cylinder_type} {i}")
+                rotation = jaxlie.SO3.identity()
+            
+            # update the position, direction and length of the cylinder
+            handle.position = tuple(center)
+            handle.wxyz = tuple(rotation.wxyz)
+            handle.scale = (1.0, 1.0, float(length) * scale_factor)
+        else:
+            # the length is too small, hide the cylinder
+            handle.scale = (0.0, 0.0, 0.0)
+
+    def update_pose(self, all_poses, skip_frames=0):
+        """update the position and direction of the cylinders based on the robot state.
         
         Args:
-            all_poses: 机器人所有节点的SE3位姿矩阵，形状为 (n_points, 4, 4)
+            all_poses: SE3 pose matrices of all robot nodes, shape (n_points, 4, 4)
+            skip_frames: Skip every N frames for performance (0 = update every frame)
         """
-        if not self.cylinder_handles:
+        if not self.robot_cylinder_handles:
             return
         
-        for i, handle in enumerate(self.cylinder_handles):
-            # 获取相邻两个节点的位置
-            pos1 = jaxlie.SE3.from_matrix(all_poses[i]).translation()
-            pos2 = jaxlie.SE3.from_matrix(all_poses[i + 1]).translation()
-            
-            # 计算圆柱体的中心位置和方向
-            center = (pos1 + pos2) / 2.0
-            direction = pos2 - pos1
-            length = np.linalg.norm(direction)
-            
-            if length > 1e-6:
-                # 计算从Z轴到目标方向的旋转
-                z_axis = np.array([0., 0., 1.])
-                direction_unit = direction / length
-                rotation = self._compute_rotation_z_to_direction(z_axis, direction_unit)
-                
-                # 检查旋转是否有效
-                if np.any(np.isnan(rotation.wxyz)):
-                    print(f"Warning: NaN rotation for cylinder {i}")
-                    rotation = jaxlie.SO3.identity()
-                
-                # 更新圆柱体的位置、方向和长度
-                handle.position = tuple(center)
-                handle.wxyz = tuple(rotation.wxyz)
-                handle.scale = (1.0, 1.0, float(length) * 0.6)
-            else:
-                # 长度太小，隐藏圆柱体
-                handle.scale = (0.0, 0.0, 0.0)
+        # Frame skipping for performance optimization
+        if skip_frames > 0:
+            self._update_counter += 1
+            if self._update_counter % (skip_frames + 1) != 0:
+                return
+        
+        # Convert JAX arrays to numpy once at the beginning to avoid repeated conversions
+        if hasattr(all_poses, 'device'):  # Check if it's a JAX array
+            all_poses = np.array(all_poses)
+        
+        # update main robot cylinders
+        for i, handle in enumerate(self.robot_cylinder_handles):
+            self._update_cylinder_pose(handle, all_poses, i, scale_factor=0.6, cylinder_type="cylinder")
+        
+        # update backbone cylinders with the same poses - only if enabled and exist
+        if self.enable_backbone and self.robot_backbone_cylinder_handles:
+            for i, backbone_handle in enumerate(self.robot_backbone_cylinder_handles):
+                self._update_cylinder_pose(backbone_handle, all_poses, i, scale_factor=1.0, cylinder_type="backbone")
     
     def _compute_rotation_z_to_direction(self, z_axis, target_direction):
-        """计算从Z轴到目标方向的旋转四元数。"""
-        # 检查是否平行
+        """calculate the rotation quaternion from the Z-axis to the target direction."""
+        # check if they are parallel
         dot_product = np.dot(z_axis, target_direction)
         if np.abs(dot_product) > 0.999:
-            # 平行或反平行
+            # parallel or anti-parallel
             if dot_product > 0:
                 return jaxlie.SO3.identity()
             else:
-                # 180度旋转，选择X轴作为旋转轴
+                # 180 degree rotation, choose X-axis as the rotation axis
                 return jaxlie.SO3.from_matrix(np.diag([1, -1, -1]))
         
-        # 计算旋转轴和角度
+        # calculate the rotation axis and angle
         rotation_axis = np.cross(z_axis, target_direction)
         axis_norm = np.linalg.norm(rotation_axis)
         
-        # 防止除零错误
+        # prevent division by zero
         if axis_norm < 1e-8:
             return jaxlie.SO3.identity()
             
         rotation_axis = rotation_axis / axis_norm
         angle = np.arccos(np.clip(dot_product, -1.0, 1.0))
         
-        # 使用轴角表示创建旋转
+        # create rotation using axis-angle representation
         return jaxlie.SO3.from_quaternion_xyzw(
             np.concatenate([rotation_axis * np.sin(angle/2), [np.cos(angle/2)]])
         )
 
     def create_collision_visualizations(self):
-        """Create sphere visualizations for the robot collision model."""
+        """create sphere visualizations for the robot collision model."""
         if not hasattr(self, 'sphere_handles'):
             self.sphere_handles = []
             
@@ -171,11 +228,11 @@ class ViserSoftRobot:
             handle.remove()
         self.sphere_handles = []
 
-        # Assume spheres have a consistent radius across the robot
-        # This is a reasonable assumption based on how RobotCollision is initialized
+        # assume spheres have a consistent radius across the robot
+        # this is a reasonable assumption based on how RobotCollision is initialized
         if isinstance(self.robot_coll.coll, Sphere):
             num_spheres = self.robot_coll.coll.radius.shape[0]
-            # Create a mesh for each sphere in the model
+                    # create a mesh for each sphere in the model
             for i in range(num_spheres):
                 sphere_node_name = f"{self.root_node_name}/sphere_{i}"
                 sphere_handle = self.server.scene.add_mesh_trimesh(
@@ -211,7 +268,7 @@ class ViserSoftRobot:
                 mesh=swept_capsules.to_trimesh(),
             )
 
-    def visualize_traj(
+    def visualize_tip_traj(
         self,
         traj: jnp.ndarray | jaxlie.SE3,
         color: np.ndarray = np.array([1.0, 0.0, 0.0]),
@@ -237,11 +294,14 @@ class ViserWorld:
         world_coll: WorldCollision,
         is_handle_able: bool = False,
         config_path: str | None = None,
+        enable_collision: bool = True,
     ):
         self.server = server
         self.world_coll = world_coll
         self.is_handle_able = is_handle_able
         self.config_path = config_path
+        self.enable_collision = enable_collision
+        
         if self.is_handle_able:
             self.save_button = self.server.add_gui_button("Save Poses")
             if self.config_path is not None:
@@ -333,12 +393,13 @@ class ViserWorld:
                     mesh=mesh,
                 )
 
-                coll_mesh = obstacle_i.to_trimesh()
-                coll_mesh.apply_translation(-obstacle_pose[4:])
-                collision_handle = self.server.scene.add_mesh_trimesh(
-                    name=f"obstacles/handle_{i}/collision",
-                    mesh=coll_mesh,
-                )
+                if self.enable_collision:
+                    coll_mesh = obstacle_i.to_trimesh()
+                    coll_mesh.apply_translation(-obstacle_pose[4:])
+                    collision_handle = self.server.scene.add_mesh_trimesh(
+                        name=f"obstacles/handle_{i}/collision",
+                        mesh=coll_mesh,
+                    )
 
                 obstacle_handle.on_update(partial(self.update_obstacle_pose, i))
 
@@ -348,10 +409,15 @@ class ViserWorld:
                     name=f"obstacles/mesh_{i}",
                     mesh=mesh,
                 )
-            self.server.scene.add_mesh_trimesh(
-                name=f"obstacles/collision",
-                mesh=self.world_coll.obstacles.to_trimesh(),
-            )
+            if self.enable_collision:
+                self.server.scene.add_mesh_trimesh(
+                    name=f"obstacles/collision",
+                    mesh=self.world_coll.obstacles.to_trimesh(),
+                )
 
         # add ground visualizations
-        self.server.scene.add_grid("/ground", width=6, height=6)
+        self.server.scene.add_grid(
+            "/ground", 
+            width=100, 
+            height=100,
+        )

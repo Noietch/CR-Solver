@@ -47,8 +47,8 @@ def viser_main():
 
     while True:
         cfg = ik_solver(ik_target_handle.wxyz, ik_target_handle.position)
-        pose = robot.forward_kinematics(cfg)
-        robot_vis.update_pose(pose)
+        # pose = robot.forward_kinematics(cfg)
+        # robot_vis.update_pose(pose)
 
 
 if __name__ == "__main__":
