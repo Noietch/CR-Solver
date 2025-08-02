@@ -16,6 +16,7 @@ class CCModelConfig:
     num_sections: jdc.Static[int]
     num_points_per_section: jdc.Static[int]
     length: jdc.Static[float]
+    radius: jdc.Static[float]
 
     # theta_range and phi_range
     lower_limits_theta: Float[Array, "num_sections"]
@@ -41,6 +42,7 @@ class CCModelConfig:
             num_sections=config_dict["num_sections"],
             num_points_per_section=config_dict["num_points_per_section"],
             length=config_dict["length"],
+            radius=config_dict["radius"],
             opt_mask=jnp.array(opt_mask, dtype=jnp.bool),
             lower_limits_theta=jnp.array(config_dict["lower_limits_theta"]),
             upper_limits_theta=jnp.array(config_dict["upper_limits_theta"]),

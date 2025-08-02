@@ -23,8 +23,8 @@ def viser_main():
 
     # Setup Visualization
     server = viser.ViserServer()
-    robot_vis = ViserSoftRobot(server, robot_coll, root_node_name="/robot")
-    robot_vis.create_sphere_visualizations()
+    robot_vis = ViserSoftRobot(server, robot, robot_coll, root_node_name="/robot")
+    robot_vis.create_robot_visualizations()
 
     # Setup GUI
     ik_target_handle = server.scene.add_transform_controls(
@@ -33,7 +33,7 @@ def viser_main():
         position=(
             0.0,
             0.0,
-            robot.config.lower_limits_length * robot.config.num_sections,
+            robot.config.length * robot.config.num_sections,
         ),
         wxyz=(1, 0, 0, 0),
     )

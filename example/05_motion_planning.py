@@ -22,7 +22,7 @@ def viser_main_trajopt():
     robot = CCRobot.from_config("configs/robots/cc_scene_eval.json")
     robot_coll = RobotCollision.from_config("configs/robots/cc_scene_eval.json")
     world_coll = WorldCollision.from_config(
-        "configs/maps/mp_scene/obstacles_13.pick_from_shelf.json"
+        "configs/maps/mp_scene/mp_demo.json"
     )
 
     # Setup Visualization
@@ -90,7 +90,7 @@ def viser_main_trajopt():
         cfg = optimize_jit(cfg, world_coll.collision_geoms)
         traj = robot.forward_kinematics(cfg)
         print("Finish planning....")
-        robot_vis.visualize_traj_collisions(robot, cfg)
+        # robot_vis.visualize_traj_collisions(robot, cfg)
         for i in range(timesteps):
             time.sleep(0.01)
             robot_vis.update_pose(traj[i])
