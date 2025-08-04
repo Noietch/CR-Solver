@@ -7,6 +7,9 @@ import jax.numpy as jnp
 import jaxlie
 import jax_dataclasses as jdc
 from functools import partial
+import time
+import imageio.v3 as iio
+from tqdm import tqdm
 
 from ..geom.collision_cc_robot import RobotCollision
 from ..geom.collision_world import WorldCollision
@@ -69,14 +72,26 @@ class ViserSoftRobot:
             colors.append((r + m, g + m, b + m))
         return colors
 
-    def _create_cylinder_mesh(self, radius: float, sections: int, color: tuple):
+    def _create_cylinder_mesh(self, radius: float, sections: int, color: tuple, alpha: float = 1.0):
         """Create a cylinder mesh with specified radius, sections and color."""
         mesh = trimesh.creation.cylinder(
             radius=radius,
             height=1.0,  # unit length, adjusted later through transformation
             sections=sections
         )
-        mesh.visual.face_colors = [int(c * 255) for c in color] + [255]  # RGBA
+        
+        # Apply color with alpha channel using standard RGBA format
+        # Trimesh expects RGBA values in range 0-255 as uint8
+        rgba_color = np.array([int(c * 255) for c in color] + [int(alpha * 255)], dtype=np.uint8)
+        
+        # Set both vertex and face colors for maximum compatibility
+        # Some renderers use vertex colors, others use face colors
+        n_vertices = len(mesh.vertices)
+        n_faces = len(mesh.faces)
+        
+        mesh.visual.vertex_colors = np.tile(rgba_color, (n_vertices, 1))
+        mesh.visual.face_colors = np.tile(rgba_color, (n_faces, 1))
+        
         return mesh
 
     def _get_section_index(self, point_index: int):
@@ -88,7 +103,7 @@ class ViserSoftRobot:
         section_idx = min(section_idx, self.robot_config.num_sections - 1)  # prevent out of bounds
         return section_idx
 
-    def create_robot_visualizations(self):
+    def create_robot_visualizations(self, alpha: float = 1.0):
         # clear existing cylinders
         for handle in self.robot_cylinder_handles:
             handle.remove()
@@ -114,7 +129,7 @@ class ViserSoftRobot:
             
             # create robot body cylinder
             color = section_colors[section_idx]
-            cylinder_mesh = self._create_cylinder_mesh(cylinder_radius, 16, color)
+            cylinder_mesh = self._create_cylinder_mesh(cylinder_radius, 16, color, alpha)
             cylinder_handle = self.server.scene.add_mesh_trimesh(
                 name=f"{self.root_node_name}/cylinder_{i}",
                 mesh=cylinder_mesh,
@@ -123,7 +138,7 @@ class ViserSoftRobot:
             
             # create backbone cylinder (black) - only if enabled
             if self.enable_backbone:
-                backbone_mesh = self._create_cylinder_mesh(backbone_radius, 8, black_color)
+                backbone_mesh = self._create_cylinder_mesh(backbone_radius, 8, black_color, alpha)
                 backbone_handle = self.server.scene.add_mesh_trimesh(
                     name=f"{self.root_node_name}/backbone_{i}",
                     mesh=backbone_mesh,
@@ -421,3 +436,109 @@ class ViserWorld:
             width=100, 
             height=100,
         )
+
+
+class ViserRenderer:
+    def __init__(self, server: viser.ViserServer | viser.ClientHandle, robot: ViserSoftRobot, world: ViserWorld):
+        self.server = server
+        self.robot = robot
+        self.world = world
+
+    def render_traj_video(self, event: viser.GuiEvent, traj: jnp.ndarray | jaxlie.SE3, skip_frames: int = 0, save_path: str = None):
+        """
+        Render trajectory as a video by combining individual frames.
+        
+        Args:
+            traj: Robot trajectory as either SE3 poses or numpy array
+            skip_frames: Number of frames to skip for performance (0 = render every frame)
+            save_path: Path to save the video file (optional)
+        """
+        images = []
+        traj_len = traj.shape[0] if hasattr(traj, 'shape') else len(traj)
+        # render every frame
+        for i in tqdm(range(0, traj_len, skip_frames + 1)):
+            self.robot.update_pose(traj[i])
+            image = event.client.get_render(height=720, width=1280)
+            images.append(image)
+        # save video
+        if save_path:
+            # Save as video file
+            if save_path.endswith('.gif'):
+                iio.imwrite(save_path, images, extension=".gif", loop=0)
+            elif save_path.endswith('.mp4'):
+                iio.imwrite(save_path, images, plugin="FFMPEG", fps=10)
+            else:
+                raise ValueError("Unsupported video format")
+            print(f"Video saved to {save_path}")
+        
+        return images
+
+    def render_traj_image(self, event: viser.GuiEvent, traj: jnp.ndarray | jaxlie.SE3, skip_frames: int = 0, save_path: str = None):
+        """
+        Render trajectory as a single composite image by overlaying robot poses on environment.
+        
+        Args:
+            event: Viser GUI event for accessing client
+            traj: Robot trajectory as either SE3 poses or numpy array
+            skip_frames: Number of frames to skip for performance (0 = render every frame)
+            save_path: Path to save the composite image (optional)
+        """
+        if save_path is None:
+            raise ValueError("Save path must be provided for trajectory image")
+            
+        print("Rendering trajectory image...")
+        
+        # Step 1: Store original visibility states and render environment-only image
+        self._set_robot_visibility(False)
+        env_image = event.client.get_render(height=720, width=1280)
+        
+        # Step 2: Restore robot visibility and render trajectory frames
+        self._set_robot_visibility(True)
+        
+        print("Rendering robot trajectory frames...")
+        robot_images = self.render_traj_video(event, traj, skip_frames)
+        
+        # Start with environment as base
+        env_array = np.array(env_image, dtype=np.float32)
+        composite_image = env_array.copy()
+        
+        # Overlay each robot frame with alpha blending
+        alpha_per_frame = 0.2  # Distribute transparency across frames
+        
+        for i, robot_frame in enumerate(robot_images):
+            robot_array = np.array(robot_frame, dtype=np.float32)
+            
+            # Calculate alpha based on frame position (start/end more opaque)
+            if i == 0 or i == len(robot_images) - 1:
+                alpha = 0.9  # Start and end poses more opaque
+            else:
+                alpha = alpha_per_frame * 2  # Intermediate poses more transparent
+            
+            # Create mask for robot pixels (non-environment pixels)
+            # Assuming environment pixels are relatively similar to the background
+            diff = np.abs(robot_array - env_array).mean(axis=2)
+            robot_mask = diff > 10  # Threshold for detecting robot pixels
+            
+            # Apply alpha blending only where robot is present
+            for c in range(3):  # RGB channels
+                composite_image[:, :, c] = np.where(
+                    robot_mask,
+                    composite_image[:, :, c] * (1 - alpha) + robot_array[:, :, c] * alpha,
+                    composite_image[:, :, c]
+                )
+        
+        # Convert back to uint8 and save
+        final_image = np.clip(composite_image, 0, 255).astype(np.uint8)
+        
+        # Save the composite image
+        iio.imwrite(save_path, final_image)
+        print(f"Trajectory image saved to {save_path}")
+        
+        return final_image
+
+    def _set_robot_visibility(self, is_visible: bool):
+        """Restore original visibility states."""
+        for handle in self.robot.robot_cylinder_handles:
+            handle.visible = is_visible
+        for handle in self.robot.robot_backbone_cylinder_handles:
+            handle.visible = is_visible
