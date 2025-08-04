@@ -4,7 +4,7 @@ import viser
 import numpy as np
 from soul.robots.cc_robot import CCRobot
 from soul.geom import RobotCollision, WorldCollision
-from soul.solver import MotionPlanner, SamplingBasedMotionPlanner, RRTMotionPlanner
+from soul.solver import MotionPlanner, PRMMotionPlanner, RRTMotionPlanner
 from soul.visualization.visualizer_viser import ViserSoftRobot, ViserWorld
 
 DISABLE_JIT = False
@@ -148,7 +148,7 @@ def viser_main_prm():
 
     # Set up trajopt parameters
     timesteps = 100
-    traj_solver = SamplingBasedMotionPlanner(robot, robot_coll, timesteps)
+    traj_solver = PRMMotionPlanner(robot, robot_coll, timesteps)
     # find_path_jit = jax.jit(traj_solver.find_path)
     # optimize_jit = jax.jit(traj_solver.optimize)
 

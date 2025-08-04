@@ -8,7 +8,7 @@ import json
 import os
 from typing import Callable, Sequence
 from soul.robots.cc_robot import CCRobot, ConstantCurvatureState
-from soul.solver import RRTMotionPlanner, MotionPlanner, SamplingBasedMotionPlanner
+from soul.solver import RRTMotionPlanner, MotionPlanner, PRMMotionPlanner
 from soul.geom import (
     RobotCollision,
     WorldCollision,
@@ -484,7 +484,7 @@ def _solve_with_trajopt(
 
 
 def _solve_with_prm(
-    solver: SamplingBasedMotionPlanner,
+    solver: PRMMotionPlanner,
     start_position: Array,
     start_wxyz: Array,
     target_position: Array,
@@ -702,7 +702,7 @@ def eval_mp_all_sections(
 
     planner_map = {
         "trajopt": (_solve_with_trajopt, MotionPlanner),
-        "prm": (_solve_with_prm, SamplingBasedMotionPlanner),
+        "prm": (_solve_with_prm, PRMMotionPlanner),
         "rrt": (_solve_with_rrt, RRTMotionPlanner),
     }
 

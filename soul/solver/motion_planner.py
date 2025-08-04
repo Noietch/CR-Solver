@@ -166,30 +166,7 @@ class ConstrainedMotionPlanner(MotionPlanner):
                 self.robot.var_cls(jnp.arange(0, self.timesteps - 1)),
                 jnp.array([40.0])[None],
             ),
-            # rest_base_cost(
-            #     traj_vars,
-            #     jnp.array([10.0])[None],
-            # ),
         ]
-        # 2. Add start and end pose constraints.
-        # factors.extend(
-        #     [
-        #         jaxls.Cost(
-        #             lambda vals, var: ((vals[var] - init_traj[0])).flatten() * 100.0,
-        #             (self.robot.var_cls(jnp.arange(0, 2)),),
-        #             name="start_pose_constraint",
-        #         ),
-        #         jaxls.Cost(
-        #             lambda vals, var: ((vals[var] - init_traj[-1])).flatten() * 100.0,
-        #             (
-        #                 self.robot.var_cls(
-        #                     jnp.arange(self.timesteps - 2, self.timesteps)
-        #                 ),
-        #             ),
-        #             name="end_pose_constraint",
-        #         ),
-        #     ]
-        # )
         # 3. Add collision avoidance costs.
         for world_coll_obj in world_coll:
             factors.append(
@@ -217,7 +194,7 @@ class ConstrainedMotionPlanner(MotionPlanner):
         return solution[traj_vars]
 
 
-class SamplingBasedMotionPlanner(ConstrainedMotionPlanner):
+class PRMMotionPlanner(ConstrainedMotionPlanner):
     def __init__(
         self,
         *args,
@@ -573,7 +550,7 @@ class SamplingBasedMotionPlanner(ConstrainedMotionPlanner):
         )
 
 
-class RRTMotionPlanner(SamplingBasedMotionPlanner):
+class RRTMotionPlanner(PRMMotionPlanner):
     def __init__(
         self, *args, goal_sample_rate=0.2, step_size=0.1, max_iters=1000, **kwargs
     ):
