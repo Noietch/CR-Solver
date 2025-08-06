@@ -406,16 +406,16 @@ class ParallelPRM:
             return None
 
         # Check if we can steer to/from roadmap
-        # start_node = self.nodes[start_idx]
-        # goal_node = self.nodes[goal_idx]
+        start_node = self.nodes[start_idx]
+        goal_node = self.nodes[goal_idx]
 
-        # if self._check_edge_collision(start, start_node, world_coll):
-        #     self._mark_node_collision(start_idx)
-        #     return None
+        if self._check_edge_collision(start, start_node, world_coll):
+            self._mark_node_collision(start_idx)
+            return None
 
-        # if self._check_edge_collision(goal_node, goal, world_coll):
-        #     self._mark_node_collision(goal_idx)
-        #     return None
+        if self._check_edge_collision(goal_node, goal, world_coll):
+            self._mark_node_collision(goal_idx)
+            return None
 
         # Find path in roadmap
         try:

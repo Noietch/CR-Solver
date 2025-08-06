@@ -142,7 +142,7 @@ def viser_main(method: str = "trajopt"):
                 world_coll.collision_geoms,
             )
             # test_prm_traj_solver.build_roadmap(
-            #     5000,
+            #     10000,
             #     world_coll.collision_geoms,
             # )
             # test_prm_traj_solver.save_roadmap("roadmap.pkl")
