@@ -15,7 +15,7 @@ from soul.geom import (
     CollGeom,
     colldist_from_sdf,
 )
-
+# TODO: 移除PRM的sample阶段计时
 jax.config.update("jax_default_matmul_precision", "highest")
 
 DISABLE_JIT = False

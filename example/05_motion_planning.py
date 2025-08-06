@@ -5,7 +5,7 @@ import numpy as np
 from soul.robots.cc_robot import CCRobot
 from soul.geom import RobotCollision, WorldCollision
 from soul.solver import MotionPlanner, PRMMotionPlanner, RRTMotionPlanner
-from soul.visualization.visualizer_viser import ViserSoftRobot, ViserWorld
+from soul.visualization.visualizer_viser import ViserSoftRobot, ViserWorld, ViserRenderer
 
 DISABLE_JIT = False
 
@@ -31,6 +31,7 @@ def viser_main(method: str = "trajopt"):
     robot_vis.create_robot_visualizations()
     obstacles_vis = ViserWorld(server, world_coll, enable_collision=False)
     obstacles_vis.create_mesh_visualizations()
+    renderer = ViserRenderer(server, robot_vis, obstacles_vis)
 
     # Setup GUI
     start_handle = server.scene.add_transform_controls(
@@ -67,6 +68,8 @@ def viser_main(method: str = "trajopt"):
 
     plan_button = server.gui.add_button("Plan", disabled=False)
     replay_button = server.gui.add_button("Replay", disabled=False)
+    render_video_button = server.gui.add_button("Render Video", disabled=False)
+    render_image_button = server.gui.add_button("Render Image", disabled=False)
 
     # Set up trajopt parameters
     timesteps = 100
@@ -131,17 +134,30 @@ def viser_main(method: str = "trajopt"):
         traj = robot.forward_kinematics(cfg)
         print("Finish planning....")
         # robot_vis.visualize_traj_collisions(robot, cfg)
-        for i in range(timesteps):
-            time.sleep(1/60.0)
-            robot_vis.update_pose(traj[i])
+        # for i in range(timesteps):
+        #     time.sleep(1/60.0)
+        #     robot_vis.update_pose(traj[i])
 
     def replay_callback(args):
+        print("Start replaying....")
         global traj
         if traj is None:
             return
         for i in range(timesteps):
-            time.sleep(1/60.0)
             robot_vis.update_pose(traj[i])
+        print("Finish replaying....")
+            
+    def render_video_callback(event: viser.GuiEvent):
+        global traj
+        if traj is None:
+            return
+        renderer.render_traj_video(event, traj, save_path="trajectory_video.mp4")
+
+    def render_image_callback(event: viser.GuiEvent):
+        global traj
+        if traj is None:
+            return
+        renderer.render_traj_image(event, traj, save_path="trajectory_image.png")
 
     def on_handle_update(handle: viser.TransformControlsHandle):
         """Update GUI when handles are moved."""
@@ -152,6 +168,8 @@ def viser_main(method: str = "trajopt"):
 
     plan_button.on_click(plan_callback)
     replay_button.on_click(replay_callback)
+    render_video_button.on_click(render_video_callback)
+    render_image_button.on_click(render_image_callback)
     start_handle.on_update(on_handle_update)
     end_handle.on_update(on_handle_update)
     on_handle_update(start_handle)

@@ -108,8 +108,7 @@ def visualize_constrain_motion_planning(
 
     selected_poses = planned_traj_poses[sample_indices]
 
-    ax.plot(ref_traj_pos[:, 0], ref_traj_pos[:, 1], ref_traj_pos[:, 2], "r--")
-    ax.plot(planned_tip_pos[:, 0], planned_tip_pos[:, 1], planned_tip_pos[:, 2], "b-")
+
 
     visualize_cc_model_3d(
         pose=selected_poses,
@@ -118,6 +117,15 @@ def visualize_constrain_motion_planning(
         world_coll_config=world_config_path,
         save_path=save_path.replace(".npz", "_fk.png"),
     )
+    
+    ax.scatter(ref_traj_pos[:, 0], ref_traj_pos[:, 1], ref_traj_pos[:, 2], c="b", marker="o",s=1)
+    ax.scatter(planned_tip_pos[:, 0], planned_tip_pos[:, 1], planned_tip_pos[:, 2], c="r", marker="o",s=3)
+
+
+    # ax.plot(ref_traj_pos[:, 0], ref_traj_pos[:, 1], ref_traj_pos[:, 2], "r--", linewidth=5 )
+    # ax.plot(planned_tip_pos[:, 0], planned_tip_pos[:, 1], planned_tip_pos[:, 2], "b-", linewidth=5)
+    save_path = save_path.replace(".npz", "_plot.png")
+    plt.savefig(save_path)
 
     print(
         f"--- Trajectory Metrics for Letter {world_config_path.split('configs/maps/obstacles_con_')[-1].split('.')[0]} ---"
@@ -126,6 +134,7 @@ def visualize_constrain_motion_planning(
     print(f"Position Error (std):  {data['pos_error_std'] * 1000:.4f}mm")
     print(f"Rotation Error (mean): {np.rad2deg(data['rot_error_mean']):.4f}deg")
     print(f"Rotation Error (std):  {np.rad2deg(data['rot_error_std']):.4f}deg")
+    print(f"Planning Time: {data['planning_time'] * 1000:.4f}ms")
 
 
 def plot_mp_with_coll_scene(
@@ -160,24 +169,24 @@ def plot_constrain_motion_planning():
 
     visualize_constrain_motion_planning(
         save_path="results/traj_following/get_icra_traj_I/get_icra_traj.npz",
-        world_config_path="configs/maps/obstacles_con_I.json",
+        world_config_path="configs/maps/constrain_motion_planning/obstacles_con_I.json",
         ax=ax1,
     )
     visualize_constrain_motion_planning(
         save_path="results/traj_following/get_icra_traj_C/get_icra_traj.npz",
-        world_config_path="configs/maps/obstacles_con_C.json",
+        world_config_path="configs/maps/constrain_motion_planning/obstacles_con_C.json",
         ax=ax2,
     )
     visualize_constrain_motion_planning(
         save_path="results/traj_following/get_icra_traj_R/get_icra_traj.npz",
-        world_config_path="configs/maps/obstacles_con_R.json",
+        world_config_path="configs/maps/constrain_motion_planning/obstacles_con_R.json",
         ax=ax3,
     )
     visualize_constrain_motion_planning(
         save_path="results/traj_following/get_icra_traj_A/get_icra_traj.npz",
-        world_config_path="configs/maps/obstacles_con_A.json",
+        world_config_path="configs/maps/constrain_motion_planning/obstacles_con_A.json",
         ax=ax4,
-        num_pose=8,
+        num_pose=6,
     )
 
     plt.tight_layout()
@@ -188,21 +197,21 @@ def plot_constrain_motion_planning():
 
 
 if __name__ == "__main__":
-    save_dir = "results/13.pick_from_shelf"
-    world_config_path = "configs/maps/mp_scene/obstacles_13.pick_from_shelf.json"
+    # save_dir = "results/13.pick_from_shelf"
+    # world_config_path = "configs/maps/mp_scene/obstacles_13.pick_from_shelf.json"
 
-    error_path_list = []
-    for save_path in os.listdir(save_dir):
-        if save_path.endswith(".npz") and "all_trials_results" not in save_path:
-            try:
-                plot_mp_with_coll_scene(
-                    save_dir=save_dir,
-                    file_name=save_path,
-                    world_config_path=world_config_path,
-                )
-            except Exception as e:
-                error_path_list.append(save_path)
-                print(f"Error in plot_mp_with_coll_scene: {e}, {save_path}")
-    print("--------------ERROR PATH LIST--------------")
-    print(error_path_list)
-    # plot_constrain_motion_planning()
+    # error_path_list = []
+    # for save_path in os.listdir(save_dir):
+    #     if save_path.endswith(".npz") and "all_trials_results" not in save_path:
+    #         try:
+    #             plot_mp_with_coll_scene(
+    #                 save_dir=save_dir,
+    #                 file_name=save_path,
+    #                 world_config_path=world_config_path,
+    #             )
+    #         except Exception as e:
+    #             error_path_list.append(save_path)
+    #             print(f"Error in plot_mp_with_coll_scene: {e}, {save_path}")
+    # print("--------------ERROR PATH LIST--------------")
+    # print(error_path_list)
+    plot_constrain_motion_planning()

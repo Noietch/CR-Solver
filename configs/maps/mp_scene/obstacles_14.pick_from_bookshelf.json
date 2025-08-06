@@ -1,0 +1,13 @@
+{
+  "obstacle_1": {
+    "type": "mesh",
+    "path": "assets/scene_trans/14.pick_from_bookshelf/14.pick_from_bookshelf.glb",
+    "scale": 15,
+    "wxyz": [0.707, 0.707, 0, 0],
+    "position": [0.0, 2.5, 0.0],
+    "decompose_type": "convex",
+    "decompose_params": {
+      "max_convex_hull": 10
+    }
+  }
+}

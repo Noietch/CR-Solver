@@ -2,8 +2,8 @@
     "obstacle_1": {
         "type": "sphere",
         "center": [
-            0.17,
-            0.1,
+            0.0,
+            0.18,
             1.15
         ],
         "radius": 0.3
@@ -11,7 +11,7 @@
     "obstacle_2": {
         "type": "sphere",
         "center": [
-            0.39,
+            0.34,
             -0.78,
             0.66
         ],

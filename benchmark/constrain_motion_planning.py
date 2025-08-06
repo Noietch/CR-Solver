@@ -5,13 +5,14 @@ import time
 import viser
 import numpy as np
 import os
+import csv
 import matplotlib.pyplot as plt
 from soul.robots.cc_robot import CCRobot
 from soul.robots.cc_robot_extend import CCRobot as CCRobotExtend
 from soul.geom import RobotCollision, WorldCollision
 from soul.solver import ConstrainedMotionPlanner
 from soul.visualization.visualizer_viser import ViserSoftRobot, ViserWorld
-from benchmark.ik_plot import visualize_constrain_motion_planning
+from benchmark.mp_plot import visualize_constrain_motion_planning
 
 # TODO: 移动到example，只保留运行代码
 # TODO: 美化图像
@@ -87,7 +88,7 @@ def get_icra_traj(
     The height is controlled by the y-difference between handles.
     """
     # word_funcs = {'I': create_I, 'C': create_C, 'R': create_R, 'A': create_A}
-    word_funcs = {"I": create_I}
+    word_funcs = {'A': create_A}
     word_str = "ICRA"
     letter_spacing = LETTER_WIDTH * 1.8
 
@@ -173,6 +174,28 @@ def get_icra_traj(
     return traj
 
 
+def save_ref_traj_to_csv(reference_traj: jaxlie.SE3, file_path: str):
+    """Saves the reference trajectory to a CSV file.
+
+    Args:
+        reference_traj: The SE3 trajectory to save.
+        file_path: The path to the CSV file.
+    """
+    translations = np.asarray(reference_traj.translation())
+    # wxyz is equivalent to qw, qx, qy, qz
+    quaternions_wxyz = np.asarray(reference_traj.rotation().wxyz)
+
+    data_to_save = np.hstack([translations, quaternions_wxyz])
+
+    header = ["x", "y", "z", "qw", "qx", "qy", "qz"]
+
+    with open(file_path, "w", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow(header)
+        writer.writerows(data_to_save)
+    print(f"Saved reference trajectory to {file_path}")
+
+
 @jax.jit
 def calculate_traj_metrics(
     reference_traj: jaxlie.SE3,
@@ -226,6 +249,53 @@ def get_linear_traj(
     return traj
 
 
+def create_square():
+    """Generates path points for a square."""
+    side_length = LETTER_WIDTH  # Use LETTER_WIDTH as the base side length
+    return [
+        (0, 0),
+        (side_length, 0),
+        (side_length, side_length),
+        (0, side_length),
+        (0, 0),  # Close the loop
+    ]
+
+
+def get_square_traj(
+    start_position: np.ndarray,
+    start_wxyz: np.ndarray,
+    end_position: np.ndarray,
+    end_wxyz: np.ndarray,  # Unused but kept for consistent signature
+    timesteps: int,
+) -> jaxlie.SE3:
+    """Generates a 3D square trajectory based on handle positions."""
+    points_2d = np.array(create_square())
+    handle_diff = np.array(end_position) - np.array(start_position)
+    target_side_length = max(abs(handle_diff[0]), 0.1)
+
+    natural_side_length = points_2d[:, 0].max() - points_2d[:, 0].min()
+    scale = target_side_length / natural_side_length if natural_side_length > 1e-6 else 1.0
+    scaled_path_2d = points_2d * scale
+
+    local_points_3d = np.hstack([scaled_path_2d, np.zeros((scaled_path_2d.shape[0], 1))])
+    start_pose = jaxlie.SE3.from_rotation_and_translation(
+        jaxlie.SO3(wxyz=start_wxyz), translation=start_position
+    )
+    world_points = start_pose.apply(local_points_3d)
+
+    distances = np.cumsum(np.linalg.norm(np.diff(world_points, axis=0), axis=1))
+    distances = np.insert(distances, 0, 0)
+    new_distances = np.linspace(0, distances[-1], timesteps)
+
+    interp_coords = [np.interp(new_distances, distances, world_points[:, i]) for i in range(3)]
+    traj_positions = np.column_stack(interp_coords)
+    traj_wxyz = np.tile(np.array(start_wxyz), (timesteps, 1))
+
+    return jaxlie.SE3.from_rotation_and_translation(
+        jaxlie.SO3(wxyz=traj_wxyz), translation=traj_positions
+    )
+
+
 def get_sine_traj(
     start_position: np.ndarray,
     start_wxyz: np.ndarray,
@@ -243,7 +313,7 @@ def get_sine_traj(
     x_base = np.linspace(start_position[0], end_position[0], timesteps)
 
     t = np.linspace(0, 2 * np.pi, timesteps)
-    x_amplitude = 0.5
+    x_amplitude = 0.3
     x_sine = x_base + x_amplitude * np.sin(t)
 
     traj_positions = np.column_stack([x_sine, y_coords, z_coords])
@@ -256,7 +326,7 @@ def get_sine_traj(
 
 
 def viser_main():
-    world_coll_config_path = "configs/maps/constrain_motion_planning/obstacles_con.json"
+    world_coll_config_path = "configs/maps/constrain_motion_planning/obstacles_con_A.json"
     # Setup Environment
     robot = CCRobot.from_config("configs/robots/cc_con_eval.json")
     robot_coll = RobotCollision.from_config("configs/robots/cc_con_eval.json")
@@ -270,7 +340,20 @@ def viser_main():
         server, world_coll, is_handle_able=True, config_path=world_coll_config_path
     )
     obstacles_vis.create_mesh_visualizations()
-    """  Handle settings for words
+    """  
+    for square
+    start_handle_position = (-0.01, -2.46, 0.9)
+    start_handle_wxyz = (0.83, 0.54, 0.06, 0.1)
+    end_handle_position = (0.76, -1.31, 2.75)
+    end_handle_wxyz = (1.0, 0, 0, 0)
+
+    for sine
+    start_handle_position = (0.5, -2.17, 0.89)
+    start_handle_wxyz = (1, 0, 0, 0)
+    end_handle_position = (0.51, -2.17, 1.49)
+    end_handle_wxyz = (1.0, 0, 0, 0)
+    
+    Handle settings for words
     for letter "A"
     start_handle_position = (-0.01, -2.51, 0.76)
     start_handle_wxyz = (0.82, 0.47, 0.25, 0.2)
@@ -278,8 +361,8 @@ def viser_main():
     end_handle_wxyz = (1.0, 0, 0, 0)
     
     for letter "R"
-    start_handle_position = (-0.04, -2.53, 0.78)
-    start_handle_wxyz = (0.83, 0.48, 0.22, 0.18)
+    start_handle_position = (-0.05, -2.45, 0.93)
+    start_handle_wxyz = (0.85, 0.49, 0.15, 0.14)
     end_handle_position = (0.79, -1.26, 2.75)
     end_handle_wxyz = (1.0, 0, 0, 0)
     
@@ -290,15 +373,15 @@ def viser_main():
     end_handle_wxyz = (1.0, 0, 0, 0)
     
     for letter "I"
-    start_handle_position = (-0.01, -2.46, 0.9)
+    start_handle_position = (-0.01, -2.45, 0.91)
     start_handle_wxyz = (0.83, 0.54, 0.06, 0.1)
-    end_handle_position = (0.75, -1.31, 2.75)
+    end_handle_position = (0.75, -1.37, 2.75)
     end_handle_wxyz = (1.0, 0, 0, 0)
     """
 
-    start_handle_position = (-0.01, -2.46, 0.9)
-    start_handle_wxyz = (0.83, 0.54, 0.06, 0.1)
-    end_handle_position = (0.75, -1.31, 2.75)
+    start_handle_position = (-0.01, -2.51, 0.76)
+    start_handle_wxyz = (0.82, 0.47, 0.25, 0.2)
+    end_handle_position = (1.23, -1.25, 2.75)
     end_handle_wxyz = (1.0, 0, 0, 0)
     radius = robot.config.length * robot.config.num_sections
 
@@ -318,6 +401,7 @@ def viser_main():
 
     with server.gui.add_folder("Trajectory Controls"):
         linear_button = server.gui.add_button("Plan Linear Traj", disabled=False)
+        square_button = server.gui.add_button("Plan Square Traj", disabled=False)
         sine_button = server.gui.add_button("Plan Sine Traj", disabled=False)
         icra_button = server.gui.add_button("Plan ICRA Traj", disabled=False)
         replay_button = server.gui.add_button("Replay", disabled=True)
@@ -370,9 +454,14 @@ def viser_main():
 
         print("Start planning....")
         # Update obstacle information from the visualizer
+        start_time = time.time()
         cfg = traj_follow_jit(reference_traj, [obstacles_vis.world_coll.obstacles])
+        jax.block_until_ready(cfg)
+        end_time = time.time()
+        planning_time = end_time - start_time
+        print(f"Planning finished in {planning_time:.4f} seconds.")
+
         global_traj = robot.forward_kinematics(cfg)
-        print("Finish planning....")
 
         planned_tip_traj = jaxlie.SE3.from_matrix(global_traj[:, -1, :, :])
 
@@ -384,10 +473,17 @@ def viser_main():
         print(f"Position Error (std):  {metrics['pos_error_std']:.4f}m")
         print(f"Rotation Error (mean): {metrics['rot_error_mean']:.4f}rad")
         print(f"Rotation Error (std):  {metrics['rot_error_std']:.4f}rad")
+        print(f"Planning Time: {planning_time:.4f}s")
 
         # Save results
         save_dir = os.path.join("results", "traj_following", ref_traj_func.__name__)
         os.makedirs(save_dir, exist_ok=True)
+
+        # Save reference trajectory to CSV
+        ref_csv_filename = f"{ref_traj_func.__name__}_reference.csv"
+        ref_csv_save_path = os.path.join(save_dir, ref_csv_filename)
+        save_ref_traj_to_csv(reference_traj, ref_csv_save_path)
+
         filename = f"{ref_traj_func.__name__}.npz"
         save_path = os.path.join(save_dir, filename)
 
@@ -405,6 +501,7 @@ def viser_main():
                 target_position=np.asarray(reference_traj.translation()),
                 target_wxyz=np.asarray(reference_traj.rotation().wxyz),
                 planned_tip_traj=np.asarray(planned_tip_traj.as_matrix()),
+                planning_time=planning_time,
                 **{k: np.array(v) for k, v in metrics.items()},
             )
         else:
@@ -417,6 +514,7 @@ def viser_main():
                 target_position=np.asarray(reference_traj.translation()),
                 target_wxyz=np.asarray(reference_traj.rotation().wxyz),
                 planned_tip_traj=np.asarray(planned_tip_traj.as_matrix()),
+                planning_time=planning_time,
                 **{k: np.array(v) for k, v in metrics.items()},
             )
         print(f"Saved trajectory data to {save_path}")
@@ -424,12 +522,10 @@ def viser_main():
         # Plot and save the figure
         fig = plt.figure(facecolor="white", figsize=(12, 6))
         ax = fig.add_subplot(111, projection="3d")
-
         visualize_constrain_motion_planning(
-            save_path="results/traj_following/get_icra_traj/get_icra_traj.npz",
+            save_path=save_path,
             world_config_path=world_coll_config_path,
             ax=ax,
-            title="ICRA World Trajectory",
         )
 
         plt.tight_layout()
@@ -469,6 +565,7 @@ def viser_main():
         print("Replay finished.")
 
     linear_button.on_click(lambda _: plan_and_visualize(get_linear_traj))
+    square_button.on_click(lambda _: plan_and_visualize(get_square_traj))
     sine_button.on_click(lambda _: plan_and_visualize(get_sine_traj))
     icra_button.on_click(lambda _: plan_and_visualize(get_icra_traj))
     replay_button.on_click(replay_callback)
