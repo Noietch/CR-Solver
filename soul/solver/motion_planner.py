@@ -6,6 +6,7 @@ import jaxls
 import jaxlie
 import numpy as np
 import networkx as nx
+
 from ..robots.cc_robot import CCRobot, ConstantCurvatureState
 from ..geom import RobotCollision, CollGeom
 from ..costs import (
@@ -14,8 +15,6 @@ from ..costs import (
     smoothness_cost,
     continuous_collision_cost,
     trajectory_length_cost,
-    rest_base_cost,
-    colldist_from_sdf,
 )
 from .ik_solver import IKSolver
 from .utils import (
@@ -166,31 +165,8 @@ class ConstrainedMotionPlanner(MotionPlanner):
                 self.robot.var_cls(jnp.arange(0, self.timesteps - 1)),
                 jnp.array([40.0])[None],
             ),
-            # rest_base_cost(
-            #     traj_vars,
-            #     jnp.array([10.0])[None],
-            # ),
         ]
-        # 2. Add start and end pose constraints.
-        # factors.extend(
-        #     [
-        #         jaxls.Cost(
-        #             lambda vals, var: ((vals[var] - init_traj[0])).flatten() * 100.0,
-        #             (self.robot.var_cls(jnp.arange(0, 2)),),
-        #             name="start_pose_constraint",
-        #         ),
-        #         jaxls.Cost(
-        #             lambda vals, var: ((vals[var] - init_traj[-1])).flatten() * 100.0,
-        #             (
-        #                 self.robot.var_cls(
-        #                     jnp.arange(self.timesteps - 2, self.timesteps)
-        #                 ),
-        #             ),
-        #             name="end_pose_constraint",
-        #         ),
-        #     ]
-        # )
-        # 3. Add collision avoidance costs.
+        # 2. Add collision avoidance costs.
         for world_coll_obj in world_coll:
             factors.append(
                 continuous_collision_cost(
@@ -202,7 +178,7 @@ class ConstrainedMotionPlanner(MotionPlanner):
                     jnp.array([50.0])[None],
                 )
             )
-        # 5. Solve the optimization problem.
+        # 3. Solve the optimization problem.
         solution = (
             jaxls.LeastSquaresProblem(
                 factors,
@@ -217,7 +193,7 @@ class ConstrainedMotionPlanner(MotionPlanner):
         return solution[traj_vars]
 
 
-class SamplingBasedMotionPlanner(ConstrainedMotionPlanner):
+class PRMMotionPlanner(ConstrainedMotionPlanner):
     def __init__(
         self,
         *args,
@@ -573,7 +549,7 @@ class SamplingBasedMotionPlanner(ConstrainedMotionPlanner):
         )
 
 
-class RRTMotionPlanner(SamplingBasedMotionPlanner):
+class RRTMotionPlanner(PRMMotionPlanner):
     def __init__(
         self, *args, goal_sample_rate=0.2, step_size=0.1, max_iters=1000, **kwargs
     ):

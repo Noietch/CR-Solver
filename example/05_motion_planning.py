@@ -4,7 +4,7 @@ import viser
 import numpy as np
 from soul.robots.cc_robot import CCRobot
 from soul.geom import RobotCollision, WorldCollision
-from soul.solver import MotionPlanner, SamplingBasedMotionPlanner, RRTMotionPlanner
+from soul.solver import MotionPlanner, PRMMotionPlanner, RRTMotionPlanner
 from soul.visualization.visualizer_viser import ViserSoftRobot, ViserWorld
 
 DISABLE_JIT = False
@@ -17,7 +17,7 @@ if DISABLE_JIT:
     jax.config.update("jax_disable_jit", True)
 
 
-def viser_main_trajopt():
+def viser_main(method: str = "trajopt"):
     # Setup Environment
     robot = CCRobot.from_config("configs/robots/cc.json")
     robot_coll = RobotCollision.from_config("configs/robots/cc.json")
@@ -72,7 +72,11 @@ def viser_main_trajopt():
     timesteps = 100
     traj_solver = MotionPlanner(robot, robot_coll, timesteps)
     start_end_interpolate_jit = jax.jit(traj_solver.start_end_interpolate)
-    optimize_jit = jax.jit(traj_solver.optimize)
+    
+    # init motion planner
+    trajopt_solver = jax.jit(traj_solver.optimize)
+    rrt_traj_solver = RRTMotionPlanner(robot, robot_coll, timesteps)
+    prm_traj_solver = PRMMotionPlanner(robot, robot_coll, timesteps)
 
     traj = None
 
@@ -80,14 +84,50 @@ def viser_main_trajopt():
         print("Start planning....")
         global traj
 
-        cfg = start_end_interpolate_jit(
-            start_handle.position,
-            start_handle.wxyz,
-            end_handle.position,
-            end_handle.wxyz,
-            world_coll.collision_geoms,
-        )
-        cfg = optimize_jit(cfg, world_coll.collision_geoms)
+        if method == "trajopt":
+            cfg = start_end_interpolate_jit(
+                start_handle.position,
+                start_handle.wxyz,
+                end_handle.position,
+                end_handle.wxyz,
+                world_coll.collision_geoms,
+            )
+            cfg = trajopt_solver(cfg, world_coll.collision_geoms)
+
+        elif method == "prm":
+            results = prm_traj_solver._ik_solver_best(
+                start_handle.wxyz,
+                start_handle.position,
+                end_handle.wxyz,
+                end_handle.position,
+                world_coll.collision_geoms,
+            )
+            cfg = prm_traj_solver.find_path(
+                results[0],
+                results[1],
+                world_coll.collision_geoms,
+            )
+            if cfg is None:
+                print("No path found")
+                return
+            
+        elif method == "rrt":
+            results = rrt_traj_solver._ik_solver_best(
+                start_handle.wxyz,
+                start_handle.position,
+                end_handle.wxyz,
+                end_handle.position,
+                world_coll.collision_geoms,
+            )
+            cfg = rrt_traj_solver.find_path(
+                results[0],
+                results[1],
+                world_coll.collision_geoms,
+            )
+            if cfg is None:
+                print("No path found")
+                return
+
         traj = robot.forward_kinematics(cfg)
         print("Finish planning....")
         # robot_vis.visualize_traj_collisions(robot, cfg)
@@ -120,160 +160,5 @@ def viser_main_trajopt():
         time.sleep(1/60.0)
 
 
-def viser_main_prm():
-    # Setup Environment
-    robot = CCRobot.from_config("configs/robots/cc.json")
-    robot_coll = RobotCollision.from_config("configs/robots/cc.json")
-    world_coll = WorldCollision.from_config("configs/maps/obstacles_00.json")
-
-    # Setup Visualization
-    server = viser.ViserServer()
-    robot_vis = ViserSoftRobot(server, robot, robot_coll, root_node_name="/robot")
-    robot_vis.create_robot_visualizations()
-    obstacles_vis = ViserWorld(server, world_coll)
-    obstacles_vis.create_mesh_visualizations()
-
-    # Setup GUI
-    start_handle = server.scene.add_transform_controls(
-        "/start",
-        scale=0.3,
-        position=(1.0, 0.0, 2.5),
-        wxyz=(1, 0, 0, 0),
-    )
-    end_handle = server.scene.add_transform_controls(
-        "/end", scale=0.3, position=(0.0, -1.0, 2.5), wxyz=(1, 0, 0, 0)
-    )
-    plan_button = server.gui.add_button("Plan", disabled=False)
-    replay_button = server.gui.add_button("Replay", disabled=False)
-
-    # Set up trajopt parameters
-    timesteps = 100
-    traj_solver = SamplingBasedMotionPlanner(robot, robot_coll, timesteps)
-    # find_path_jit = jax.jit(traj_solver.find_path)
-    # optimize_jit = jax.jit(traj_solver.optimize)
-
-    traj = None
-
-    def plan_callback(args):
-        print("Start planning....")
-        global traj
-
-        cfg = traj_solver._ik_solver_best(
-            start_handle.wxyz,
-            start_handle.position,
-            end_handle.wxyz,
-            end_handle.position,
-            world_coll.collision_geoms,
-        )
-        cfg = traj_solver.find_path(
-            cfg[0],
-            cfg[1],
-            1000,
-            world_coll.collision_geoms,
-        )
-        if cfg is None:
-            print("No solution")
-            return
-        traj = robot.forward_kinematics(cfg)
-        print("Finish planning....")
-        robot_vis.visualize_traj_collisions(robot, cfg)
-        for i in range(timesteps):
-            time.sleep(1/60.0)
-            robot_vis.update_pose(traj[i])
-
-    def replay_callback(args):
-        global traj
-        if traj is None:
-            return
-        for i in range(timesteps):
-            time.sleep(1/60.0)
-            robot_vis.update_pose(traj[i])
-
-    plan_button.on_click(plan_callback)
-    replay_button.on_click(replay_callback)
-
-    while True:
-        # plan_callback(None)
-        time.sleep(1/60.0)
-
-
-def viser_main_rrt():
-    # Setup Environment
-    robot = CCRobot.from_config("configs/robots/cc.json")
-    robot_coll = RobotCollision.from_config("configs/robots/cc.json")
-    world_coll = WorldCollision.from_config("configs/maps/obstacles_00.json")
-
-    # Setup Visualization
-    server = viser.ViserServer()
-    robot_vis = ViserSoftRobot(server, robot, robot_coll, root_node_name="/robot")
-    robot_vis.create_robot_visualizations()
-    obstacles_vis = ViserWorld(server, world_coll)
-    obstacles_vis.create_mesh_visualizations()
-
-    # Setup GUI
-    start_handle = server.scene.add_transform_controls(
-        "/start",
-        scale=0.3,
-        position=(1.0, 0.0, 2.5),
-        wxyz=(1, 0, 0, 0),
-    )
-    end_handle = server.scene.add_transform_controls(
-        "/end", scale=0.3, position=(0.0, -1.0, 2.5), wxyz=(1, 0, 0, 0)
-    )
-    plan_button = server.gui.add_button("Plan", disabled=False)
-    replay_button = server.gui.add_button("Replay", disabled=False)
-
-    # Set up trajopt parameters
-    timesteps = 100
-    traj_solver = RRTMotionPlanner(robot, robot_coll, timesteps)
-    # find_path_jit = jax.jit(traj_solver.find_path)
-    # optimize_jit = jax.jit(traj_solver.optimize)
-
-    traj = None
-
-    def plan_callback(args):
-        print("Start planning....")
-        global traj
-
-        cfg = traj_solver._ik_solver_best(
-            start_handle.wxyz,
-            start_handle.position,
-            end_handle.wxyz,
-            end_handle.position,
-            world_coll.collision_geoms,
-        )
-        cfg = traj_solver.find_path(
-            cfg[0],
-            cfg[1],
-            world_coll.collision_geoms,
-        )
-        if cfg is None:
-            print("No solution")
-            return
-        traj = robot.forward_kinematics(cfg)
-        print("Finish planning....")
-        # robot_vis.visualize_traj_collisions(robot, cfg)
-        for i in range(timesteps):
-            time.sleep(1/60.0)
-            robot_vis.update_pose(traj[i])
-
-    def replay_callback(args):
-        global traj
-        if traj is None:
-            return
-        for i in range(timesteps):
-            time.sleep(1/60.0)
-            robot_vis.update_pose(traj[i])
-
-    plan_button.on_click(plan_callback)
-    replay_button.on_click(replay_callback)
-
-    while True:
-        # plan_callback(None)
-        time.sleep(1/60.0)
-
-
 if __name__ == "__main__":
-    viser_main_trajopt()
-    # viser_main_prm()
-    # viser_main_rrt()
+    viser_main(method="rrt")
