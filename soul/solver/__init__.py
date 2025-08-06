@@ -5,6 +5,8 @@ from .motion_planner import (
     RRTMotionPlanner,
 )
 from .ik_solver import IKSolver
+from .motion_planner_test.prm import ParallelPRM, PRMOptions
+from .motion_planner_test.hpolyhedron_sampler import HPolyhedronSampler, HPolyhedron
 
 __all__ = [
     "IKSolver",
@@ -12,4 +14,8 @@ __all__ = [
     "ConstrainedMotionPlanner",
     "PRMMotionPlanner",
     "RRTMotionPlanner",
+    'ParallelPRM',
+    'PRMOptions',
+    'HPolyhedronSampler',
+    'HPolyhedron'
 ]

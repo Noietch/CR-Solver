@@ -4,7 +4,7 @@ import viser
 import numpy as np
 from soul.robots.cc_robot import CCRobot
 from soul.geom import RobotCollision, WorldCollision
-from soul.solver import MotionPlanner, PRMMotionPlanner, RRTMotionPlanner
+from soul.solver import MotionPlanner, PRMMotionPlanner, RRTMotionPlanner, ParallelPRM
 from soul.visualization.visualizer_viser import ViserSoftRobot, ViserWorld, ViserRenderer
 
 DISABLE_JIT = False
@@ -80,7 +80,7 @@ def viser_main(method: str = "trajopt"):
     trajopt_solver = jax.jit(traj_solver.optimize)
     rrt_traj_solver = RRTMotionPlanner(robot, robot_coll, timesteps)
     prm_traj_solver = PRMMotionPlanner(robot, robot_coll, timesteps)
-
+    test_prm_traj_solver = ParallelPRM(robot, robot_coll)
     traj = None
 
     def plan_callback(args):
@@ -130,6 +130,29 @@ def viser_main(method: str = "trajopt"):
             if cfg is None:
                 print("No path found")
                 return
+        
+        elif method == "test":
+            results = rrt_traj_solver._ik_solver_best(
+                start_handle.wxyz,
+                start_handle.position,
+                end_handle.wxyz,
+                end_handle.position,
+                world_coll.collision_geoms,
+            )
+            # test_prm_traj_solver.build_roadmap(
+            #     5000,
+            #     world_coll.collision_geoms,
+            # )
+            # test_prm_traj_solver.save_roadmap("roadmap.pkl")
+            test_prm_traj_solver.load_roadmap("roadmap.pkl")
+            cfg = test_prm_traj_solver.find_path(
+                results[0],
+                results[1],
+                world_coll.collision_geoms,
+            )
+            if cfg is None:
+                print("No path found")
+                return
 
         traj = robot.forward_kinematics(cfg)
         print("Finish planning....")
@@ -143,7 +166,7 @@ def viser_main(method: str = "trajopt"):
         global traj
         if traj is None:
             return
-        for i in range(timesteps):
+        for i in range(len(traj)):
             robot_vis.update_pose(traj[i])
         print("Finish replaying....")
             
@@ -179,4 +202,4 @@ def viser_main(method: str = "trajopt"):
 
 
 if __name__ == "__main__":
-    viser_main(method="rrt")
+    viser_main(method="test")
