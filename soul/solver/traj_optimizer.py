@@ -125,7 +125,7 @@ class TrajOptimizer:
             )
         )
         return solution[traj_vars]
-    
+
     def optimize_tip_traj_follow(
         self, reference_traj: jaxlie.SE3, world_coll: Sequence[CollGeom]
     ):

@@ -14,8 +14,8 @@ __all__ = [
     "ConstrainedMotionPlanner",
     "PRMMotionPlanner",
     "RRTMotionPlanner",
-    'ParallelPRM',
-    'PRMOptions',
-    'HPolyhedronSampler',
-    'HPolyhedron'
+    "ParallelPRM",
+    "PRMOptions",
+    "HPolyhedronSampler",
+    "HPolyhedron",
 ]

@@ -108,8 +108,6 @@ def visualize_constrain_motion_planning(
 
     selected_poses = planned_traj_poses[sample_indices]
 
-
-
     visualize_cc_model_3d(
         pose=selected_poses,
         num_points=10,
@@ -117,10 +115,23 @@ def visualize_constrain_motion_planning(
         world_coll_config=world_config_path,
         save_path=save_path.replace(".npz", "_fk.png"),
     )
-    
-    ax.scatter(ref_traj_pos[:, 0], ref_traj_pos[:, 1], ref_traj_pos[:, 2], c="b", marker="o",s=1)
-    ax.scatter(planned_tip_pos[:, 0], planned_tip_pos[:, 1], planned_tip_pos[:, 2], c="r", marker="o",s=3)
 
+    ax.scatter(
+        ref_traj_pos[:, 0],
+        ref_traj_pos[:, 1],
+        ref_traj_pos[:, 2],
+        c="b",
+        marker="o",
+        s=1,
+    )
+    ax.scatter(
+        planned_tip_pos[:, 0],
+        planned_tip_pos[:, 1],
+        planned_tip_pos[:, 2],
+        c="r",
+        marker="o",
+        s=3,
+    )
 
     # ax.plot(ref_traj_pos[:, 0], ref_traj_pos[:, 1], ref_traj_pos[:, 2], "r--", linewidth=5 )
     # ax.plot(planned_tip_pos[:, 0], planned_tip_pos[:, 1], planned_tip_pos[:, 2], "b-", linewidth=5)

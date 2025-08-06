@@ -5,7 +5,11 @@ import numpy as np
 from soul.robots.cc_robot import CCRobot
 from soul.geom import RobotCollision, WorldCollision
 from soul.solver import MotionPlanner, PRMMotionPlanner, RRTMotionPlanner, ParallelPRM
-from soul.visualization.visualizer_viser import ViserSoftRobot, ViserWorld, ViserRenderer
+from soul.visualization.visualizer_viser import (
+    ViserSoftRobot,
+    ViserWorld,
+    ViserRenderer,
+)
 
 DISABLE_JIT = False
 
@@ -21,9 +25,7 @@ def viser_main(method: str = "trajopt"):
     # Setup Environment
     robot = CCRobot.from_config("configs/robots/cc.json")
     robot_coll = RobotCollision.from_config("configs/robots/cc.json")
-    world_coll = WorldCollision.from_config(
-        "configs/maps/mp_scene/mp_demo.json"
-    )
+    world_coll = WorldCollision.from_config("configs/maps/mp_scene/mp_demo.json")
 
     # Setup Visualization
     server = viser.ViserServer()
@@ -75,7 +77,7 @@ def viser_main(method: str = "trajopt"):
     timesteps = 100
     traj_solver = MotionPlanner(robot, robot_coll, timesteps)
     start_end_interpolate_jit = jax.jit(traj_solver.start_end_interpolate)
-    
+
     # init motion planner
     trajopt_solver = jax.jit(traj_solver.optimize)
     rrt_traj_solver = RRTMotionPlanner(robot, robot_coll, timesteps)
@@ -113,7 +115,7 @@ def viser_main(method: str = "trajopt"):
             if cfg is None:
                 print("No path found")
                 return
-            
+
         elif method == "rrt":
             results = rrt_traj_solver._ik_solver_best(
                 start_handle.wxyz,
@@ -130,7 +132,7 @@ def viser_main(method: str = "trajopt"):
             if cfg is None:
                 print("No path found")
                 return
-        
+
         elif method == "test":
             results = rrt_traj_solver._ik_solver_best(
                 start_handle.wxyz,
@@ -169,7 +171,7 @@ def viser_main(method: str = "trajopt"):
         for i in range(len(traj)):
             robot_vis.update_pose(traj[i])
         print("Finish replaying....")
-            
+
     def render_video_callback(event: viser.GuiEvent):
         global traj
         if traj is None:
@@ -198,7 +200,7 @@ def viser_main(method: str = "trajopt"):
     on_handle_update(start_handle)
 
     while True:
-        time.sleep(1/60.0)
+        time.sleep(1 / 60.0)
 
 
 if __name__ == "__main__":

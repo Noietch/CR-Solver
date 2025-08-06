@@ -15,6 +15,7 @@ from soul.geom import (
     CollGeom,
     colldist_from_sdf,
 )
+
 # TODO: 移除PRM的sample阶段计时
 jax.config.update("jax_default_matmul_precision", "highest")
 
@@ -840,7 +841,7 @@ def eval_mp_all_sections(
 
 
 if __name__ == "__main__":
-    test_list = [3,4,5,6]
+    test_list = [3, 4, 5, 6]
     repeat_num = 50  # Evaluate 10 times for each configuration
     robot_config_path = "configs/robots/cc_scene_eval.json"
     # world_config_path = "configs/maps/mp_maps/obstacles_lattice.json"

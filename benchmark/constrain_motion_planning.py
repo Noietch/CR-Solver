@@ -88,7 +88,7 @@ def get_icra_traj(
     The height is controlled by the y-difference between handles.
     """
     # word_funcs = {'I': create_I, 'C': create_C, 'R': create_R, 'A': create_A}
-    word_funcs = {'A': create_A}
+    word_funcs = {"A": create_A}
     word_str = "ICRA"
     letter_spacing = LETTER_WIDTH * 1.8
 
@@ -274,10 +274,14 @@ def get_square_traj(
     target_side_length = max(abs(handle_diff[0]), 0.1)
 
     natural_side_length = points_2d[:, 0].max() - points_2d[:, 0].min()
-    scale = target_side_length / natural_side_length if natural_side_length > 1e-6 else 1.0
+    scale = (
+        target_side_length / natural_side_length if natural_side_length > 1e-6 else 1.0
+    )
     scaled_path_2d = points_2d * scale
 
-    local_points_3d = np.hstack([scaled_path_2d, np.zeros((scaled_path_2d.shape[0], 1))])
+    local_points_3d = np.hstack(
+        [scaled_path_2d, np.zeros((scaled_path_2d.shape[0], 1))]
+    )
     start_pose = jaxlie.SE3.from_rotation_and_translation(
         jaxlie.SO3(wxyz=start_wxyz), translation=start_position
     )
@@ -287,7 +291,9 @@ def get_square_traj(
     distances = np.insert(distances, 0, 0)
     new_distances = np.linspace(0, distances[-1], timesteps)
 
-    interp_coords = [np.interp(new_distances, distances, world_points[:, i]) for i in range(3)]
+    interp_coords = [
+        np.interp(new_distances, distances, world_points[:, i]) for i in range(3)
+    ]
     traj_positions = np.column_stack(interp_coords)
     traj_wxyz = np.tile(np.array(start_wxyz), (timesteps, 1))
 
@@ -326,7 +332,9 @@ def get_sine_traj(
 
 
 def viser_main():
-    world_coll_config_path = "configs/maps/constrain_motion_planning/obstacles_con_A.json"
+    world_coll_config_path = (
+        "configs/maps/constrain_motion_planning/obstacles_con_A.json"
+    )
     # Setup Environment
     robot = CCRobot.from_config("configs/robots/cc_con_eval.json")
     robot_coll = RobotCollision.from_config("configs/robots/cc_con_eval.json")
