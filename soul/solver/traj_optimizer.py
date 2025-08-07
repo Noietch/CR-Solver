@@ -1,4 +1,5 @@
-from typing import Sequence
+from typing import Sequence, Optional
+from dataclasses import dataclass
 
 import jax
 import jax.numpy as jnp
@@ -7,6 +8,7 @@ import jaxlie
 import numpy as np
 
 from ..robots.cc_robot import CCRobot, ConstantCurvatureState
+from ..robots.tdcr_robot import TDCRRobot
 from ..geom import RobotCollision, CollGeom
 from ..costs import (
     pose_cost,
@@ -14,15 +16,50 @@ from ..costs import (
     smoothness_cost,
     continuous_collision_cost,
     trajectory_length_cost,
+    tendon_length_velocity_cost,
+    tendon_length_acceleration_cost,
 )
 from .ik_solver import IKSolver
 
 
+@dataclass
+class TrajOptimizerOptions:
+    """Options for trajectory optimization"""
+    # Basic costs weights
+    limit_weight: float = 10.0
+    smoothness_weight: float = 12.0
+    trajectory_length_weight: float = 15.0
+    
+    # Collision weight
+    collision_weight: float = 40.0
+    
+    # Constraint weights
+    start_pose_weight: float = 100.0
+    end_pose_weight: float = 100.0
+    
+    # Time optimization specific weights
+    tendon_vel_weight: float = 5.0
+    tendon_acc_weight: float = 10.0
+    # time_smoothness_weight: float = 8.0
+    # time_collision_weight: float = 40.0
+    
+    # Trajectory following weights
+    pose_position_weight: float = 100.0
+    pose_orientation_weight: float = 50.0
+    # follow_limit_weight: float = 100.0
+    # follow_smoothness_weight: float = 40.0
+    # follow_collision_weight: float = 50.0
+    
+    # Time step for time optimization
+    dt: float = 0.1
+
+
 class TrajOptimizer:
-    def __init__(self, robot: CCRobot, coll: RobotCollision, timesteps: int):
+    def __init__(self, robot: CCRobot, coll: RobotCollision, timesteps: int, options: Optional[TrajOptimizerOptions] = None):
         self.timesteps = timesteps
         self.robot = robot
         self.coll = coll
+        self.options = options or TrajOptimizerOptions()
         self.ik_solver = IKSolver(
             robot,
             num_seeds_init=10,
@@ -55,7 +92,7 @@ class TrajOptimizer:
         phi = jnp.linspace(results[0].phi, results[1].phi, self.timesteps)
         return ConstantCurvatureState(base_position=base_position, theta=theta, phi=phi)
 
-    def optimize_distance(
+    def optimize(
         self,
         init_traj: ConstantCurvatureState,
         world_coll: Sequence[CollGeom],
@@ -67,30 +104,30 @@ class TrajOptimizer:
             limit_cost(
                 self._robot_batch,
                 traj_vars,
-                jnp.array([10.0])[None],
+                jnp.array([self.options.limit_weight])[None],
             ),
             smoothness_cost(
                 self.robot.var_cls(jnp.arange(1, self.timesteps)),
                 self.robot.var_cls(jnp.arange(0, self.timesteps - 1)),
-                jnp.array([12.0])[None],
+                jnp.array([self.options.smoothness_weight])[None],
             ),
             trajectory_length_cost(
                 self._robot_batch,
                 self.robot.var_cls(jnp.arange(1, self.timesteps)),
                 self.robot.var_cls(jnp.arange(0, self.timesteps - 1)),
-                jnp.array([15.0])[None],
+                jnp.array([self.options.trajectory_length_weight])[None],
             ),
         ]
         # 2. Add start and end pose constraints.
         factors.extend(
             [
                 jaxls.Cost(
-                    lambda vals, var: ((vals[var] - init_traj[0])).flatten() * 100.0,
+                    lambda vals, var: ((vals[var] - init_traj[0])).flatten() * self.options.start_pose_weight,
                     (self.robot.var_cls(jnp.arange(0, 2)),),
                     name="start_pose_constraint",
                 ),
                 jaxls.Cost(
-                    lambda vals, var: ((vals[var] - init_traj[-1])).flatten() * 100.0,
+                    lambda vals, var: ((vals[var] - init_traj[-1])).flatten() * self.options.end_pose_weight,
                     (
                         self.robot.var_cls(
                             jnp.arange(self.timesteps - 2, self.timesteps)
@@ -109,7 +146,7 @@ class TrajOptimizer:
                     jax.tree.map(lambda x: x[None], world_coll_obj),
                     self.robot.var_cls(jnp.arange(0, self.timesteps - 1)),
                     self.robot.var_cls(jnp.arange(1, self.timesteps)),
-                    jnp.array([40.0])[None],
+                    jnp.array([self.options.collision_weight])[None],
                 )
             )
         # 5. Solve the optimization problem.
@@ -124,6 +161,113 @@ class TrajOptimizer:
                 initial_vals=jaxls.VarValues.make((traj_vars.with_value(init_traj),)),
             )
         )
+        return solution[traj_vars]
+
+    def optimize_tdcr(
+        self,
+        init_traj: ConstantCurvatureState,
+        world_coll: Sequence[CollGeom],
+    ):
+        """
+        Optimize trajectory with time-based smoothness constraints for tendon lengths.
+        This is specifically designed for TDCR robots to ensure smooth tendon movements.
+        
+        Args:
+            init_traj: Initial trajectory guess
+            world_coll: World collision objects
+            
+        Returns:
+            Optimized trajectory
+        """
+        traj_vars = self.robot.var_cls(jnp.arange(self.timesteps))
+        
+        # 1. Basic regularization / limit costs
+        factors: list[jaxls.Cost] = [
+            limit_cost(
+                self._robot_batch,
+                traj_vars,
+                jnp.array([self.options.limit_weight])[None],
+            ),
+            smoothness_cost(
+                self.robot.var_cls(jnp.arange(1, self.timesteps)),
+                self.robot.var_cls(jnp.arange(0, self.timesteps - 1)),
+                jnp.array([self.options.smoothness_weight])[None],
+            ),
+        ]
+        
+        # Tendon length velocity and acceleration smoothness
+        factors.extend(
+            [
+                tendon_length_velocity_cost(
+                    self._robot_batch,
+                    self.robot.var_cls(jnp.arange(1, self.timesteps)),
+                    self.robot.var_cls(jnp.arange(0, self.timesteps - 1)),
+                    jnp.array([self.options.dt])[None],
+                    jnp.array([self.options.tendon_vel_weight])[None],
+                ),
+                tendon_length_acceleration_cost(
+                    self._robot_batch,
+                    self.robot.var_cls(jnp.arange(0, self.timesteps - 2)),
+                    self.robot.var_cls(jnp.arange(1, self.timesteps - 1)),
+                    self.robot.var_cls(jnp.arange(2, self.timesteps)),
+                    jnp.array([self.options.dt])[None],
+                    jnp.array([self.options.tendon_acc_weight])[None],
+                ),
+            ]
+        )
+        
+        # 3. Add trajectory length cost for efficient motion
+        factors.append(
+            trajectory_length_cost(
+                self._robot_batch,
+                self.robot.var_cls(jnp.arange(1, self.timesteps)),
+                self.robot.var_cls(jnp.arange(0, self.timesteps - 1)),
+                jnp.array([self.options.trajectory_length_weight])[None],
+            )
+        )
+        
+        # 4. Add start and end pose constraints
+        factors.extend(
+            [
+                jaxls.Cost(
+                    lambda vals, var: ((vals[var] - init_traj[0])).flatten() * self.options.start_pose_weight,
+                    (self.robot.var_cls(jnp.array([0])),),
+                    name="start_pose_constraint",
+                ),
+                jaxls.Cost(
+                    lambda vals, var: ((vals[var] - init_traj[-1])).flatten() * self.options.end_pose_weight,
+                    (self.robot.var_cls(jnp.array([self.timesteps - 1])),),
+                    name="end_pose_constraint",
+                ),
+            ]
+        )
+        
+        # 5. Add collision avoidance costs
+        for world_coll_obj in world_coll:
+            factors.append(
+                continuous_collision_cost(
+                    self._robot_batch,
+                    self._robot_coll_batch,
+                    jax.tree.map(lambda x: x[None], world_coll_obj),
+                    self.robot.var_cls(jnp.arange(0, self.timesteps - 1)),
+                    self.robot.var_cls(jnp.arange(1, self.timesteps)),
+                    jnp.array([self.options.collision_weight])[None],
+                )
+            )
+        
+        # 6. Solve the optimization problem
+        solution = (
+            jaxls.LeastSquaresProblem(
+                factors,
+                [traj_vars],
+            )
+            .analyze()
+            .solve(
+                verbose=False,
+                initial_vals=jaxls.VarValues.make((traj_vars.with_value(init_traj),)),
+            )
+        )
+        
         return solution[traj_vars]
 
     def optimize_tip_traj_follow(
@@ -141,18 +285,18 @@ class TrajOptimizer:
                 self._robot_batch,
                 traj_vars,
                 reference_traj,
-                jnp.array([100.0])[None],
-                jnp.array([50.0])[None],
+                jnp.array([self.options.pose_position_weight])[None],
+                jnp.array([self.options.pose_orientation_weight])[None],
             ),
             limit_cost(
                 self._robot_batch,
                 traj_vars,
-                jnp.array([100.0])[None],
+                jnp.array([self.options.limit_weight])[None],
             ),
             smoothness_cost(
                 self.robot.var_cls(jnp.arange(1, self.timesteps)),
                 self.robot.var_cls(jnp.arange(0, self.timesteps - 1)),
-                jnp.array([40.0])[None],
+                jnp.array([self.options.smoothness_weight])[None],
             ),
         ]
         # 2. Add collision avoidance costs.
@@ -164,7 +308,7 @@ class TrajOptimizer:
                     jax.tree.map(lambda x: x[None], world_coll_obj),
                     self.robot.var_cls(jnp.arange(0, self.timesteps - 1)),
                     self.robot.var_cls(jnp.arange(1, self.timesteps)),
-                    jnp.array([50.0])[None],
+                    jnp.array([self.options.collision_weight])[None],
                 )
             )
         # 3. Solve the optimization problem.
