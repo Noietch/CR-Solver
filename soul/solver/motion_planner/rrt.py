@@ -84,18 +84,18 @@ class OptimizedRRT:
     
     def _check_single_collision_fn(
         self, state: ConstantCurvatureState, world_coll: Sequence[CollGeom]
-    ) -> bool:
+    ) -> jnp.ndarray:
         """Check collision for a single state"""
         
         # Check collision with world objects
+        has_collision = jnp.array(False)
         for world_obj in world_coll:
             dist_matrix = self.robot_coll.compute_world_collision_distance(
                 self.robot, state, world_obj, 1
             )
-            if jnp.any(dist_matrix < 0.0):
-                return True
+            has_collision = has_collision | jnp.any(dist_matrix < 0.0)
         
-        return False
+        return has_collision
     
     def _batch_check_collision_fn(
         self, states: ConstantCurvatureState, world_coll: Sequence[CollGeom]
@@ -282,7 +282,7 @@ class OptimizedRRT:
                 phi=interp_phi
             )
             
-            if self._check_single_collision(interp_state, world_coll):
+            if bool(self._check_single_collision(interp_state, world_coll)):
                 return False
         
         return True
@@ -358,10 +358,10 @@ class OptimizedRRT:
         Find path from start to goal using RRT.
         """
         # Check start and goal for collision
-        if self._check_single_collision(start, world_coll):
+        if bool(self._check_single_collision(start, world_coll)):
             print("Start configuration is in collision")
             return None
-        if self._check_single_collision(goal, world_coll):
+        if bool(self._check_single_collision(goal, world_coll)):
             print("Goal configuration is in collision")
             return None
         
@@ -386,7 +386,7 @@ class OptimizedRRT:
             new_state = self._steer(nearest, sample_single)
             
             # Check collision for new state
-            if self._check_single_collision(new_state, world_coll):
+            if bool(self._check_single_collision(new_state, world_coll)):
                 continue
             
             # Check edge collision

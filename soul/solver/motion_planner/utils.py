@@ -302,3 +302,121 @@ def sample_states_around_start_goal(
         theta=jnp.concatenate([sampled_from_start.theta, sampled_from_goal.theta]),
         phi=jnp.concatenate([sampled_from_start.phi, sampled_from_goal.phi]),
     )
+
+
+def resample_trajectory(
+    trajectory: ConstantCurvatureState, 
+    target_timesteps: int
+) -> ConstantCurvatureState:
+    """
+    Resample a trajectory to a target number of timesteps using linear interpolation.
+    
+    This function takes a trajectory of arbitrary length and resamples it to have
+    exactly `target_timesteps` points. It uses linear interpolation to compute
+    the intermediate values.
+    
+    Args:
+        trajectory: Input trajectory with shape (current_timesteps, ...)
+        target_timesteps: Desired number of timesteps in the output trajectory
+        
+    Returns:
+        Resampled trajectory with shape (target_timesteps, ...)
+    """
+    current_timesteps = trajectory.theta.shape[0]
+    
+    # Create interpolation indices
+    # Map from new indices to old indices
+    old_indices = jnp.linspace(0, current_timesteps - 1, current_timesteps)
+    new_indices = jnp.linspace(0, current_timesteps - 1, target_timesteps)
+    
+    # Helper function to interpolate a single dimension
+    def interpolate_1d(values_1d):
+        return jnp.interp(new_indices, old_indices, values_1d)
+    
+    # Interpolate each dimension of theta
+    num_theta_dims = trajectory.theta.shape[1]
+    new_theta = jnp.stack([
+        interpolate_1d(trajectory.theta[:, i]) 
+        for i in range(num_theta_dims)
+    ], axis=1)
+    
+    # Interpolate each dimension of phi
+    num_phi_dims = trajectory.phi.shape[1]
+    new_phi = jnp.stack([
+        interpolate_1d(trajectory.phi[:, i]) 
+        for i in range(num_phi_dims)
+    ], axis=1)
+    
+    # Interpolate each dimension of base_position
+    num_base_dims = trajectory.base_position.shape[1]
+    new_base = jnp.stack([
+        interpolate_1d(trajectory.base_position[:, i]) 
+        for i in range(num_base_dims)
+    ], axis=1)
+    
+    return ConstantCurvatureState(
+        base_position=new_base,
+        theta=new_theta,
+        phi=new_phi
+    )
+
+
+def resample_trajectory_smooth(
+    trajectory: ConstantCurvatureState, 
+    target_timesteps: int,
+    smoothing_factor: float = 0.0
+) -> ConstantCurvatureState:
+    """
+    Resample a trajectory with optional smoothing using spline interpolation.
+    
+    This is a more advanced version that can apply smoothing during resampling
+    to reduce noise in the trajectory. Uses cubic spline interpolation.
+    
+    Args:
+        trajectory: Input trajectory
+        target_timesteps: Desired number of timesteps
+        smoothing_factor: Amount of smoothing (0 = no smoothing, higher = more smoothing)
+        
+    Returns:
+        Resampled and optionally smoothed trajectory
+    """
+    from scipy.interpolate import UnivariateSpline
+    import numpy as np
+    
+    current_timesteps = trajectory.theta.shape[0]
+    
+    # Create time arrays
+    old_t = np.linspace(0, 1, current_timesteps)
+    new_t = np.linspace(0, 1, target_timesteps)
+    
+    # Helper to interpolate with optional smoothing
+    def interpolate_smooth_1d(values_1d):
+        values_np = np.array(values_1d)
+        if smoothing_factor > 0:
+            spline = UnivariateSpline(old_t, values_np, s=smoothing_factor)
+            return jnp.array(spline(new_t))
+        else:
+            # Use linear interpolation if no smoothing
+            return jnp.interp(new_t, old_t, values_np)
+    
+    # Process each dimension
+    new_theta = jnp.stack([
+        interpolate_smooth_1d(trajectory.theta[:, i]) 
+        for i in range(trajectory.theta.shape[1])
+    ], axis=1)
+    
+    new_phi = jnp.stack([
+        interpolate_smooth_1d(trajectory.phi[:, i]) 
+        for i in range(trajectory.phi.shape[1])
+    ], axis=1)
+    
+    new_base = jnp.stack([
+        interpolate_smooth_1d(trajectory.base_position[:, i]) 
+        for i in range(trajectory.base_position.shape[1])
+    ], axis=1)
+    
+    return ConstantCurvatureState(
+        base_position=new_base,
+        theta=new_theta,
+        phi=new_phi
+    )

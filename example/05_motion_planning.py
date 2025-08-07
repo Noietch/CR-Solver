@@ -2,9 +2,11 @@ import jax
 import time
 import viser
 import numpy as np
+import os
 from soul.robots.cc_robot import CCRobot
 from soul.geom import RobotCollision, WorldCollision
 from soul.solver import TrajOptimizer, ParallelPRM, PRMOptions, OptimizedRRT, RRTOptions
+from soul.solver.motion_planner import resample_trajectory
 from soul.visualization.visualizer_viser import (
     ViserSoftRobot,
     ViserWorld,
@@ -21,7 +23,7 @@ if DISABLE_JIT:
     jax.config.update("jax_disable_jit", True)
 
 
-def viser_main(method: str = "trajopt"):
+def viser_main(default_method: str = "trajopt"):
     # Setup Environment
     robot = CCRobot.from_config("configs/robots/cc.json")
     robot_coll = RobotCollision.from_config("configs/robots/cc.json")
@@ -68,36 +70,54 @@ def viser_main(method: str = "trajopt"):
             disabled=True,
         )
 
+    # Set up trajopt parameters
+    timesteps = 100
+    
+    with server.gui.add_folder("Planning Options"):
+        method_dropdown = server.gui.add_dropdown(
+            "Planning Method",
+            options=["trajopt", "rrt", "prm"],
+            initial_value=default_method,
+            hint="Select the motion planning algorithm"
+        )
+        use_trajopt_after_planner = server.gui.add_checkbox(
+            "Optimize after RRT/PRM", 
+            initial_value=True,
+            hint="Apply trajectory optimization after RRT/PRM planning"
+        )
+    
     plan_button = server.gui.add_button("Plan", disabled=False)
     replay_button = server.gui.add_button("Replay", disabled=False)
     render_video_button = server.gui.add_button("Render Video", disabled=False)
     render_image_button = server.gui.add_button("Render Image", disabled=False)
-
-    # Set up trajopt parameters
-    timesteps = 100
+    
+    # init motion planners
     traj_solver = TrajOptimizer(robot, robot_coll, timesteps)
     start_end_interpolate_jit = jax.jit(traj_solver.start_end_interpolate)
     start_end_ik_solver = traj_solver._ik_solver_best
-
-    # init motion planner
-    trajopt_solver = jax.jit(traj_solver.optimize_distance)
-    if method == "rrt":
-        rrt_options = RRTOptions(
-            batch_size=100,
-            max_iterations=1000,
-        )
-        rrt_traj_solver = OptimizedRRT(robot, robot_coll, rrt_options)
-    elif method == "prm":
-        prm_options = PRMOptions(
-            batch_size=2000,
-            parallel_edge_checks=200
-        )
-        prm_traj_solver = ParallelPRM(robot, robot_coll, prm_options)
-        if os.path.exists("roadmap_opt.pkl"):
-            prm_traj_solver.build_roadmap(1000, world_coll.collision_geoms)
-            prm_traj_solver.save_roadmap("roadmap_opt.pkl")
-        else:
-            prm_traj_solver.load_roadmap("roadmap_opt.pkl")
+    traj_opt = jax.jit(traj_solver.optimize)
+    forward_kinematics = jax.jit(jax.vmap(robot._forward_kinematics))
+    
+    # Initialize RRT solver
+    rrt_options = RRTOptions(
+        batch_size=100,
+        max_iterations=1000,
+    )
+    rrt_traj_solver = OptimizedRRT(robot, robot_coll, rrt_options)
+    
+    # Initialize PRM solver
+    prm_options = PRMOptions(
+        batch_size=2000,
+        parallel_edge_checks=200
+    )
+    prm_traj_solver = ParallelPRM(robot, robot_coll, prm_options)
+    if os.path.exists("roadmap_opt.pkl"):
+        print("Loading existing roadmap...")
+        prm_traj_solver.load_roadmap("roadmap_opt.pkl")
+    else:
+        print("Building new roadmap...")
+        prm_traj_solver.build_roadmap(1000, world_coll.collision_geoms)
+        prm_traj_solver.save_roadmap("roadmap_opt.pkl")
 
     traj = None
     print("Init done")
@@ -105,8 +125,15 @@ def viser_main(method: str = "trajopt"):
     def plan_callback(args):
         print("Start planning....")
         global traj
+        
+        # Get current options from GUI
+        method = method_dropdown.value
+        target_timesteps = timesteps
+        
+        print(f"Using method: {method}")
 
         if method == "trajopt":
+            # Create optimizer with correct timesteps
             cfg = start_end_interpolate_jit(
                 start_handle.position,
                 start_handle.wxyz,
@@ -114,7 +141,8 @@ def viser_main(method: str = "trajopt"):
                 end_handle.wxyz,
                 world_coll.collision_geoms,
             )
-            cfg = trajopt_solver(cfg, world_coll.collision_geoms)
+            # Optimize trajectory
+            cfg = traj_opt(cfg, world_coll.collision_geoms)
 
         elif method == "prm":
             results = start_end_ik_solver(
@@ -132,6 +160,13 @@ def viser_main(method: str = "trajopt"):
             if cfg is None:
                 print("No path found")
                 return
+            
+            # Resample PRM path to fixed timesteps
+            print(f"PRM path length: {cfg.theta.shape[0]} timesteps")
+            if use_trajopt_after_planner.value:
+                cfg = resample_trajectory(cfg, target_timesteps)
+                print(f"Resampled to: {cfg.theta.shape[0]} timesteps")
+                cfg = traj_opt(cfg, world_coll.collision_geoms)
 
         elif method == "rrt":
             results = start_end_ik_solver(
@@ -149,8 +184,16 @@ def viser_main(method: str = "trajopt"):
             if cfg is None:
                 print("No path found")
                 return
+            
+            # Resample RRT path to fixed timesteps
+            print(f"RRT path length: {cfg.theta.shape[0]} timesteps")
+            if use_trajopt_after_planner.value:
+                cfg = resample_trajectory(cfg, target_timesteps)
+                print(f"Resampled to: {cfg.theta.shape[0]} timesteps")
+                cfg = traj_opt(cfg, world_coll.collision_geoms)
 
-        traj = robot.forward_kinematics(cfg)
+        traj = forward_kinematics(cfg)
+        traj = jax.block_until_ready(traj)
         print("Finish planning....")
         for i in range(len(traj)):
             time.sleep(1/60.0)
@@ -197,4 +240,4 @@ def viser_main(method: str = "trajopt"):
 
 
 if __name__ == "__main__":
-    viser_main(method="rrt")
+    viser_main(default_method="trajopt")
