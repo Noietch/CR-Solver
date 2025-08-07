@@ -4,7 +4,7 @@ import viser
 import numpy as np
 from soul.robots.cc_robot import CCRobot
 from soul.geom import RobotCollision, WorldCollision
-from soul.solver import MotionPlanner, PRMMotionPlanner, RRTMotionPlanner, ParallelPRM
+from soul.solver import TrajOptimizer, ParallelPRM, PRMOptions, OptimizedRRT, RRTOptions
 from soul.visualization.visualizer_viser import (
     ViserSoftRobot,
     ViserWorld,
@@ -75,15 +75,32 @@ def viser_main(method: str = "trajopt"):
 
     # Set up trajopt parameters
     timesteps = 100
-    traj_solver = MotionPlanner(robot, robot_coll, timesteps)
+    traj_solver = TrajOptimizer(robot, robot_coll, timesteps)
     start_end_interpolate_jit = jax.jit(traj_solver.start_end_interpolate)
+    start_end_ik_solver = traj_solver._ik_solver_best
 
     # init motion planner
-    trajopt_solver = jax.jit(traj_solver.optimize)
-    rrt_traj_solver = RRTMotionPlanner(robot, robot_coll, timesteps)
-    prm_traj_solver = PRMMotionPlanner(robot, robot_coll, timesteps)
-    test_prm_traj_solver = ParallelPRM(robot, robot_coll)
+    trajopt_solver = jax.jit(traj_solver.optimize_distance)
+    if method == "rrt":
+        rrt_options = RRTOptions(
+            batch_size=100,
+            max_iterations=1000,
+        )
+        rrt_traj_solver = OptimizedRRT(robot, robot_coll, rrt_options)
+    elif method == "prm":
+        prm_options = PRMOptions(
+            batch_size=2000,
+            parallel_edge_checks=200
+        )
+        prm_traj_solver = ParallelPRM(robot, robot_coll, prm_options)
+        if os.path.exists("roadmap_opt.pkl"):
+            prm_traj_solver.build_roadmap(1000, world_coll.collision_geoms)
+            prm_traj_solver.save_roadmap("roadmap_opt.pkl")
+        else:
+            prm_traj_solver.load_roadmap("roadmap_opt.pkl")
+
     traj = None
+    print("Init done")
 
     def plan_callback(args):
         print("Start planning....")
@@ -100,7 +117,7 @@ def viser_main(method: str = "trajopt"):
             cfg = trajopt_solver(cfg, world_coll.collision_geoms)
 
         elif method == "prm":
-            results = prm_traj_solver._ik_solver_best(
+            results = start_end_ik_solver(
                 start_handle.wxyz,
                 start_handle.position,
                 end_handle.wxyz,
@@ -117,7 +134,7 @@ def viser_main(method: str = "trajopt"):
                 return
 
         elif method == "rrt":
-            results = rrt_traj_solver._ik_solver_best(
+            results = start_end_ik_solver(
                 start_handle.wxyz,
                 start_handle.position,
                 end_handle.wxyz,
@@ -133,35 +150,11 @@ def viser_main(method: str = "trajopt"):
                 print("No path found")
                 return
 
-        elif method == "test":
-            results = rrt_traj_solver._ik_solver_best(
-                start_handle.wxyz,
-                start_handle.position,
-                end_handle.wxyz,
-                end_handle.position,
-                world_coll.collision_geoms,
-            )
-            # test_prm_traj_solver.build_roadmap(
-            #     10000,
-            #     world_coll.collision_geoms,
-            # )
-            # test_prm_traj_solver.save_roadmap("roadmap.pkl")
-            test_prm_traj_solver.load_roadmap("roadmap.pkl")
-            cfg = test_prm_traj_solver.find_path(
-                results[0],
-                results[1],
-                world_coll.collision_geoms,
-            )
-            if cfg is None:
-                print("No path found")
-                return
-
         traj = robot.forward_kinematics(cfg)
         print("Finish planning....")
-        # robot_vis.visualize_traj_collisions(robot, cfg)
-        # for i in range(timesteps):
-        #     time.sleep(1/60.0)
-        #     robot_vis.update_pose(traj[i])
+        for i in range(len(traj)):
+            time.sleep(1/60.0)
+            robot_vis.update_pose(traj[i])
 
     def replay_callback(args):
         print("Start replaying....")
@@ -204,4 +197,4 @@ def viser_main(method: str = "trajopt"):
 
 
 if __name__ == "__main__":
-    viser_main(method="test")
+    viser_main(method="rrt")
