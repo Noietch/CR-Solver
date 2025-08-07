@@ -5,6 +5,7 @@ from jax import Array
 from jaxls import Cost, Var, VarValues
 
 from ..robots.cc_robot import CCRobot, ConstantCurvatureState
+from ..robots.tdcr_robot import TDCRRobot
 from ..geom.collision_cc_robot import RobotCollision
 from ..geom.geometry import CollGeom
 from ..geom.collision import colldist_from_sdf, collide
@@ -244,75 +245,126 @@ def trajectory_length_cost(
     return (dists * weight).flatten()
 
 
-# --- Finite Difference Costs (Velocity, Acceleration, Jerk) ---
-
-
 @Cost.create_factory
-def five_point_velocity_cost(
+def tendon_length_velocity_cost(
     vals: VarValues,
-    robot: CCRobot,  # Needed for limits
-    var_t_plus_2: Var[Array],
-    var_t_plus_1: Var[Array],
-    var_t_minus_1: Var[Array],
-    var_t_minus_2: Var[Array],
+    robot: TDCRRobot,
+    curr_robot_var: Var[ConstantCurvatureState],
+    past_robot_var: Var[ConstantCurvatureState],
     dt: float,
     weight: Array | float,
 ) -> Array:
-    """Computes the residual penalizing velocity limit violations (5-point stencil)."""
-    q_tm2 = vals[var_t_minus_2].theta
-    q_tm1 = vals[var_t_minus_1].theta
-    q_tp1 = vals[var_t_plus_1].theta
-    q_tp2 = vals[var_t_plus_2].theta
-
-    velocity = (-q_tp2 + 8 * q_tp1 - 8 * q_tm1 + q_tm2) / (12 * dt)
-    vel_limits = 0
-    limit_violation = jnp.maximum(0.0, jnp.abs(velocity) - vel_limits)
-    return (limit_violation * weight).flatten()
-
-
-@Cost.create_factory
-def five_point_acceleration_cost(
-    vals: VarValues,
-    var_t: Var[Array],
-    var_t_plus_2: Var[Array],
-    var_t_plus_1: Var[Array],
-    var_t_minus_1: Var[Array],
-    var_t_minus_2: Var[Array],
-    dt: float,
-    weight: Array | float,
-) -> Array:
-    """Computes the residual minimizing joint acceleration (5-point stencil)."""
-    q_tm2 = vals[var_t_minus_2].theta
-    q_tm1 = vals[var_t_minus_1].theta
-    q_t = vals[var_t].theta
-    q_tp1 = vals[var_t_plus_1].theta
-    q_tp2 = vals[var_t_plus_2].theta
-
-    acceleration = (-q_tp2 + 16 * q_tp1 - 30 * q_t + 16 * q_tm1 - q_tm2) / (12 * dt**2)
-    return (acceleration * weight).flatten()
+    """
+    Computes the residual penalizing tendon length velocity.
+    This ensures smooth tendon movements between time steps.
+    
+    Args:
+        vals: Variable values
+        robot: TDCR robot instance
+        curr_robot_var: Current robot state variable
+        past_robot_var: Previous robot state variable
+        dt: Time step between states
+        weight: Weight for the cost
+    
+    Returns:
+        Weighted residual for tendon length velocity
+    """
+    curr_state = vals[curr_robot_var]
+    past_state = vals[past_robot_var]
+    
+    # Calculate tendon lengths for both states
+    curr_tendon_lengths = robot.calculate_tendon_lengths(curr_state)
+    past_tendon_lengths = robot.calculate_tendon_lengths(past_state)
+    
+    # Calculate velocity (change in length / dt)
+    tendon_velocities = (curr_tendon_lengths - past_tendon_lengths) / dt
+    
+    # Return weighted velocity residual
+    return (tendon_velocities * weight).flatten()
 
 
 @Cost.create_factory
-def five_point_jerk_cost(
+def tendon_length_acceleration_cost(
     vals: VarValues,
-    var_t_plus_3: Var[Array],
-    var_t_plus_2: Var[Array],
-    var_t_plus_1: Var[Array],
-    var_t_minus_1: Var[Array],
-    var_t_minus_2: Var[Array],
-    var_t_minus_3: Var[Array],
+    robot: TDCRRobot,
+    prev_robot_var: Var[ConstantCurvatureState],
+    curr_robot_var: Var[ConstantCurvatureState],
+    next_robot_var: Var[ConstantCurvatureState],
     dt: float,
     weight: Array | float,
 ) -> Array:
-    """Computes the residual minimizing joint jerk (7-point stencil)."""
-    q_tm3 = vals[var_t_minus_3].theta
-    q_tm2 = vals[var_t_minus_2].theta
-    q_tm1 = vals[var_t_minus_1].theta
-    q_tp1 = vals[var_t_plus_1].theta
-    q_tp2 = vals[var_t_plus_2].theta
-    q_tp3 = vals[var_t_plus_3].theta
+    """
+    Computes the residual penalizing tendon length acceleration.
+    This ensures smooth acceleration profiles for tendon movements.
+    
+    Args:
+        vals: Variable values
+        robot: TDCR robot instance
+        prev_robot_var: Previous robot state variable (t-1)
+        curr_robot_var: Current robot state variable (t)
+        next_robot_var: Next robot state variable (t+1)
+        dt: Time step between states
+        weight: Weight for the cost
+    
+    Returns:
+        Weighted residual for tendon length acceleration
+    """
+    prev_state = vals[prev_robot_var]
+    curr_state = vals[curr_robot_var]
+    next_state = vals[next_robot_var]
+    
+    # Calculate tendon lengths for all three states
+    prev_tendon_lengths = robot.calculate_tendon_lengths(prev_state)
+    curr_tendon_lengths = robot.calculate_tendon_lengths(curr_state)
+    next_tendon_lengths = robot.calculate_tendon_lengths(next_state)
+    
+    # Calculate velocities
+    vel_curr = (curr_tendon_lengths - prev_tendon_lengths) / dt
+    vel_next = (next_tendon_lengths - curr_tendon_lengths) / dt
+    
+    # Calculate acceleration (change in velocity / dt)
+    tendon_accelerations = (vel_next - vel_curr) / dt
+    
+    # Return weighted acceleration residual
+    return (tendon_accelerations * weight).flatten()
 
-    jerk = (-q_tp3 + 8 * q_tp2 - 13 * q_tp1 + 13 * q_tm1 - 8 * q_tm2 + q_tm3) / (
-        8 * dt**3
-    )
-    return (jerk * weight).flatten()
+
+@Cost.create_factory
+def tendon_length_jerk_cost(
+    vals: VarValues,
+    robot: TDCRRobot,
+    robot_vars: list[Var[ConstantCurvatureState]],
+    dt: float,
+    weight: Array | float,
+) -> Array:
+    """
+    Computes the residual penalizing tendon length jerk (rate of change of acceleration).
+    This ensures very smooth tendon movements with minimal jerky motion.
+    
+    Args:
+        vals: Variable values
+        robot: TDCR robot instance
+        robot_vars: List of 4 consecutive robot state variables [t-1, t, t+1, t+2]
+        dt: Time step between states
+        weight: Weight for the cost
+    
+    Returns:
+        Weighted residual for tendon length jerk
+    """
+    assert len(robot_vars) == 4, "Jerk cost requires 4 consecutive states"
+    
+    # Get states
+    states = [vals[var] for var in robot_vars]
+    
+    # Calculate tendon lengths for all states
+    tendon_lengths = [robot.calculate_tendon_lengths(state) for state in states]
+    
+    # Calculate accelerations at t and t+1
+    acc_t = ((tendon_lengths[2] - tendon_lengths[1]) - (tendon_lengths[1] - tendon_lengths[0])) / (dt * dt)
+    acc_t1 = ((tendon_lengths[3] - tendon_lengths[2]) - (tendon_lengths[2] - tendon_lengths[1])) / (dt * dt)
+    
+    # Calculate jerk (change in acceleration / dt)
+    tendon_jerk = (acc_t1 - acc_t) / dt
+    
+    # Return weighted jerk residual
+    return (tendon_jerk * weight).flatten()
