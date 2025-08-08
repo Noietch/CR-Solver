@@ -4,8 +4,16 @@ import viser
 import numpy as np
 import os
 from soul.robots.cc_robot import CCRobot
+from soul.robots.tdcr_robot import TDCRRobot
 from soul.geom import RobotCollision, WorldCollision
-from soul.solver import TrajOptimizer, ParallelPRM, PRMOptions, OptimizedRRT, RRTOptions
+from soul.solver import (
+    TrajOptimizer,
+    TrajOptimizerOptions,
+    ParallelPRM,
+    PRMOptions,
+    OptimizedRRT,
+    RRTOptions,
+)
 from soul.solver.motion_planner import resample_trajectory
 from soul.visualization.visualizer_viser import (
     ViserSoftRobot,
@@ -23,10 +31,14 @@ if DISABLE_JIT:
     jax.config.update("jax_disable_jit", True)
 
 
-def viser_main(default_method: str = "trajopt"):
-    # Setup Environment
-    robot = CCRobot.from_config("configs/robots/cc.json")
-    robot_coll = RobotCollision.from_config("configs/robots/cc.json")
+def viser_main(robot_type: str = "cc", default_method: str = "trajopt"):
+    # Setup Robot Environment
+    if robot_type == "cc":
+        robot = CCRobot.from_config("configs/robots/cc.json")
+        robot_coll = RobotCollision.from_config("configs/robots/cc.json")
+    elif robot_type == "tdcr":
+        robot = TDCRRobot.from_config("configs/robots/cc_tdcr.json")
+        robot_coll = RobotCollision.from_config("configs/robots/cc_tdcr.json")
     world_coll = WorldCollision.from_config("configs/maps/mp_scene/mp_demo.json")
 
     # Setup Visualization
@@ -72,44 +84,152 @@ def viser_main(default_method: str = "trajopt"):
 
     # Set up trajopt parameters
     timesteps = 100
-    
+
+    # Initialize trajectory optimizer options
+    traj_options = TrajOptimizerOptions()
+
     with server.gui.add_folder("Planning Options"):
         method_dropdown = server.gui.add_dropdown(
             "Planning Method",
             options=["trajopt", "rrt", "prm"],
             initial_value=default_method,
-            hint="Select the motion planning algorithm"
+            hint="Select the motion planning algorithm",
         )
         use_trajopt_after_planner = server.gui.add_checkbox(
-            "Optimize after RRT/PRM", 
+            "Optimize after RRT/PRM",
             initial_value=True,
-            hint="Apply trajectory optimization after RRT/PRM planning"
+            hint="Apply trajectory optimization after RRT/PRM planning",
         )
-    
+
+    # Add cost weight controls
+    with server.gui.add_folder("Cost Weights"):
+        # Basic costs
+        limit_weight_slider = server.gui.add_slider(
+            "Limit Weight",
+            min=0.0,
+            max=100.0,
+            step=1.0,
+            initial_value=traj_options.limit_weight,
+            hint="Weight for joint limit constraints",
+        )
+        smoothness_weight_slider = server.gui.add_slider(
+            "Smoothness Weight",
+            min=0.0,
+            max=100.0,
+            step=1.0,
+            initial_value=traj_options.smoothness_weight,
+            hint="Weight for trajectory smoothness",
+        )
+        traj_length_weight_slider = server.gui.add_slider(
+            "Trajectory Length Weight",
+            min=0.0,
+            max=100.0,
+            step=1.0,
+            initial_value=traj_options.trajectory_length_weight,
+            hint="Weight for minimizing trajectory length",
+        )
+
+        # Collision weight
+        collision_weight_slider = server.gui.add_slider(
+            "Collision Weight",
+            min=0.0,
+            max=200.0,
+            step=5.0,
+            initial_value=traj_options.collision_weight,
+            hint="Weight for collision avoidance",
+        )
+
+        # Constraint weights
+        start_pose_weight_slider = server.gui.add_slider(
+            "Start Pose Weight",
+            min=0.0,
+            max=500.0,
+            step=10.0,
+            initial_value=traj_options.start_pose_weight,
+            hint="Weight for start pose constraint",
+        )
+        end_pose_weight_slider = server.gui.add_slider(
+            "End Pose Weight",
+            min=0.0,
+            max=500.0,
+            step=10.0,
+            initial_value=traj_options.end_pose_weight,
+            hint="Weight for end pose constraint",
+        )
+
+        # TDCR-specific weights (only show for TDCR robot)
+        if robot_type == "tdcr":
+            tendon_vel_weight_slider = server.gui.add_slider(
+                "Tendon Velocity Weight",
+                min=0.0,
+                max=50.0,
+                step=1.0,
+                initial_value=traj_options.tendon_vel_weight,
+                hint="Weight for tendon velocity smoothness",
+            )
+            tendon_acc_weight_slider = server.gui.add_slider(
+                "Tendon Acceleration Weight",
+                min=0.0,
+                max=50.0,
+                step=1.0,
+                initial_value=traj_options.tendon_acc_weight,
+                hint="Weight for tendon acceleration smoothness",
+            )
+            dt_slider = server.gui.add_slider(
+                "Time Step (dt)",
+                min=0.01,
+                max=1.0,
+                step=0.01,
+                initial_value=traj_options.dt,
+                hint="Time step for time-based costs",
+            )
+
+        # Add reset button for weights
+        reset_weights_button = server.gui.add_button("Reset Weights to Default")
+
+        def reset_weights_callback(args):
+            """Reset all weights to default values."""
+            default_options = TrajOptimizerOptions()
+            limit_weight_slider.value = default_options.limit_weight
+            smoothness_weight_slider.value = default_options.smoothness_weight
+            traj_length_weight_slider.value = default_options.trajectory_length_weight
+            collision_weight_slider.value = default_options.collision_weight
+            start_pose_weight_slider.value = default_options.start_pose_weight
+            end_pose_weight_slider.value = default_options.end_pose_weight
+            if robot_type == "tdcr":
+                tendon_vel_weight_slider.value = default_options.tendon_vel_weight
+                tendon_acc_weight_slider.value = default_options.tendon_acc_weight
+                dt_slider.value = default_options.dt
+            print("Weights reset to default values")
+
+        reset_weights_button.on_click(reset_weights_callback)
+
     plan_button = server.gui.add_button("Plan", disabled=False)
     replay_button = server.gui.add_button("Replay", disabled=False)
     render_video_button = server.gui.add_button("Render Video", disabled=False)
     render_image_button = server.gui.add_button("Render Image", disabled=False)
-    
+
     # init motion planners
-    traj_solver = TrajOptimizer(robot, robot_coll, timesteps)
+    traj_solver = TrajOptimizer(robot, robot_coll, timesteps, options=traj_options)
     start_end_interpolate_jit = jax.jit(traj_solver.start_end_interpolate)
     start_end_ik_solver = traj_solver._ik_solver_best
-    traj_opt = jax.jit(traj_solver.optimize)
+    if robot_type == "cc":
+        # JIT compile without making options static - they will be traced as dynamic values
+        traj_opt = jax.jit(traj_solver.optimize)
+    elif robot_type == "tdcr":
+        # JIT compile without making options static - they will be traced as dynamic values
+        traj_opt = jax.jit(traj_solver.optimize_tdcr)
     forward_kinematics = jax.jit(jax.vmap(robot._forward_kinematics))
-    
+
     # Initialize RRT solver
     rrt_options = RRTOptions(
         batch_size=100,
         max_iterations=1000,
     )
     rrt_traj_solver = OptimizedRRT(robot, robot_coll, rrt_options)
-    
+
     # Initialize PRM solver
-    prm_options = PRMOptions(
-        batch_size=2000,
-        parallel_edge_checks=200
-    )
+    prm_options = PRMOptions(batch_size=2000, parallel_edge_checks=200)
     prm_traj_solver = ParallelPRM(robot, robot_coll, prm_options)
     if os.path.exists("roadmap_opt.pkl"):
         print("Loading existing roadmap...")
@@ -125,13 +245,25 @@ def viser_main(default_method: str = "trajopt"):
     def plan_callback(args):
         print("Start planning....")
         global traj
-        
+
+        # Update trajectory optimizer options from UI
+        traj_options.limit_weight = limit_weight_slider.value
+        traj_options.smoothness_weight = smoothness_weight_slider.value
+        traj_options.trajectory_length_weight = traj_length_weight_slider.value
+        traj_options.collision_weight = collision_weight_slider.value
+        traj_options.start_pose_weight = start_pose_weight_slider.value
+        traj_options.end_pose_weight = end_pose_weight_slider.value
+
+        if robot_type == "tdcr":
+            traj_options.tendon_vel_weight = tendon_vel_weight_slider.value
+            traj_options.tendon_acc_weight = tendon_acc_weight_slider.value
+            traj_options.dt = dt_slider.value
+
         # Get current options from GUI
         method = method_dropdown.value
         target_timesteps = timesteps
-        
-        print(f"Using method: {method}")
 
+        print(f"Using method: {method}")
         if method == "trajopt":
             # Create optimizer with correct timesteps
             cfg = start_end_interpolate_jit(
@@ -141,8 +273,32 @@ def viser_main(default_method: str = "trajopt"):
                 end_handle.wxyz,
                 world_coll.collision_geoms,
             )
-            # Optimize trajectory
-            cfg = traj_opt(cfg, world_coll.collision_geoms)
+            # Optimize trajectory with current options
+            if robot_type == "cc":
+                cfg = traj_opt(
+                    cfg,
+                    world_coll.collision_geoms,
+                    limit_weight=traj_options.limit_weight,
+                    smoothness_weight=traj_options.smoothness_weight,
+                    trajectory_length_weight=traj_options.trajectory_length_weight,
+                    collision_weight=traj_options.collision_weight,
+                    start_pose_weight=traj_options.start_pose_weight,
+                    end_pose_weight=traj_options.end_pose_weight,
+                )
+            elif robot_type == "tdcr":
+                cfg = traj_opt(
+                    cfg,
+                    world_coll.collision_geoms,
+                    limit_weight=traj_options.limit_weight,
+                    smoothness_weight=traj_options.smoothness_weight,
+                    trajectory_length_weight=traj_options.trajectory_length_weight,
+                    collision_weight=traj_options.collision_weight,
+                    start_pose_weight=traj_options.start_pose_weight,
+                    end_pose_weight=traj_options.end_pose_weight,
+                    tendon_vel_weight=traj_options.tendon_vel_weight,
+                    tendon_acc_weight=traj_options.tendon_acc_weight,
+                    dt=traj_options.dt,
+                )
 
         elif method == "prm":
             results = start_end_ik_solver(
@@ -160,13 +316,37 @@ def viser_main(default_method: str = "trajopt"):
             if cfg is None:
                 print("No path found")
                 return
-            
+
             # Resample PRM path to fixed timesteps
             print(f"PRM path length: {cfg.theta.shape[0]} timesteps")
             if use_trajopt_after_planner.value:
                 cfg = resample_trajectory(cfg, target_timesteps)
                 print(f"Resampled to: {cfg.theta.shape[0]} timesteps")
-                cfg = traj_opt(cfg, world_coll.collision_geoms)
+                if robot_type == "cc":
+                    cfg = traj_opt(
+                        cfg,
+                        world_coll.collision_geoms,
+                        limit_weight=traj_options.limit_weight,
+                        smoothness_weight=traj_options.smoothness_weight,
+                        trajectory_length_weight=traj_options.trajectory_length_weight,
+                        collision_weight=traj_options.collision_weight,
+                        start_pose_weight=traj_options.start_pose_weight,
+                        end_pose_weight=traj_options.end_pose_weight,
+                    )
+                elif robot_type == "tdcr":
+                    cfg = traj_opt(
+                        cfg,
+                        world_coll.collision_geoms,
+                        limit_weight=traj_options.limit_weight,
+                        smoothness_weight=traj_options.smoothness_weight,
+                        trajectory_length_weight=traj_options.trajectory_length_weight,
+                        collision_weight=traj_options.collision_weight,
+                        start_pose_weight=traj_options.start_pose_weight,
+                        end_pose_weight=traj_options.end_pose_weight,
+                        tendon_vel_weight=traj_options.tendon_vel_weight,
+                        tendon_acc_weight=traj_options.tendon_acc_weight,
+                        dt=traj_options.dt,
+                    )
 
         elif method == "rrt":
             results = start_end_ik_solver(
@@ -184,19 +364,43 @@ def viser_main(default_method: str = "trajopt"):
             if cfg is None:
                 print("No path found")
                 return
-            
+
             # Resample RRT path to fixed timesteps
             print(f"RRT path length: {cfg.theta.shape[0]} timesteps")
             if use_trajopt_after_planner.value:
                 cfg = resample_trajectory(cfg, target_timesteps)
                 print(f"Resampled to: {cfg.theta.shape[0]} timesteps")
-                cfg = traj_opt(cfg, world_coll.collision_geoms)
+                if robot_type == "cc":
+                    cfg = traj_opt(
+                        cfg,
+                        world_coll.collision_geoms,
+                        limit_weight=traj_options.limit_weight,
+                        smoothness_weight=traj_options.smoothness_weight,
+                        trajectory_length_weight=traj_options.trajectory_length_weight,
+                        collision_weight=traj_options.collision_weight,
+                        start_pose_weight=traj_options.start_pose_weight,
+                        end_pose_weight=traj_options.end_pose_weight,
+                    )
+                elif robot_type == "tdcr":
+                    cfg = traj_opt(
+                        cfg,
+                        world_coll.collision_geoms,
+                        limit_weight=traj_options.limit_weight,
+                        smoothness_weight=traj_options.smoothness_weight,
+                        trajectory_length_weight=traj_options.trajectory_length_weight,
+                        collision_weight=traj_options.collision_weight,
+                        start_pose_weight=traj_options.start_pose_weight,
+                        end_pose_weight=traj_options.end_pose_weight,
+                        tendon_vel_weight=traj_options.tendon_vel_weight,
+                        tendon_acc_weight=traj_options.tendon_acc_weight,
+                        dt=traj_options.dt,
+                    )
 
         traj = forward_kinematics(cfg)
         traj = jax.block_until_ready(traj)
         print("Finish planning....")
         for i in range(len(traj)):
-            time.sleep(1/60.0)
+            time.sleep(1 / 60.0)
             robot_vis.update_pose(traj[i])
 
     def replay_callback(args):
@@ -235,9 +439,11 @@ def viser_main(default_method: str = "trajopt"):
     end_handle.on_update(on_handle_update)
     on_handle_update(start_handle)
 
+    plan_callback(None)
+
     while True:
         time.sleep(1 / 60.0)
 
 
 if __name__ == "__main__":
-    viser_main(default_method="trajopt")
+    viser_main(robot_type="tdcr", default_method="trajopt")

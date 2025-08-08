@@ -1,5 +1,5 @@
 from .ik_solver import IKSolver
-from .traj_optimizer import TrajOptimizer
+from .traj_optimizer import TrajOptimizer, TrajOptimizerOptions
 from .motion_planner.prm import ParallelPRM, PRMOptions
 from .motion_planner.rrt import OptimizedRRT, RRTOptions
 from .motion_planner.utils import HPolyhedronSampler, HPolyhedron
@@ -7,6 +7,7 @@ from .motion_planner.utils import HPolyhedronSampler, HPolyhedron
 __all__ = [
     "IKSolver",
     "TrajOptimizer",
+    "TrajOptimizerOptions",
     "ParallelPRM",
     "PRMOptions",
     "HPolyhedronSampler",

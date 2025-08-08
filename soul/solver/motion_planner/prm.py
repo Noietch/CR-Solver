@@ -18,6 +18,7 @@ from .utils import HPolyhedronSampler
 @dataclass
 class PRMOptions:
     """Options for PRM planner"""
+
     max_neighbors: int = 10
     max_edge_distance: float = 2.0
     edge_interpolation_steps: int = 2
@@ -105,7 +106,7 @@ class ParallelPRM:
 
         # Start from Chebyshev center
         current_states = [self.sampler.get_feasible_point() for _ in range(batch_size)]
-        
+
         num_attempts = 0
         max_attempts = num_samples * 3  # More efficient, so fewer attempts needed
 
@@ -113,15 +114,19 @@ class ParallelPRM:
             # Generate batch of samples in parallel
             batch_states = []
             for i in range(min(batch_size, (num_samples - len(collision_free)) * 2)):
-                new_state = self.sampler.uniform_sample(current_states[i % len(current_states)], mixing_steps)
+                new_state = self.sampler.uniform_sample(
+                    current_states[i % len(current_states)], mixing_steps
+                )
                 batch_states.append(new_state)
                 current_states[i % len(current_states)] = new_state
-            
+
             num_attempts += len(batch_states)
 
             if batch_states:
                 # Vectorized collision check
-                batched = jax.tree_util.tree_map(lambda *xs: jnp.stack(xs), *batch_states)
+                batched = jax.tree_util.tree_map(
+                    lambda *xs: jnp.stack(xs), *batch_states
+                )
                 collision_mask = self._batch_check_collision(batched, world_coll)
 
                 # Extract collision-free states efficiently
@@ -137,7 +142,7 @@ class ParallelPRM:
         self, states: ConstantCurvatureState, world_coll: Sequence[CollGeom]
     ) -> jnp.ndarray:
         """Optimized batch collision checking"""
-        
+
         # Vectorized collision check for all world objects at once
         def check_single_object(world_obj):
             dist_matrix = jax.vmap(
@@ -146,7 +151,7 @@ class ParallelPRM:
                 )
             )(states)
             return jnp.any(dist_matrix < 0.0, axis=(1, 2))
-        
+
         # Stack collision results
         collision_masks = jnp.stack([check_single_object(obj) for obj in world_coll])
         return jnp.any(collision_masks, axis=0)
@@ -156,9 +161,9 @@ class ParallelPRM:
     ) -> jnp.ndarray:
         """Vectorized distance computation"""
         # Use squared distances to avoid sqrt when not needed
-        theta_dist_sq = jnp.sum((states2.theta - state1.theta[None, :])**2, axis=1)
-        phi_dist_sq = jnp.sum((states2.phi - state1.phi[None, :])**2, axis=1)
-        
+        theta_dist_sq = jnp.sum((states2.theta - state1.theta[None, :]) ** 2, axis=1)
+        phi_dist_sq = jnp.sum((states2.phi - state1.phi[None, :]) ** 2, axis=1)
+
         return jnp.sqrt(theta_dist_sq + phi_dist_sq)
 
     def _batch_interpolate_fn(
@@ -169,7 +174,7 @@ class ParallelPRM:
     ) -> ConstantCurvatureState:
         """Optimized interpolation using vectorized operations"""
         alphas = jnp.linspace(0, 1, num_steps + 2)[1:-1]
-        
+
         # Vectorized interpolation
         base_positions = jnp.zeros((len(alphas), 3))
         thetas = jnp.outer(1 - alphas, state1.theta) + jnp.outer(alphas, state2.theta)
@@ -179,12 +184,14 @@ class ParallelPRM:
             base_position=base_positions, theta=thetas, phi=phis
         )
 
-    def _compute_all_distances_fn(self, all_states: ConstantCurvatureState) -> jnp.ndarray:
+    def _compute_all_distances_fn(
+        self, all_states: ConstantCurvatureState
+    ) -> jnp.ndarray:
         """Optimized pairwise distance computation using broadcasting"""
         # Efficient squared distance computation
         theta_diff = all_states.theta[:, None, :] - all_states.theta[None, :, :]
         phi_diff = all_states.phi[:, None, :] - all_states.phi[None, :, :]
-        
+
         # Combined squared distances
         dist_sq = jnp.sum(theta_diff**2, axis=2) + jnp.sum(phi_diff**2, axis=2)
         return jnp.sqrt(dist_sq)
@@ -192,10 +199,10 @@ class ParallelPRM:
     def _find_k_nearest_fn(self, distances: jnp.ndarray, k: int) -> jnp.ndarray:
         """Efficiently find k-nearest neighbors for all nodes"""
         n = distances.shape[0]
-        
+
         # Set diagonal to inf to exclude self
         distances_masked = distances.at[jnp.diag_indices(n)].set(jnp.inf)
-        
+
         # Use top-k for better performance
         if k < n - 1:
             # Get k smallest indices for each row
@@ -203,77 +210,84 @@ class ParallelPRM:
         else:
             # All neighbors except self
             indices = jnp.argsort(distances_masked, axis=1)[:, :k]
-        
+
         return indices
 
     def _parallel_check_edges_fn(
         self,
         state_pairs: Tuple[ConstantCurvatureState, ConstantCurvatureState],
         world_coll: Sequence[CollGeom],
-        steps: int
+        steps: int,
     ) -> jnp.ndarray:
         """Check multiple edges in parallel"""
         states1, states2 = state_pairs
         num_edges = states1.theta.shape[0]
-        
+
         # Vectorized interpolation for all edges
         def interpolate_edge(s1, s2):
             alphas = jnp.linspace(0, 1, steps + 2)[1:-1]
             thetas = jnp.outer(1 - alphas, s1.theta) + jnp.outer(alphas, s2.theta)
             phis = jnp.outer(1 - alphas, s1.phi) + jnp.outer(alphas, s2.phi)
             return thetas, phis
-        
+
         # Vectorized over all edges
         all_thetas, all_phis = jax.vmap(interpolate_edge)(states1, states2)
-        
+
         # Reshape for batch collision checking
         all_thetas_flat = all_thetas.reshape(-1, all_thetas.shape[-1])
         all_phis_flat = all_phis.reshape(-1, all_phis.shape[-1])
         base_positions_flat = jnp.zeros((all_thetas_flat.shape[0], 3))
-        
+
         intermediate = ConstantCurvatureState(
-            base_position=base_positions_flat,
-            theta=all_thetas_flat,
-            phi=all_phis_flat
+            base_position=base_positions_flat, theta=all_thetas_flat, phi=all_phis_flat
         )
-        
+
         # Batch collision check
         collision_mask = self._batch_check_collision(intermediate, world_coll)
-        
+
         # Reshape and check if any intermediate point has collision
         collision_mask_reshaped = collision_mask.reshape(num_edges, steps)
         edge_has_collision = jnp.any(collision_mask_reshaped, axis=1)
-        
+
         return ~edge_has_collision  # Return True for valid edges
 
     def _scan_interpolate_fn(
         self, waypoints: List[ConstantCurvatureState]
     ) -> ConstantCurvatureState:
         """Use JAX scan for efficient trajectory building"""
+
         def interpolate_segment(_, waypoint_pair):
             prev_state, curr_state = waypoint_pair
-            
+
             # Interpolate between waypoints
             alphas = jnp.linspace(0, 1, self.options.edge_interpolation_steps + 2)
-            thetas = jnp.outer(1 - alphas, prev_state.theta) + jnp.outer(alphas, curr_state.theta)
-            phis = jnp.outer(1 - alphas, prev_state.phi) + jnp.outer(alphas, curr_state.phi)
+            thetas = jnp.outer(1 - alphas, prev_state.theta) + jnp.outer(
+                alphas, curr_state.theta
+            )
+            phis = jnp.outer(1 - alphas, prev_state.phi) + jnp.outer(
+                alphas, curr_state.phi
+            )
             base_positions = jnp.zeros((len(alphas), 3))
-            
+
             segment = ConstantCurvatureState(
                 base_position=base_positions, theta=thetas, phi=phis
             )
             return curr_state, segment
-        
+
         # Create pairs of consecutive waypoints
-        waypoint_pairs = [(waypoints[i], waypoints[i+1]) for i in range(len(waypoints)-1)]
-        
+        waypoint_pairs = [
+            (waypoints[i], waypoints[i + 1]) for i in range(len(waypoints) - 1)
+        ]
+
         # Use scan for sequential processing
         _, segments = jax.lax.scan(
             interpolate_segment, waypoints[0], jnp.array(waypoint_pairs)
         )
-        
+
         # Concatenate all segments
-        return jax.tree_util.tree_map(lambda *xs: jnp.concatenate(xs, axis=0), *segments)
+        return jax.tree_util.tree_map(
+            lambda *xs: jnp.concatenate(xs, axis=0), *segments
+        )
 
     def build_roadmap(self, num_nodes: int, world_coll: Sequence[CollGeom]):
         """Build optimized PRM roadmap"""
@@ -320,38 +334,38 @@ class ParallelPRM:
         edges_to_check = []
         edge_states1 = []
         edge_states2 = []
-        
+
         for i, idx1 in enumerate(node_indices):
             for j_local in nearest_indices[i]:
                 j = int(j_local)
                 if i >= j:  # Avoid duplicates
                     continue
-                    
+
                 idx2 = node_indices[j]
                 dist = float(all_distances[i, j])
-                
+
                 if dist > self.options.max_edge_distance:
                     continue
                 if self.graph.has_edge(idx1, idx2):
                     continue
                 if (idx1, idx2) in self.forbidden_edges:
                     continue
-                
+
                 edges_to_check.append((idx1, idx2, dist))
                 edge_states1.append(self.nodes[idx1])
                 edge_states2.append(self.nodes[idx2])
 
         # Parallel edge collision checking
         print(f"Checking {len(edges_to_check)} potential edges in parallel...")
-        
+
         if edges_to_check:
             # Process in batches for memory efficiency
             batch_size = self.options.parallel_edge_checks
             valid_edges_mask = []
-            
+
             for batch_start in range(0, len(edges_to_check), batch_size):
                 batch_end = min(batch_start + batch_size, len(edges_to_check))
-                
+
                 # Stack batch states
                 batch_states1 = jax.tree_util.tree_map(
                     lambda *xs: jnp.stack(xs), *edge_states1[batch_start:batch_end]
@@ -359,16 +373,16 @@ class ParallelPRM:
                 batch_states2 = jax.tree_util.tree_map(
                     lambda *xs: jnp.stack(xs), *edge_states2[batch_start:batch_end]
                 )
-                
+
                 # Parallel collision check
                 batch_valid = self._parallel_check_edges(
                     (batch_states1, batch_states2),
                     world_coll,
-                    self.options.edge_interpolation_steps
+                    self.options.edge_interpolation_steps,
                 )
-                
+
                 valid_edges_mask.extend(batch_valid)
-            
+
             # Add valid edges to graph
             for (idx1, idx2, dist), is_valid in zip(edges_to_check, valid_edges_mask):
                 if is_valid:
@@ -415,7 +429,7 @@ class ParallelPRM:
         world_coll: Sequence[CollGeom],
     ) -> Optional[ConstantCurvatureState]:
         """Optimized planning attempt"""
-        
+
         # Find closest nodes efficiently
         start_idx = self._find_closest_valid_node(start)
         goal_idx = self._find_closest_valid_node(goal)
@@ -429,23 +443,27 @@ class ParallelPRM:
 
         # Check edge validity
         start_edge_valid = self._parallel_check_edges(
-            (jax.tree_util.tree_map(lambda x: x[None, ...], start),
-             jax.tree_util.tree_map(lambda x: x[None, ...], start_node)),
+            (
+                jax.tree_util.tree_map(lambda x: x[None, ...], start),
+                jax.tree_util.tree_map(lambda x: x[None, ...], start_node),
+            ),
             world_coll,
-            self.options.edge_interpolation_steps
+            self.options.edge_interpolation_steps,
         )[0]
-        
+
         if not start_edge_valid:
             self._mark_node_collision(start_idx)
             return None
 
         goal_edge_valid = self._parallel_check_edges(
-            (jax.tree_util.tree_map(lambda x: x[None, ...], goal_node),
-             jax.tree_util.tree_map(lambda x: x[None, ...], goal)),
+            (
+                jax.tree_util.tree_map(lambda x: x[None, ...], goal_node),
+                jax.tree_util.tree_map(lambda x: x[None, ...], goal),
+            ),
             world_coll,
-            self.options.edge_interpolation_steps
+            self.options.edge_interpolation_steps,
         )[0]
-        
+
         if not goal_edge_valid:
             self._mark_node_collision(goal_idx)
             return None
@@ -465,9 +483,7 @@ class ParallelPRM:
         # Build trajectory efficiently
         return self._build_trajectory(start, goal, path_indices)
 
-    def _find_closest_valid_node(
-        self, state: ConstantCurvatureState
-    ) -> Optional[int]:
+    def _find_closest_valid_node(self, state: ConstantCurvatureState) -> Optional[int]:
         """Find closest node using vectorized operations"""
         if not self.nodes:
             return None
@@ -496,35 +512,33 @@ class ParallelPRM:
         """Validate path with batch edge checking"""
         if len(path_indices) < 2:
             return True
-        
+
         # Collect all edges to check
         edges_to_validate = []
         edge_states1 = []
         edge_states2 = []
-        
+
         for i in range(len(path_indices) - 1):
             idx1, idx2 = path_indices[i], path_indices[i + 1]
-            
+
             if (idx1, idx2) in self.forbidden_edges:
                 return False
-            
+
             edges_to_validate.append((idx1, idx2))
             edge_states1.append(self.nodes[idx1])
             edge_states2.append(self.nodes[idx2])
-        
+
         if not edges_to_validate:
             return True
-        
+
         # Batch collision check
         states1 = jax.tree_util.tree_map(lambda *xs: jnp.stack(xs), *edge_states1)
         states2 = jax.tree_util.tree_map(lambda *xs: jnp.stack(xs), *edge_states2)
-        
+
         valid_mask = self._parallel_check_edges(
-            (states1, states2),
-            world_coll,
-            self.options.edge_interpolation_steps
+            (states1, states2), world_coll, self.options.edge_interpolation_steps
         )
-        
+
         # Update forbidden edges for invalid ones
         for (idx1, idx2), is_valid in zip(edges_to_validate, valid_mask):
             if not is_valid:
@@ -532,7 +546,7 @@ class ParallelPRM:
                 self.forbidden_edges.add((idx2, idx1))
                 self._update_edge_attempts(idx1)
                 return False
-        
+
         return True
 
     def _build_trajectory(
@@ -546,33 +560,32 @@ class ParallelPRM:
         waypoints = [start]
         waypoints.extend([self.nodes[idx] for idx in path_indices])
         waypoints.append(goal)
-        
+
         # Use vectorized interpolation for all segments
         trajectory_segments = []
-        
+
         for i in range(len(waypoints) - 1):
             # Add current waypoint
             trajectory_segments.append(
                 jax.tree_util.tree_map(lambda x: x[None, ...], waypoints[i])
             )
-            
+
             # Interpolate to next waypoint
             segment = self._batch_interpolate(
-                waypoints[i], waypoints[i + 1], 
-                self.options.edge_interpolation_steps
+                waypoints[i], waypoints[i + 1], self.options.edge_interpolation_steps
             )
             trajectory_segments.append(segment)
-        
+
         # Add final waypoint
         trajectory_segments.append(
             jax.tree_util.tree_map(lambda x: x[None, ...], waypoints[-1])
         )
-        
+
         # Concatenate all segments efficiently
         full_trajectory = jax.tree_util.tree_map(
             lambda *xs: jnp.concatenate(xs, axis=0), *trajectory_segments
         )
-        
+
         return full_trajectory
 
     def _mark_node_collision(self, node_idx: int):
@@ -585,7 +598,7 @@ class ParallelPRM:
     def _update_edge_attempts(self, node_idx: int):
         """Update edge attempt count"""
         self.edge_attempt_count[node_idx] = self.edge_attempt_count.get(node_idx, 0) + 1
-        
+
         if (
             self.edge_attempt_count[node_idx]
             >= self.options.max_num_blocked_edges_before_discard
@@ -595,7 +608,7 @@ class ParallelPRM:
     def save_roadmap(self, filepath: str):
         """Save roadmap to file"""
         import pickle
-        
+
         roadmap_data = {
             "nodes": self.nodes,
             "edges": list(self.graph.edges(data=True)),
@@ -608,17 +621,17 @@ class ParallelPRM:
     def load_roadmap(self, filepath: str):
         """Load roadmap from file"""
         import pickle
-        
+
         with open(filepath, "rb") as f:
             roadmap_data = pickle.load(f)
-        
+
         self.clear()
-        
+
         for node in roadmap_data["nodes"]:
             self.add_node(node)
-        
+
         for u, v, data in roadmap_data["edges"]:
             self.graph.add_edge(u, v, **data)
-        
+
         self.collision_set = roadmap_data["collision_set"]
         self.forbidden_edges = roadmap_data["forbidden_edges"]
