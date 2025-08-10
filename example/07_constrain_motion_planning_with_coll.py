@@ -1,16 +1,27 @@
+import os
 import jax
+os.environ["JAX_COMPILATION_CACHE_DIR"] = "/tmp/jax_cache"
+jax.config.update("jax_compilation_cache_dir", "/tmp/jax_cache")
+jax.config.update("jax_persistent_cache_min_entry_size_bytes", -1)
+jax.config.update("jax_persistent_cache_min_compile_time_secs", 0)
+jax.config.update(
+    "jax_persistent_cache_enable_xla_caches", "xla_gpu_per_fusion_autotune_cache_dir"
+)
+
 import jaxlie
 import time
 import viser
 import numpy as np
-import os
 from soul.robots.cc_robot import CCRobot
 from soul.geom import RobotCollision, WorldCollision
-from soul.solver import ConstrainedMotionPlanner
+from soul.solver.traj_optimizer import TrajOptimizer
 from soul.visualization.visualizer_viser import ViserSoftRobot, ViserWorld
 
-# TODO: 移动到example，只保留运行代码
-# TODO: 美化图像
+
+
+from jax.experimental.compilation_cache import compilation_cache as cc
+
+cc.set_cache_dir("/tmp/jax_cache")
 
 DISABLE_JIT = False
 
@@ -83,7 +94,7 @@ def get_icra_traj(
     The height is controlled by the y-difference between handles.
     """
     # word_funcs = {'I': create_I, 'C': create_C, 'R': create_R, 'A': create_A}
-    word_funcs = {"A": create_A}
+    word_funcs = {"R": create_R}
     word_str = "ICRA"
     letter_spacing = LETTER_WIDTH * 1.8
 
@@ -272,7 +283,7 @@ def get_sine_traj(
 
 def viser_main():
     world_coll_config_path = (
-        "configs/maps/constrain_motion_planning/obstacles_con_A.json"
+        "configs/maps/constrain_motion_planning/obstacles_con_R.json"
     )
     # Setup Environment
     robot = CCRobot.from_config("configs/robots/cc_con_eval.json")
@@ -289,9 +300,9 @@ def viser_main():
     obstacles_vis.create_mesh_visualizations()
     """  
     for square
-    start_handle_position = (-0.01, -2.46, 0.9)
+    start_handle_position = (-0.05, -2.3, 0.96)
     start_handle_wxyz = (0.83, 0.54, 0.06, 0.1)
-    end_handle_position = (0.76, -1.31, 2.75)
+    end_handle_position = (0.7, -1.45, 2.75)
     end_handle_wxyz = (1.0, 0, 0, 0)
 
     for sine
@@ -308,7 +319,7 @@ def viser_main():
     end_handle_wxyz = (1.0, 0, 0, 0)
     
     for letter "R"
-    start_handle_position = (-0.05, -2.45, 0.93)
+    start_handle_position = (-0.11, -2.36, 0.87)
     start_handle_wxyz = (0.85, 0.49, 0.15, 0.14)
     end_handle_position = (0.79, -1.26, 2.75)
     end_handle_wxyz = (1.0, 0, 0, 0)
@@ -326,9 +337,9 @@ def viser_main():
     end_handle_wxyz = (1.0, 0, 0, 0)
     """
 
-    start_handle_position = (-0.01, -2.51, 0.76)
-    start_handle_wxyz = (0.82, 0.47, 0.25, 0.2)
-    end_handle_position = (1.23, -1.25, 2.75)
+    start_handle_position = (-0.11, -2.36, 0.87)
+    start_handle_wxyz = (0.85, 0.49, 0.15, 0.14)
+    end_handle_position = (0.79, -1.26, 2.75)
     end_handle_wxyz = (1.0, 0, 0, 0)
     radius = robot.config.length * robot.config.num_sections
 
@@ -377,8 +388,8 @@ def viser_main():
 
     # Set up trajopt parameters
     timesteps = 150
-    traj_solver = ConstrainedMotionPlanner(robot, robot_coll, timesteps)
-    traj_follow_jit = jax.jit(traj_solver.tip_traj_follow)
+    traj_solver = TrajOptimizer(robot, robot_coll, timesteps)
+    traj_follow_jit = jax.jit(traj_solver.optimize_tip_traj_follow)
 
     global_traj = None
 

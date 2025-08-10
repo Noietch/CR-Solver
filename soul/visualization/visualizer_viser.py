@@ -385,7 +385,7 @@ class ViserWorld:
             for i in range(len(centers)):
                 obstacles_dict[f"obstacle_{i+1}"] = {
                     "type": "sphere",
-                    "center": [round(float(center), 2) for center in centers[i]],
+                    "center": [round(float(center), 4) for center in centers[i]],
                     "radius": round(float(radii[i]), 2),
                 }
         elif isinstance(self.world_coll.obstacles, BoundingBox):
@@ -395,8 +395,8 @@ class ViserWorld:
             for i in range(len(centers)):
                 obstacles_dict[f"obstacle_{i+1}"] = {
                     "type": "bbox",
-                    "center": [round(float(center), 2) for center in centers[i]],
-                    "extents": [round(float(extent), 2) for extent in extents[i]],
+                    "center": [round(float(center), 4) for center in centers[i]],
+                    "extents": [round(float(extent), 4) for extent in extents[i]],
                 }
         else:
             raise ValueError(

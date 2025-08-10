@@ -1,7 +1,20 @@
 import numpy as np
 import os
 import matplotlib.pyplot as plt
+import matplotlib  # Import matplotlib for rcParams
 from soul.visualization.visualizer_plot import visualize_cc_model_3d, visualize_mp_scene
+
+TICK_LABELSIZE = 18
+TICK_PAD = 8
+
+
+def set_3d_tick_labelsize(
+    ax: plt.Axes, size: int = TICK_LABELSIZE, pad: int = TICK_PAD
+) -> None:
+    ax.xaxis.set_tick_params(labelsize=size, pad=pad)
+    ax.yaxis.set_tick_params(labelsize=size, pad=pad)
+    if hasattr(ax, "zaxis"):
+        ax.zaxis.set_tick_params(labelsize=size, pad=pad)
 
 
 def visualize_motion_planning(
@@ -116,27 +129,46 @@ def visualize_constrain_motion_planning(
         save_path=save_path.replace(".npz", "_fk.png"),
     )
 
+
     ax.scatter(
         ref_traj_pos[:, 0],
         ref_traj_pos[:, 1],
         ref_traj_pos[:, 2],
-        c="b",
+        c="#7ea6e0",
         marker="o",
-        s=1,
+        s=8,
+        label="Reference",
     )
+
     ax.scatter(
         planned_tip_pos[:, 0],
         planned_tip_pos[:, 1],
         planned_tip_pos[:, 2],
-        c="r",
+        c="#ea6b66",
         marker="o",
-        s=3,
+        s=6,
+        label="Experiment",
     )
+
+    # ax.plot(ref_traj_pos[:, 0], ref_traj_pos[:, 1], ref_traj_pos[:, 2], c="#7ea6e0", linewidth=4, label="Reference")
+    # ax.plot(planned_tip_pos[:, 0], planned_tip_pos[:, 1], planned_tip_pos[:, 2], c="#ea6b66", linewidth=8, label="Experiment")
+
+    ax.patch.set_alpha(0.0)
+    ax.xaxis.pane.fill = False
+    ax.yaxis.pane.fill = False
+    ax.zaxis.pane.fill = False
+    ax.xaxis.pane.set_edgecolor("w")
+    ax.yaxis.pane.set_edgecolor("w")
+    ax.zaxis.pane.set_edgecolor("w")
+    # ax.set_xlabel("X (m)")
+    # ax.set_ylabel("Y (m)")
+    # ax.set_zlabel("Z (m)")
+    # ax.legend(frameon=False, markerscale=4)
 
     # ax.plot(ref_traj_pos[:, 0], ref_traj_pos[:, 1], ref_traj_pos[:, 2], "r--", linewidth=5 )
     # ax.plot(planned_tip_pos[:, 0], planned_tip_pos[:, 1], planned_tip_pos[:, 2], "b-", linewidth=5)
     save_path = save_path.replace(".npz", "_plot.png")
-    plt.savefig(save_path)
+    plt.savefig(save_path, bbox_inches="tight", dpi=600)
 
     print(
         f"--- Trajectory Metrics for Letter {world_config_path.split('configs/maps/obstacles_con_')[-1].split('.')[0]} ---"
@@ -148,6 +180,86 @@ def visualize_constrain_motion_planning(
     print(f"Planning Time: {data['planning_time'] * 1000:.4f}ms")
 
 
+def visualize_constrain_motion_planning_traj(
+    save_path: str,
+    ax: plt.Axes,
+    sample_indices: list[int] = None,
+):
+    try:
+        data = np.load(save_path, allow_pickle=True)
+    except FileNotFoundError:
+        print(f"Warning: Data file not found at {save_path}. Skipping plot.")
+        ax.text(
+            0.5,
+            0.5,
+            0.5,
+            "Data file not found",
+            horizontalalignment="center",
+            verticalalignment="center",
+            transform=ax.transAxes,
+        )
+        return
+
+    # Reconstruct robot states from saved data
+    num_timesteps = data["solution_states_theta"].shape[0]
+    planned_traj_poses = data["fk_result"]
+    ref_traj_pos = data["target_position"]
+    planned_tip_traj_mat = data["planned_tip_traj"]
+    planned_tip_pos = planned_tip_traj_mat[:, :3, 3]
+
+    single_save_path = save_path.replace(".npz", "_fk_traj.png")
+    ax.set_xlim3d(-1.2, 0.2)
+    ax.set_ylim3d(-0.85, 0.5)
+    ax.set_zlim3d(-0.9, 0.7)
+
+    # Set equal aspect ratio
+    ax.set_box_aspect([1, 1, 1])
+
+    # Reduce tick density
+    ax.xaxis.set_major_locator(plt.MaxNLocator(3))
+    ax.yaxis.set_major_locator(plt.MaxNLocator(3))
+    ax.zaxis.set_major_locator(plt.MaxNLocator(3))
+
+    ax.grid(False)
+
+    if single_save_path is not None:
+        plt.savefig(single_save_path, bbox_inches="tight", dpi=300)
+
+    # ax.scatter(ref_traj_pos[:, 0], ref_traj_pos[:, 1], ref_traj_pos[:, 2], c="#7ea6e0", marker="o",s=8, label="Reference")
+    ax.scatter(
+        planned_tip_pos[:, 0],
+        planned_tip_pos[:, 1],
+        planned_tip_pos[:, 2],
+        c="#ea6b66",
+        marker="o",
+        s=27,
+        label="Experiment",
+    )
+
+    # ax.plot(ref_traj_pos[:, 0], ref_traj_pos[:, 1], ref_traj_pos[:, 2], c="#7ea6e0", linewidth=4, label="Reference")
+    # ax.plot(planned_tip_pos[:, 0], planned_tip_pos[:, 1], planned_tip_pos[:, 2], c="#ea6b66", linewidth=8, label="Experiment")
+
+    ax.patch.set_alpha(0.0)
+    ax.xaxis.pane.fill = False
+    ax.yaxis.pane.fill = False
+    ax.zaxis.pane.fill = False
+    ax.xaxis.pane.set_edgecolor("w")
+    ax.yaxis.pane.set_edgecolor("w")
+    ax.zaxis.pane.set_edgecolor("w")
+    # ax.set_xlabel("X (m)")
+    # ax.set_ylabel("Y (m)")
+    # ax.set_zlabel("Z (m)")
+    # ax.legend(frameon=False, markerscale=4)
+
+    # ax.plot(ref_traj_pos[:, 0], ref_traj_pos[:, 1], ref_traj_pos[:, 2], "r--", linewidth=5 )
+    # ax.plot(planned_tip_pos[:, 0], planned_tip_pos[:, 1], planned_tip_pos[:, 2], "b-", linewidth=5)
+    save_path = save_path.replace(".npz", "_plot_traj.png")
+    plt.savefig(save_path, bbox_inches="tight", dpi=600)
+    print(
+        f"Plotted Letter {save_path.split('configs/maps/obstacles_con_')[-1].split('.')[0]}"
+    )
+
+
 def plot_mp_with_coll_scene(
     save_dir: str,
     file_name: str,
@@ -155,6 +267,7 @@ def plot_mp_with_coll_scene(
 ):
     fig = plt.figure(facecolor="white", figsize=(8, 8))
     ax1 = fig.add_subplot(111, projection="3d")
+    set_3d_tick_labelsize(ax1)
 
     visualize_motion_planning(save_dir, file_name, world_config_path, ax1, num_pose=80)
 
@@ -167,47 +280,79 @@ def plot_mp_with_coll_scene(
 
     ax1.legend()
     plt.tight_layout()
-    plt.savefig("results/mp_scene_examples.png")
+    plt.savefig("results/mp_scene_examples.png", bbox_inches="tight", dpi=800)
     plt.close()
 
 
 def plot_constrain_motion_planning():
-    fig = plt.figure(facecolor="white", figsize=(24, 6))
-    ax1 = fig.add_subplot(141, projection="3d")
-    ax2 = fig.add_subplot(142, projection="3d")
-    ax3 = fig.add_subplot(143, projection="3d")
-    ax4 = fig.add_subplot(144, projection="3d")
+    fig = plt.figure(facecolor="white", figsize=(24, 12))
+    ax1 = fig.add_subplot(241, projection="3d")
+    ax2 = fig.add_subplot(242, projection="3d")
+    ax3 = fig.add_subplot(243, projection="3d")
+    ax4 = fig.add_subplot(244, projection="3d")
+    ax5 = fig.add_subplot(245, projection="3d")
+    ax6 = fig.add_subplot(246, projection="3d")
+    ax7 = fig.add_subplot(247, projection="3d")
+    ax8 = fig.add_subplot(248, projection="3d")
+
+    for _ax in (ax1, ax2, ax3, ax4, ax5, ax6, ax7, ax8):
+        set_3d_tick_labelsize(_ax)
 
     visualize_constrain_motion_planning(
         save_path="results/traj_following/get_icra_traj_I/get_icra_traj.npz",
         world_config_path="configs/maps/constrain_motion_planning/obstacles_con_I.json",
         ax=ax1,
+        num_pose=15,
     )
     visualize_constrain_motion_planning(
         save_path="results/traj_following/get_icra_traj_C/get_icra_traj.npz",
         world_config_path="configs/maps/constrain_motion_planning/obstacles_con_C.json",
         ax=ax2,
+        num_pose=15,
     )
     visualize_constrain_motion_planning(
         save_path="results/traj_following/get_icra_traj_R/get_icra_traj.npz",
         world_config_path="configs/maps/constrain_motion_planning/obstacles_con_R.json",
         ax=ax3,
+        num_pose=15,
     )
     visualize_constrain_motion_planning(
         save_path="results/traj_following/get_icra_traj_A/get_icra_traj.npz",
         world_config_path="configs/maps/constrain_motion_planning/obstacles_con_A.json",
         ax=ax4,
-        num_pose=6,
+        num_pose=15,
+    )
+
+    visualize_constrain_motion_planning_traj(
+        save_path="results/traj_following/get_icra_traj_I/get_icra_traj.npz",
+        ax=ax5,
+    )
+    visualize_constrain_motion_planning_traj(
+        save_path="results/traj_following/get_icra_traj_C/get_icra_traj.npz",
+        ax=ax6,
+    )
+    visualize_constrain_motion_planning_traj(
+        save_path="results/traj_following/get_icra_traj_R/get_icra_traj.npz",
+        ax=ax7,
+    )
+    visualize_constrain_motion_planning_traj(
+        save_path="results/traj_following/get_icra_traj_A/get_icra_traj.npz",
+        ax=ax8,
     )
 
     plt.tight_layout()
     save_path = "results/motion_planning_examples.png"
-    plt.savefig(save_path)
+    plt.savefig(save_path, bbox_inches="tight", dpi=600)
     print(f"Saved plot to {save_path}")
     plt.close()
 
 
 if __name__ == "__main__":
+    # === FONT CONFIGURATION (APPLY GLOBALLY) ===
+    matplotlib.rcParams["font.family"] = "sans-serif"
+    matplotlib.rcParams["font.sans-serif"] = ["Arial", "DejaVu Sans"]
+    # ==========================================
+
     # save_dir = "results/13.pick_from_shelf"
     # world_config_path = "configs/maps/mp_scene/obstacles_13.pick_from_shelf.json"
 

@@ -212,37 +212,95 @@ def generate_icosahedron_env(
     )
 
 
+def generate_random_env(
+    save_path: str,
+    num_obstacles: int = 10,
+    center_pos: list = [0.0, 0.0, 0.0],
+    scale: float = 1.0,
+    radius: float = 0.15,
+):
+    """
+    Generate a random environment with spherical obstacles.
+
+    Parameters:
+    - save_path: Path to save the generated obstacle configuration JSON file
+    - num_obstacles: Number of spherical obstacles to generate
+    - center_pos: Center position of the environment [x, y, z]
+    - scale: Scale factor for the environment size
+    - radius: Radius of the spherical obstacles
+    """
+    obstacles_dict = {}
+
+    for i in range(num_obstacles):
+        obstacle_key = f"obstacle_{i+1}"
+        center = [
+            np.random.uniform(-scale, scale) + center_pos[0],
+            np.random.uniform(-scale, scale) + center_pos[1],
+            np.random.uniform(-scale, scale) + center_pos[2],
+        ]
+        obstacles_dict[obstacle_key] = {
+            "type": "sphere",
+            "center": center,
+            "radius": radius,
+        }
+
+    # Save to JSON file
+    with open(save_path, "w") as f:
+        json.dump(obstacles_dict, f, indent=4)
+
+    print(
+        f"Generated random environment with {len(obstacles_dict)} obstacles saved to {save_path}"
+    )
+
+
 if __name__ == "__main__":
-    # Lattice (27 vertices)
-    generate_lattice_env("configs/maps/ik_maps/obstacles_lattice.json", radius=0.2)
-    visualize_cc_model_3d(
-        world_coll_config="configs/maps/ik_maps/obstacles_lattice.json",
-        save_path="visualization/lattice_env.png",
-    )
+    # # Lattice (27 vertices)
+    # generate_lattice_env("configs/maps/ik_maps/obstacles_lattice.json", radius=0.2)
+    # visualize_cc_model_3d(
+    #     world_coll_config="configs/maps/ik_maps/obstacles_lattice.json",
+    #     save_path="visualization/lattice_env.png",
+    # )
 
-    # Octahedron (6 vertices) - smaller radius
-    generate_octahedron_env(
-        "configs/maps/ik_maps/obstacles_octahedron.json", radius=0.4, scale=0.8
-    )
-    visualize_cc_model_3d(
-        world_coll_config="configs/maps/ik_maps/obstacles_octahedron.json",
-        save_path="visualization/octahedron_env.png",
-    )
+    # # Octahedron (6 vertices) - smaller radius
+    # generate_octahedron_env(
+    #     "configs/maps/ik_maps/obstacles_octahedron.json", radius=0.4, scale=0.8
+    # )
+    # visualize_cc_model_3d(
+    #     world_coll_config="configs/maps/ik_maps/obstacles_octahedron.json",
+    #     save_path="visualization/octahedron_env.png",
+    # )
 
-    # Cube (8 vertices) - medium radius
-    generate_cube_env("configs/maps/ik_maps/obstacles_cube.json", radius=0.4, scale=0.8)
-    visualize_cc_model_3d(
-        world_coll_config="configs/maps/ik_maps/obstacles_cube.json",
-        save_path="visualization/cube_env.png",
-    )
+    # # Cube (8 vertices) - medium radius
+    # generate_cube_env("configs/maps/ik_maps/obstacles_cube.json", radius=0.4, scale=0.8)
+    # visualize_cc_model_3d(
+    #     world_coll_config="configs/maps/ik_maps/obstacles_cube.json",
+    #     save_path="visualization/cube_env.png",
+    # )
 
-    # Icosahedron (12 vertices) - larger radius
-    generate_icosahedron_env(
-        "configs/maps/ik_maps/obstacles_icosahedron.json", radius=0.4, scale=1.0
-    )
-    visualize_cc_model_3d(
-        world_coll_config="configs/maps/ik_maps/obstacles_icosahedron.json",
-        save_path="visualization/icosahedron_env.png",
-    )
+    # # Icosahedron (12 vertices) - larger radius
+    # generate_icosahedron_env(
+    #     "configs/maps/ik_maps/obstacles_icosahedron.json", radius=0.4, scale=1.0
+    # )
+    # visualize_cc_model_3d(
+    #     world_coll_config="configs/maps/ik_maps/obstacles_icosahedron.json",
+    #     save_path="visualization/icosahedron_env.png",
+    # )
+
+    # Random environment
+    section_list = [3, 4, 5, 6]
+    section_length = 1.0
+
+    for section in section_list:
+        generate_random_env(
+            f"configs/maps/ik_maps/obstacles_random_section_{section}.json",
+            num_obstacles=section**3,  # Number of obstacles increases with section size
+            center_pos=[0.0, 0.0, 0.0],
+            scale=section * section_length,
+            radius=0.2,
+        )
+        visualize_cc_model_3d(
+            world_coll_config=f"configs/maps/ik_maps/obstacles_random_section_{section}.json",
+            save_path=f"visualization/obstacles_random_section_{section}.png",
+        )
 
     print("\nAll environments generated successfully!")
