@@ -1,5 +1,6 @@
 import os
 import jax
+
 os.environ["JAX_COMPILATION_CACHE_DIR"] = "/tmp/jax_cache"
 jax.config.update("jax_compilation_cache_dir", "/tmp/jax_cache")
 jax.config.update("jax_persistent_cache_min_entry_size_bytes", -1)
@@ -16,7 +17,6 @@ from soul.robots.cc_robot import CCRobot
 from soul.geom import RobotCollision, WorldCollision
 from soul.solver.traj_optimizer import TrajOptimizer
 from soul.visualization.visualizer_viser import ViserSoftRobot, ViserWorld
-
 
 
 from jax.experimental.compilation_cache import compilation_cache as cc

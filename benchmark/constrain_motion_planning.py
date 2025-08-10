@@ -1,5 +1,6 @@
 import jax
 import os
+
 # Initialize JAX persistent compilation cache
 os.environ["JAX_COMPILATION_CACHE_DIR"] = "/tmp/jax_cache"
 jax.config.update("jax_compilation_cache_dir", "/tmp/jax_cache")
@@ -18,8 +19,13 @@ from soul.robots.cc_robot import CCRobot
 from soul.robots.cc_robot_extend import CCRobot as CCRobotExtend
 from soul.geom import RobotCollision, WorldCollision
 from soul.solver.traj_optimizer import TrajOptimizer
-from benchmark.mp_plot import visualize_constrain_motion_planning
-from mp_plot import plot_constrain_motion_planning
+from benchmark.mp_plot import (
+    visualize_constrain_motion_planning,
+    plot_constrain_motion_planning,
+    plot_tendon_length,
+    plot_error,
+)
+from soul.robots.tdcr_robot import TDCRRobot
 
 
 DISABLE_JIT = False
@@ -201,7 +207,7 @@ def calculate_traj_metrics(
         planned_traj: The executed trajectory.
 
     Returns:
-        A dictionary with position and rotation error stats (mean and std).
+        A dictionary with per-timestep errors plus summary stats.
     """
     # Position error
     ref_pos = reference_traj.translation()
@@ -214,6 +220,8 @@ def calculate_traj_metrics(
     rotation_errors = jnp.linalg.norm((ref_rot.inverse() @ plan_rot).log(), axis=-1)
 
     metrics = {
+        "position_errors": position_errors,
+        "rotation_errors": rotation_errors,
         "pos_error_mean": jnp.mean(position_errors),
         "pos_error_std": jnp.std(position_errors),
         "rot_error_mean": jnp.mean(rotation_errors),
@@ -425,6 +433,12 @@ def run_case(
     planning_time = end_time - start_time
     print(f"Planning finished in {planning_time:.4f} seconds.")
 
+    # Compute TDCR tendon lengths vs time if applicable
+    tendon_lengths_series = None
+    if isinstance(robot, TDCRRobot):
+        calc_tendon_lengths_batch = jax.jit(jax.vmap(robot.calculate_tendon_lengths))
+        tendon_lengths_series = np.asarray(calc_tendon_lengths_batch(cfg))
+
     # FK and metrics
     global_traj = robot.forward_kinematics(cfg)
     planned_tip_traj = jaxlie.SE3.from_matrix(global_traj[:, -1, :, :])
@@ -448,6 +462,18 @@ def run_case(
     ref_csv_filename = f"{ref_func.__name__}_reference.csv"
     ref_csv_save_path = os.path.join(save_dir, ref_csv_filename)
     save_ref_traj_to_csv(ref_traj, ref_csv_save_path)
+
+    # Save TDCR tendon lengths series to CSV
+    if tendon_lengths_series is not None:
+        csv_path = os.path.join(save_dir, "tendon_lengths.csv")
+        time_series = np.arange(tendon_lengths_series.shape[0])  # timestep index
+        header = ",".join(
+            ["timestep"]
+            + [f"tendon_{i+1}" for i in range(tendon_lengths_series.shape[1])]
+        )
+        data = np.column_stack([time_series, tendon_lengths_series])
+        np.savetxt(csv_path, data, delimiter=",", header=header, comments="")
+        print(f"Saved TDCR tendon length time series to {csv_path}")
 
     filename = f"{ref_func.__name__}.npz"
     save_path = os.path.join(save_dir, filename)
@@ -500,12 +526,21 @@ def run_case(
 
 
 if __name__ == "__main__":
-    robot_config = "configs/robots/cc_con_eval.json"
+    # Select robot type here without CLI: set to "cc" or "tdcr"
+    robot_type = "tdcr"  # change to "cc" to use constant-curvature robot
     timesteps = 150
 
-    # Create robot, collision, and JIT-compiled planner once for all cases
-    robot = CCRobot.from_config(robot_config)
-    robot_coll = RobotCollision.from_config(robot_config)
+    # Choose config based on robot type and construct robot + collision
+    if robot_type == "cc":
+        robot_config = "configs/robots/cc_con_eval.json"
+        robot = CCRobot.from_config(robot_config)
+        robot_coll = RobotCollision.from_config(robot_config)
+    elif robot_type == "tdcr":
+        robot_config = "configs/robots/cc_con_tdcr.json"
+        robot = TDCRRobot.from_config(robot_config)
+        robot_coll = RobotCollision.from_config(robot_config)
+
+    # Create JIT-compiled planner once for all cases
     traj_solver = TrajOptimizer(robot, robot_coll, timesteps)
     traj_follow_jit = jax.jit(traj_solver.optimize_tip_traj_follow)
 
@@ -573,7 +608,7 @@ if __name__ == "__main__":
     ]
 
     for case in cases:
-        print(f"\n=== Running case: {case['name']} ===")
+        print(f"\n=== Running case: {case['name']} (robot: {robot_type}) ===")
         run_case(
             robot=robot,
             traj_follow_jit=traj_follow_jit,
@@ -587,3 +622,5 @@ if __name__ == "__main__":
             timesteps=timesteps,
         )
     plot_constrain_motion_planning()
+    plot_tendon_length()
+    plot_error()

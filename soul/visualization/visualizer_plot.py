@@ -310,7 +310,6 @@ def visualize_cc_model_3d(
         plt.savefig(save_path, bbox_inches="tight", dpi=300)
 
 
-
 def visualize_mp_scene(
     pose: Array = None,
     start_end_poses: list[Array, Array] = None,
