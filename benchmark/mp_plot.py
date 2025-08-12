@@ -15,17 +15,17 @@ TICK_PAD_2D = 8
 def set_3d_tick_labelsize(
     ax: plt.Axes, size: int = TICK_LABELSIZE, pad: int = TICK_PAD
 ) -> None:
-    ax.xaxis.set_tick_params(labelsize=size, pad=pad)
-    ax.yaxis.set_tick_params(labelsize=size, pad=pad)
+    ax.xaxis.set_tick_params(labelsize=size, pad=pad, direction="in")
+    ax.yaxis.set_tick_params(labelsize=size, pad=pad, direction="in")
     if hasattr(ax, "zaxis"):
-        ax.zaxis.set_tick_params(labelsize=size, pad=pad)
+        ax.zaxis.set_tick_params(labelsize=size, pad=pad, direction="in")
 
 
 def set_2d_tick_labelsize(
     ax: plt.Axes, size: int = TICK_LABELSIZE_2D, pad: int = TICK_PAD_2D
 ) -> None:
-    ax.xaxis.set_tick_params(labelsize=size, pad=pad)
-    ax.yaxis.set_tick_params(labelsize=size, pad=pad)
+    ax.xaxis.set_tick_params(labelsize=size, pad=pad, direction="in")
+    ax.yaxis.set_tick_params(labelsize=size, pad=pad, direction="in")
 
 
 def visualize_motion_planning(
@@ -140,23 +140,22 @@ def visualize_constrain_motion_planning(
         save_path=save_path.replace(".npz", "_fk.png"),
     )
 
-    ax.scatter(
+    set_3d_tick_labelsize(ax)
+    ax.plot(
         ref_traj_pos[:, 0],
         ref_traj_pos[:, 1],
         ref_traj_pos[:, 2],
-        c="#7ea6e0",
-        marker="o",
-        s=8,
+        c="#7ea6e0",  # blue
+        linewidth=6,
         label="Reference",
     )
 
-    ax.scatter(
+    ax.plot(
         planned_tip_pos[:, 0],
         planned_tip_pos[:, 1],
         planned_tip_pos[:, 2],
-        c="#ea6b66",
-        marker="o",
-        s=6,
+        c="#ea6b66",  # red
+        linewidth=6,
         label="Experiment",
     )
 
@@ -173,7 +172,7 @@ def visualize_constrain_motion_planning(
     # ax.set_xlabel("X (m)")
     # ax.set_ylabel("Y (m)")
     # ax.set_zlabel("Z (m)")
-    # ax.legend(frameon=False, markerscale=4)
+    ax.legend(frameon=False, markerscale=1)
 
     # ax.plot(ref_traj_pos[:, 0], ref_traj_pos[:, 1], ref_traj_pos[:, 2], "r--", linewidth=5 )
     # ax.plot(planned_tip_pos[:, 0], planned_tip_pos[:, 1], planned_tip_pos[:, 2], "b-", linewidth=5)
@@ -259,7 +258,7 @@ def visualize_constrain_motion_planning_traj(
     # ax.set_xlabel("X (m)")
     # ax.set_ylabel("Y (m)")
     # ax.set_zlabel("Z (m)")
-    # ax.legend(frameon=False, markerscale=4)
+    # ax.legend(frameon=False, markerscale=2)
 
     # ax.plot(ref_traj_pos[:, 0], ref_traj_pos[:, 1], ref_traj_pos[:, 2], "r--", linewidth=5 )
     # ax.plot(planned_tip_pos[:, 0], planned_tip_pos[:, 1], planned_tip_pos[:, 2], "b-", linewidth=5)
@@ -387,10 +386,13 @@ def visualize_tendon_lengths_grid(
                 label=f"Cable {tendon_i + 1}",
             )
         # Titles and cosmetics
-        ax.grid(True, linestyle=":", alpha=0.3)
+        ax.grid(False)
         set_2d_tick_labelsize(ax)
+        ax.set_ylim(0.85, 1.18)
+        if sec_idx > 0:
+            ax.tick_params(labelleft=False)
         # if (end - start) <= 10:
-        #     ax.legend(fontsize=8, frameon=False)
+        #     ax.legend(fontsize=14, frameon=False, markerscale=10)
 
     # Labels (apply to leftmost and bottom row by convention; caller may refine)
 
@@ -412,18 +414,24 @@ def plot_mp_with_coll_scene(
 
 
 def plot_constrain_motion_planning():
-    fig = plt.figure(facecolor="white", figsize=(16, 24))
-    ax1 = fig.add_subplot(421, projection="3d")
-    ax2 = fig.add_subplot(423, projection="3d")
-    ax3 = fig.add_subplot(425, projection="3d")
-    ax4 = fig.add_subplot(427, projection="3d")
-    ax5 = fig.add_subplot(422, projection="3d")
-    ax6 = fig.add_subplot(424, projection="3d")
-    ax7 = fig.add_subplot(426, projection="3d")
-    ax8 = fig.add_subplot(428, projection="3d")
+    # fig = plt.figure(facecolor="white", figsize=(16, 24))
+    # ax1 = fig.add_subplot(421, projection="3d")
+    # ax2 = fig.add_subplot(423, projection="3d")
+    # ax3 = fig.add_subplot(425, projection="3d")
+    # ax4 = fig.add_subplot(427, projection="3d")
+    # ax5 = fig.add_subplot(422, projection="3d")
+    # ax6 = fig.add_subplot(424, projection="3d")
+    # ax7 = fig.add_subplot(426, projection="3d")
+    # ax8 = fig.add_subplot(428, projection="3d")
 
-    for _ax in (ax1, ax2, ax3, ax4, ax5, ax6, ax7, ax8):
-        set_3d_tick_labelsize(_ax)
+    # for _ax in (ax1, ax2, ax3, ax4, ax5, ax6, ax7, ax8):
+    #     set_3d_tick_labelsize(_ax)
+
+    fig = plt.figure(facecolor="white", figsize=(8, 24))
+    ax1 = fig.add_subplot(411, projection="3d")
+    ax2 = fig.add_subplot(412, projection="3d")
+    ax3 = fig.add_subplot(413, projection="3d")
+    ax4 = fig.add_subplot(414, projection="3d")
 
     visualize_constrain_motion_planning(
         save_path="results/traj_following/get_icra_traj_I/get_icra_traj.npz",
@@ -450,25 +458,25 @@ def plot_constrain_motion_planning():
         num_pose=15,
     )
 
-    visualize_constrain_motion_planning_traj(
-        save_path="results/traj_following/get_icra_traj_I/get_icra_traj.npz",
-        ax=ax5,
-    )
-    visualize_constrain_motion_planning_traj(
-        save_path="results/traj_following/get_icra_traj_C/get_icra_traj.npz",
-        ax=ax6,
-    )
-    visualize_constrain_motion_planning_traj(
-        save_path="results/traj_following/get_icra_traj_R/get_icra_traj.npz",
-        ax=ax7,
-    )
-    visualize_constrain_motion_planning_traj(
-        save_path="results/traj_following/get_icra_traj_A/get_icra_traj.npz",
-        ax=ax8,
-    )
+    # visualize_constrain_motion_planning_traj(
+    #     save_path="results/traj_following/get_icra_traj_I/get_icra_traj.npz",
+    #     ax=ax5,
+    # )
+    # visualize_constrain_motion_planning_traj(
+    #     save_path="results/traj_following/get_icra_traj_C/get_icra_traj.npz",
+    #     ax=ax6,
+    # )
+    # visualize_constrain_motion_planning_traj(
+    #     save_path="results/traj_following/get_icra_traj_R/get_icra_traj.npz",
+    #     ax=ax7,
+    # )
+    # visualize_constrain_motion_planning_traj(
+    #     save_path="results/traj_following/get_icra_traj_A/get_icra_traj.npz",
+    #     ax=ax8,
+    # )
 
     plt.tight_layout()
-    save_path = "results/motion_planning_examples.png"
+    save_path = "results/icra_motion_planning.png"
     plt.savefig(save_path, bbox_inches="tight", dpi=900)
     print(f"Saved plot to {save_path}")
     plt.close()
@@ -504,19 +512,19 @@ def plot_tendon_length() -> None:
     # Bottom row x-labels
 
     fig.tight_layout()
-    save_path = os.path.join("results", "tendon_length_icra.png")
+    save_path = os.path.join("results", "icra_tendon_length.png")
     os.makedirs(os.path.dirname(save_path), exist_ok=True)
     plt.savefig(save_path, bbox_inches="tight", dpi=900)
     print(f"Saved tendon length ICRA plot to {save_path}")
 
 
-def visualize_error(save_path: str, ax: plt.Axes):
+def visualize_error(save_path: str, ax: plt.Axes, set_precision: int = None):
     """
     Plot per-timestep position and rotation errors from a saved trajectory .npz.
 
     - X axis: timestep index
-    - Left Y axis: position error (m)
-    - Right Y axis: rotation error (rad)
+    - Left Y axis: position error (mm)
+    - Right Y axis: rotation error (deg)
     """
     if not os.path.exists(save_path):
         print(f"Warning: npz not found at {save_path}")
@@ -605,6 +613,8 @@ def visualize_error(save_path: str, ax: plt.Axes):
         )
         traces = np.clip((np.trace(R_rel, axis1=1, axis2=2) - 1.0) / 2.0, -1.0, 1.0)
         rotation_errors = np.arccos(traces)
+    # Convert rotation error from radians to degrees for plotting
+    rotation_errors = np.rad2deg(rotation_errors)
 
     # Plot
     timesteps = np.arange(len(position_errors))
@@ -622,8 +632,9 @@ def visualize_error(save_path: str, ax: plt.Axes):
         linewidth=1.8,
         label="Position Error",
     )
-    ax.grid(True, linestyle=":", alpha=0.3)
+    ax.grid(False)
     set_2d_tick_labelsize(ax)
+    # ax.legend(fontsize=14, frameon=False, loc="upper right", markerscale=20)
 
     ax_right = ax.twinx()
     ax_right.plot(
@@ -634,6 +645,21 @@ def visualize_error(save_path: str, ax: plt.Axes):
         label="Rotation Error",
     )
     set_2d_tick_labelsize(ax_right)
+    ax_right.grid(False)
+    # ax_right.legend(fontsize=14, frameon=False, loc="center right", markerscale=20)
+
+    # Ensure consistent decimal places on both y-axes in the same figure
+    if set_precision == 2:
+        fixed_formatter = matplotlib.ticker.FormatStrFormatter("%.2f")
+        ax.yaxis.set_major_formatter(fixed_formatter)
+        ax_right.yaxis.set_major_formatter(fixed_formatter)
+    elif set_precision == 1:
+        fixed_formatter = matplotlib.ticker.FormatStrFormatter("%.1f")
+        ax.yaxis.set_major_formatter(fixed_formatter)
+        ax_right.yaxis.set_major_formatter(fixed_formatter)
+    else:
+        pass
+    # ax_right.set_ylabel("Rotation Error (deg)")
 
     title_suffix = None
     try:
@@ -659,7 +685,10 @@ def plot_error() -> None:
             "results", "traj_following", f"get_icra_traj_{letter}", "get_icra_traj.npz"
         )
         current_ax = axes[idx] if isinstance(axes, np.ndarray) else axes
-        visualize_error(npz_path, current_ax)
+        if letter == "I":
+            visualize_error(npz_path, current_ax, set_precision=2)
+        else:
+            visualize_error(npz_path, current_ax, set_precision=1)
         # Left-side label for each row for readability
         set_2d_tick_labelsize(current_ax)
         # Right y-axis label already set by visualize_error via twinx
@@ -667,7 +696,7 @@ def plot_error() -> None:
     set_2d_tick_labelsize(axes[-1])
 
     fig.tight_layout()
-    save_path = os.path.join("results", "error_icra.png")
+    save_path = os.path.join("results", "icra_error.png")
     os.makedirs(os.path.dirname(save_path), exist_ok=True)
     plt.savefig(save_path, bbox_inches="tight", dpi=900)
     print(f"Saved error ICRA plot to {save_path}")
@@ -696,6 +725,6 @@ if __name__ == "__main__":
     #             print(f"Error in plot_mp_with_coll_scene: {e}, {save_path}")
     # print("--------------ERROR PATH LIST--------------")
     # print(error_path_list)
-    # plot_constrain_motion_planning()
+    plot_constrain_motion_planning()
     plot_tendon_length()
-    # plot_error()
+    plot_error()
