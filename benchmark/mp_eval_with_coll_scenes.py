@@ -7,8 +7,29 @@ import time
 import json
 import os
 from typing import Callable, Sequence
+
+# Initialize JAX persistent compilation cache
+os.environ["JAX_COMPILATION_CACHE_DIR"] = "/tmp/jax_cache"
+jax.config.update("jax_compilation_cache_dir", "/tmp/jax_cache")
+jax.config.update("jax_persistent_cache_min_entry_size_bytes", -1)
+jax.config.update("jax_persistent_cache_min_compile_time_secs", 0)
+jax.config.update(
+    "jax_persistent_cache_enable_xla_caches", "xla_gpu_per_fusion_autotune_cache_dir"
+)
+from jax.experimental.compilation_cache import compilation_cache as cc
+
+cc.set_cache_dir("/tmp/jax_cache")
 from soul.robots.cc_robot import CCRobot, ConstantCurvatureState
-from soul.solver import RRTMotionPlanner, MotionPlanner, PRMMotionPlanner
+from soul.robots.tdcr_robot import TDCRRobot
+from soul.solver import (
+    TrajOptimizer,
+    TrajOptimizerOptions,
+    ParallelPRM,
+    PRMOptions,
+    OptimizedRRT,
+    RRTOptions,
+)
+from soul.solver.motion_planner import resample_trajectory
 from soul.geom import (
     RobotCollision,
     WorldCollision,
@@ -420,7 +441,7 @@ def summarize_results(all_results_summary: list):
     """Prints a summary table of the evaluation results."""
     print("\n\n--- MP Evaluation Summary ---")
     header = (
-        f"{'Method':<10} | {'Sections':<10} | {'Eval Num':<10} | "
+        f"{'Method':<10} | {'Optimized':<10} | {'Sections':<10} | {'Eval Num':<10} | "
         f"{'Success (%)':<18} | {'Reachable (%)':<20} | "
         f"{'Pos Error (m)':<20} | {'Rot Error (rad)':<20} | {'Time (s)':<20}"
     )
@@ -429,6 +450,7 @@ def summarize_results(all_results_summary: list):
 
     for res_item in all_results_summary:
         method_str = res_item.get("method", "MP")
+        optimized_str = str(res_item.get("with_optimization", "N/A"))
         sections_str = str(res_item.get("num sections", "N/A"))
         eval_num_str = str(res_item.get("eval num", "N/A"))
 
@@ -446,14 +468,50 @@ def summarize_results(all_results_summary: list):
         time_str = f"{res_item['time_mean']:.3f} ± {res_item['time_std']:.3f}"
 
         print(
-            f"{method_str:<10} | {sections_str:<10} | {eval_num_str:<10} | "
+            f"{method_str:<10} | {optimized_str:<10} | {sections_str:<10} | {eval_num_str:<10} | "
             f"{sr_str:<18} | {kr_str:<20} | "
             f"{ps_error_str:<20} | {rt_error_str:<20} | {time_str:<20}"
         )
 
 
+def _traj_optimize(
+    robot_type: str,
+    traj_opt: Callable,
+    traj_options: TrajOptimizerOptions,
+    world_coll: CollGeom,
+    cfg: Array,
+) -> Array:
+    """Optimizes a trajectory using the TrajOpt framework."""
+    if robot_type == "cc":
+        cfg = traj_opt(
+            cfg,
+            [world_coll],
+            limit_weight=traj_options.limit_weight,
+            smoothness_weight=traj_options.smoothness_weight,
+            trajectory_length_weight=traj_options.trajectory_length_weight,
+            collision_weight=traj_options.collision_weight,
+            start_pose_weight=traj_options.start_pose_weight,
+            end_pose_weight=traj_options.end_pose_weight,
+        )
+    elif robot_type == "tdcr":
+        cfg = traj_opt(
+            cfg,
+            [world_coll],
+            limit_weight=traj_options.limit_weight,
+            smoothness_weight=traj_options.smoothness_weight,
+            trajectory_length_weight=traj_options.trajectory_length_weight,
+            collision_weight=traj_options.collision_weight,
+            start_pose_weight=traj_options.start_pose_weight,
+            end_pose_weight=traj_options.end_pose_weight,
+            tendon_vel_weight=traj_options.tendon_vel_weight,
+            tendon_acc_weight=traj_options.tendon_acc_weight,
+            dt=traj_options.dt,
+        )
+    return cfg
+
+
 def _solve_with_trajopt(
-    solver: tuple[Callable, Callable],
+    solver: tuple[Callable, Callable, TrajOptimizerOptions, str],
     start_position: Array,
     start_wxyz: Array,
     target_position: Array,
@@ -461,31 +519,17 @@ def _solve_with_trajopt(
     world_geom: CollGeom,
 ):
     """Specific solving logic for TrajOpt."""
-    start_end_interpolate_jit = solver[0]
-    optimize_traj_jit = solver[1]
-
-    print("Warm-up run for TrajOpt solver...")
-    path_cfg = start_end_interpolate_jit(
+    start_end_interpolate_jit, traj_opt_jit, traj_options, robot_type = solver
+    cfg = start_end_interpolate_jit(
         start_position, start_wxyz, target_position, target_wxyz, [world_geom]
     )
-    path_cfg = optimize_traj_jit(path_cfg, [world_geom])
-    jax.block_until_ready(path_cfg)
 
-    # Solve
-    print(f"start solve trajopt")
-    start = time.time()
-    path_cfg = start_end_interpolate_jit(
-        start_position, start_wxyz, target_position, target_wxyz, [world_geom]
-    )
-    path_cfg = optimize_traj_jit(path_cfg, [world_geom])
-    jax.block_until_ready(path_cfg)
-    total_time = time.time() - start
-
-    return path_cfg, total_time
+    path_cfg = _traj_optimize(robot_type, traj_opt_jit, traj_options, world_geom, cfg)
+    return path_cfg
 
 
 def _solve_with_prm(
-    solver: PRMMotionPlanner,
+    solver: tuple[Callable, ParallelPRM],
     start_position: Array,
     start_wxyz: Array,
     target_position: Array,
@@ -493,27 +537,16 @@ def _solve_with_prm(
     world_geom: CollGeom,
 ):
     """Specific solving logic for PRM."""
-    print("Warm-up run for PRM solver...")
-    cfg_pair = solver._ik_solver_best(
+    ik_solver, prm_solver = solver
+    cfg_pair = ik_solver(
         start_wxyz, start_position, target_wxyz, target_position, [world_geom]
     )
-    path_cfg = solver.find_path(cfg_pair[0], cfg_pair[1], 100, [world_geom])
-    jax.block_until_ready(path_cfg)
-
-    print("start solve prm")
-    start = time.time()
-    cfg_pair = solver._ik_solver_best(
-        start_wxyz, start_position, target_wxyz, target_position, [world_geom]
-    )
-    path_cfg = solver.find_path(cfg_pair[0], cfg_pair[1], 1000, [world_geom])
-    jax.block_until_ready(path_cfg)
-    total_time = time.time() - start
-
-    return path_cfg, total_time
+    path_cfg = prm_solver.find_path(cfg_pair[0], cfg_pair[1], [world_geom])
+    return path_cfg
 
 
 def _solve_with_rrt(
-    solver: RRTMotionPlanner,
+    solver: tuple[Callable, OptimizedRRT],
     start_position: Array,
     start_wxyz: Array,
     target_position: Array,
@@ -521,34 +554,23 @@ def _solve_with_rrt(
     world_geom: CollGeom,
 ):
     """Specific solving logic for RRT."""
-    # Warm-up run
-    print("Warm-up run for RRT solver...")
-    cfg_pair = solver._ik_solver_best(
+    ik_solver, rrt_solver = solver
+    cfg_pair = ik_solver(
         start_wxyz, start_position, target_wxyz, target_position, [world_geom]
     )
-    path_cfg = solver.find_path(cfg_pair[0], cfg_pair[1], [world_geom])
-    jax.block_until_ready(path_cfg)
-
-    # Solve
-    print(f"start solve rrt")
-    start = time.time()
-    cfg_pair = solver._ik_solver_best(
-        start_wxyz, start_position, target_wxyz, target_position, [world_geom]
-    )
-
-    path_cfg = solver.find_path(cfg_pair[0], cfg_pair[1], [world_geom])
-
-    jax.block_until_ready(path_cfg)
-    total_time = time.time() - start
-
-    return path_cfg, total_time
+    path_cfg = rrt_solver.find_path(cfg_pair[0], cfg_pair[1], [world_geom])
+    return path_cfg
 
 
 def _eval_planner(
     planner_name: str,
+    robot_type: str,
     solver,
     solve_fn: Callable,
-    robot: CCRobot,
+    target_timesteps: int,
+    whether_use_trajopt_after_planner: bool,
+    traj_opt_solver: tuple,  # (traj_opt_jit, traj_options)
+    robot,
     batched_fk: Callable[[ConstantCurvatureState], Array],
     robot_coll: RobotCollision,
     world_geom: CollGeom,
@@ -570,10 +592,31 @@ def _eval_planner(
     target_wxyz = target_tip_transform.rotation().wxyz
     target_position = target_tip_transform.translation()
 
-    # Call the specific solver function
-    path_cfg, total_time = solve_fn(
+    # Call the specific solver function and time it
+    start_time = time.time()
+    path_cfg = solve_fn(
         solver, start_position, start_wxyz, target_position, target_wxyz, world_geom
     )
+    jax.block_until_ready(path_cfg)
+    total_time = time.time() - start_time
+
+    # Post-process with TrajOpt if enabled
+    if (
+        (planner_name == "prm" or planner_name == "rrt")
+        and whether_use_trajopt_after_planner
+        and path_cfg is not None
+        and path_cfg.theta.shape[0] > 0
+    ):
+        total_time = 0.0
+        path_cfg = resample_trajectory(path_cfg, target_timesteps)
+        traj_opt, traj_options = traj_opt_solver
+
+        path_cfg = _traj_optimize(
+            robot_type, traj_opt, traj_options, world_geom, path_cfg
+        )
+        jax.block_until_ready(path_cfg)
+        total_time = time.time() - start_time
+        print(f"Finish optimizing {planner_name.upper()} path with TrajOpt...")
 
     # Process results
     is_valid = path_cfg is not None and path_cfg.theta.shape[0] > 0
@@ -662,7 +705,9 @@ def _eval_planner(
     )
 
     # Print and return results
-    print(f"--- {method_name_upper} With Collision Results ---")
+    print(
+        f"--- {method_name_upper} (Opt: {whether_use_trajopt_after_planner}) With Collision Results ---"
+    )
     print(
         f"Kinematic Reachability Rate (accurate AND within limits): {kinematic_reachability_rate:.2f}%"
     )
@@ -672,12 +717,13 @@ def _eval_planner(
     print(f"Final Position Error: {final_pos_error:.3f}m")
     print(f"Final Rotation Error: {final_rot_error:.3f}rad")
     print(
-        f"finish solve {planner_name} of num sections {robot.config.num_sections}, total time: {total_time}s"
+        f"finish solve {planner_name} (Opt: {whether_use_trajopt_after_planner}) of num sections {robot.config.num_sections}, total time: {total_time}s"
     )
     print(failure_stats)
 
     return {
         "method": method_name_upper,
+        "with_optimization": whether_use_trajopt_after_planner,
         "eval num": 1,
         "actual eval num": 1,
         "num sections": robot.config.num_sections,
@@ -691,50 +737,123 @@ def _eval_planner(
 
 
 def eval_mp_all_sections(
+    robot_type: str,
     robot_config_path: str,
     world_config_path: str,
     section_list: list,
     eval_num: int,
     save_dir: str,
     min_sample_dist_ratio: float,
+    opt_after_planner: bool = False,
     planner_type: str = "trajopt",
 ) -> list:
     all_results_summary = []
-
-    planner_map = {
-        "trajopt": (_solve_with_trajopt, MotionPlanner),
-        "prm": (_solve_with_prm, PRMMotionPlanner),
-        "rrt": (_solve_with_rrt, RRTMotionPlanner),
-    }
-
-    if planner_type not in planner_map:
-        raise ValueError(
-            f"Unknown planner_type: '{planner_type}'. Available options are {list(planner_map.keys())}"
-        )
-
-    solve_fn, solver_class = planner_map[planner_type]
 
     for num_sections in section_list:
         # load robot config
         config = json.load(open(robot_config_path))
         config["num_sections"] = num_sections
 
-        robot = CCRobot.from_config(config)
-        robot_coll = RobotCollision.from_config(config)
+        if robot_type == "cc":
+            robot = CCRobot.from_config(config)
+            robot_coll = RobotCollision.from_config(config)
+        elif robot_type == "tdcr":
+            robot = TDCRRobot.from_config(config)
+            robot_coll = RobotCollision.from_config(config)
+
         robot_total_length = robot.config.length * robot.config.num_sections
         # load world config
         world_coll = WorldCollision.from_config(world_config_path)
 
-        batched_fk = robot.forward_kinematics
-
-        solver = solver_class(robot, robot_coll, timesteps=100)
         world_geom = world_coll.collision_geoms_no_ground[-1]
 
-        # Replace solver for trajopt
-        if planner_type == "trajopt":
-            start_end_interpolate_jit = jax.jit(solver.start_end_interpolate)
-            optimize_traj_jit = jax.jit(solver.optimize)
-            solver = (start_end_interpolate_jit, optimize_traj_jit)
+        # Set up trajopt parameters
+        timesteps = 100
+
+        # Initialize trajectory optimizer options
+        traj_options = TrajOptimizerOptions()
+
+        # init motion planners
+        traj_solver = TrajOptimizer(robot, robot_coll, timesteps, options=traj_options)
+        start_end_interpolate_jit = jax.jit(traj_solver.start_end_interpolate)
+        start_end_ik_solver = traj_solver._ik_solver_best
+        if robot_type == "cc":
+            # JIT compile without making options static - they will be traced as dynamic values
+            traj_opt = jax.jit(traj_solver.optimize)
+        elif robot_type == "tdcr":
+            # JIT compile without making options static - they will be traced as dynamic values
+            traj_opt = jax.jit(traj_solver.optimize_tdcr)
+
+        # Equal
+        batched_fk = jax.jit(jax.vmap(robot._forward_kinematics))
+
+        # Initialize RRT solver
+        rrt_options = RRTOptions(
+            batch_size=100,
+            max_iterations=1000,
+        )
+        rrt_traj_solver = OptimizedRRT(robot, robot_coll, rrt_options)
+
+        # Initialize PRM solver
+        prm_options = PRMOptions(batch_size=2000, parallel_edge_checks=200)
+        prm_traj_solver = ParallelPRM(robot, robot_coll, prm_options)
+        roadmap_path = os.path.join(save_dir, "roadmaps", f"roadmap_{num_sections}.pkl")
+        os.makedirs(os.path.dirname(roadmap_path), exist_ok=True)
+        if os.path.exists(roadmap_path):
+            print(f"Loading existing roadmap: {roadmap_path}...")
+            prm_traj_solver.load_roadmap(roadmap_path)
+        else:
+            print(f"Building new roadmap: {roadmap_path}...")
+            prm_traj_solver.build_roadmap(1000, [world_geom])
+            prm_traj_solver.save_roadmap(roadmap_path)
+
+        print("Init done")
+
+        planner_map = {
+            "trajopt": (
+                _solve_with_trajopt,
+                (start_end_interpolate_jit, traj_opt, traj_options, robot_type),
+            ),
+            "prm": (_solve_with_prm, (start_end_ik_solver, prm_traj_solver)),
+            "rrt": (_solve_with_rrt, (start_end_ik_solver, rrt_traj_solver)),
+        }
+        if planner_type not in planner_map:
+            raise ValueError(
+                f"Unknown planner_type: '{planner_type}'. Available options are {list(planner_map.keys())}"
+            )
+
+        solve_fn, solver = planner_map[planner_type]
+        traj_opt_solver_methods = (traj_opt, traj_options)
+
+        # # Warm-up call
+        print(f"Warming up {planner_type.upper()} solver...")
+        # Create some dummy data for warm-up
+        dummy_start, dummy_end = sample_collision_free_start_end_states(
+            robot, 50, robot_coll, world_coll.collision_geoms[0], batched_fk, 0.1
+        )
+        dummy_start_fk = batched_fk(dummy_start)
+        dummy_end_fk = batched_fk(dummy_end)
+        s_pos = jaxlie.SE3.from_matrix(dummy_start_fk[0, -1]).translation()
+        s_wxyz = jaxlie.SE3.from_matrix(dummy_start_fk[0, -1]).rotation().wxyz
+        e_pos = jaxlie.SE3.from_matrix(dummy_end_fk[0, -1]).translation()
+        e_wxyz = jaxlie.SE3.from_matrix(dummy_end_fk[0, -1]).rotation().wxyz
+        path_cfg = solve_fn(
+            solver, s_pos, s_wxyz, e_pos, e_wxyz, world_coll.collision_geoms[0]
+        )
+        if (
+            (planner_type == "prm" or planner_type == "rrt")
+            and opt_after_planner
+            and path_cfg is not None
+            and path_cfg.theta.shape[0] > 0
+        ):
+
+            path_cfg = resample_trajectory(path_cfg, timesteps)
+            traj_opt, traj_options = traj_opt_solver_methods
+            # Warm-up for the optimization step as well
+            _ = _traj_optimize(robot_type, traj_opt, traj_options, world_geom, path_cfg)
+            jax.block_until_ready(_)
+            print(f"Finish the warm up of [{planner_type.upper()}] with TrajOpt...")
+            print("Warm-up complete.")
 
         # Sample all pairs first
         print(
@@ -773,14 +892,16 @@ def eval_mp_all_sections(
             end_state_i = jax.tree_util.tree_map(lambda x: x[i : i + 1], end_states)
 
             # Save the detailed trajectory of each trial
-            save_path = (
-                f"{save_dir}/{planner_type}_sections_{num_sections}_trial_{i}.npz"
-            )
+            save_path = f"{save_dir}/{planner_type}_opt_{opt_after_planner}_sections_{num_sections}_trial_{i}.npz"
 
             result = _eval_planner(
                 planner_name=planner_type,
+                robot_type=robot_type,
                 solver=solver,
                 solve_fn=solve_fn,
+                target_timesteps=timesteps,
+                whether_use_trajopt_after_planner=opt_after_planner,
+                traj_opt_solver=traj_opt_solver_methods,
                 robot=robot,
                 batched_fk=batched_fk,
                 robot_coll=robot_coll,
@@ -804,7 +925,7 @@ def eval_mp_all_sections(
         times = np.array([r["total time"] for r in trial_results])
 
         # Save the collected raw results to a single npz file for this configuration
-        full_results_path = f"{save_dir}/all_trials_results/{planner_type}_sections_{num_sections}_all_trials_results.npz"
+        full_results_path = f"{save_dir}/all_trials_results/{planner_type}_opt_{opt_after_planner}_sections_{num_sections}_all_trials_results.npz"
         os.makedirs(os.path.dirname(full_results_path), exist_ok=True)
         np.savez(
             full_results_path,
@@ -816,12 +937,13 @@ def eval_mp_all_sections(
             failure_stats=[r["failure_stats"] for r in trial_results],
         )
         print(
-            f"\nSaved full results for {planner_type.upper()} with {num_sections} sections to {full_results_path}"
+            f"\nSaved full results for {planner_type.upper()} with {opt_after_planner} optimization and {num_sections} sections to {full_results_path}"
         )
 
         # Create the aggregated summary dictionary
         summary = {
             "method": planner_type.upper(),
+            "with_optimization": opt_after_planner,
             "num sections": num_sections,
             "eval num": actual_eval_num,
             "success_rate_mean": np.mean(success_rates),
@@ -841,29 +963,64 @@ def eval_mp_all_sections(
 
 
 if __name__ == "__main__":
+    robot_type = "tdcr"
     test_list = [3, 4, 5, 6]
-    repeat_num = 50  # Evaluate 10 times for each configuration
-    robot_config_path = "configs/robots/cc_scene_eval.json"
-    # world_config_path = "configs/maps/mp_maps/obstacles_lattice.json"
-    world_config_path = "configs/maps/mp_scene/obstacles_13.pick_from_shelf.json"
-    # result_dir = "results/2.pick_from_box"
+    repeat_num = 50  # Evaluate 50 times for each configuration
+    robot_config_path = "configs/robots/cc_scene_eval_tdcr.json"
 
-    # TODO: change the result_dir to the scene name
-    result_dir = "results/13.pick_from_shelf"
-    os.makedirs(result_dir, exist_ok=True)
-    planner_types = ["trajopt", "prm", "rrt"]  # ["trajopt", "prm", "rrt"]
+    # Correctly format the world config paths
+    world_config_paths = [
+        f"configs/maps/mp_scene/obstacles_random_section_{i}.json" for i in test_list
+    ] + [
+        "configs/maps/mp_scene/13.pick_from_shelf.json",
+        "configs/maps/mp_scene/14.pick_from_bookshelf.json",
+        "configs/maps/mp_scene/15.grab_from_box.json",
+        "configs/maps/mp_scene/mp_demo.json",
+    ]
+
+    planner_types = ["rrt"]  # ["trajopt", "prm", "rrt"]
+    opt_options = [True, False]
     result_summarys = []
 
-    for planner_type in planner_types:
-        result_summary = eval_mp_all_sections(
-            robot_config_path=robot_config_path,
-            world_config_path=world_config_path,
-            section_list=test_list,
-            eval_num=repeat_num,
-            save_dir=result_dir,
-            min_sample_dist_ratio=0.1,
-            planner_type=planner_type,
-        )
-        result_summarys.extend(result_summary)
+    for world_path in world_config_paths:
+        # Extract scene name for result directory
+        scene_name = os.path.splitext(os.path.basename(world_path))[0]
+        result_dir = f"results/mp_test/{scene_name}"
+        os.makedirs(result_dir, exist_ok=True)
 
+        print(f"\n{'='*20} Running Evaluation for Scene: {scene_name} {'='*20}")
+
+        for planner in planner_types:
+            # TrajOpt doesn't have a separate optimization option like PRM/RRT
+            if planner == "trajopt":
+                opts_to_run = [False]  # It ignores this flag, just run once
+            else:
+                opts_to_run = opt_options
+
+            for opt in opts_to_run:
+                print(f"\n--- Planner: {planner.upper()}, Optimization: {opt} ---")
+
+                # For non-random scenes, test_list might need adjustment.
+                # Here we assume scenes with specific section counts will be named accordingly
+                # or we can default to a standard test list.
+                current_test_list = test_list
+                if "obstacles_random_section" not in world_path:
+                    # For named scenes, maybe we evaluate a fixed set of sections
+                    current_test_list = [3, 4, 5, 6]
+
+                result_summary = eval_mp_all_sections(
+                    robot_config_path=robot_config_path,
+                    world_config_path=world_path,
+                    section_list=current_test_list,
+                    eval_num=repeat_num,
+                    save_dir=result_dir,
+                    min_sample_dist_ratio=0.1,
+                    opt_after_planner=opt,
+                    robot_type=robot_type,
+                    planner_type=planner,
+                )
+                if result_summary:
+                    result_summarys.extend(result_summary)
+
+    print("\n\n" + "=" * 30 + " FINAL SUMMARY " + "=" * 30)
     summarize_results(result_summarys)

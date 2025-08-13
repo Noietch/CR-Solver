@@ -217,7 +217,8 @@ def generate_random_env(
     num_obstacles: int = 10,
     center_pos: list = [0.0, 0.0, 0.0],
     scale: float = 1.0,
-    radius: float = 0.15,
+    radius_min: float = 0.15,
+    radius_max: float = 0.30,
 ):
     """
     Generate a random environment with spherical obstacles.
@@ -238,6 +239,7 @@ def generate_random_env(
             np.random.uniform(-scale, scale) + center_pos[1],
             np.random.uniform(-scale, scale) + center_pos[2],
         ]
+        radius = np.random.uniform(radius_min, radius_max)
         obstacles_dict[obstacle_key] = {
             "type": "sphere",
             "center": center,
@@ -292,11 +294,12 @@ if __name__ == "__main__":
 
     for section in section_list:
         generate_random_env(
-            f"configs/maps/ik_maps/obstacles_random_section_{section}.json",
+            f"configs/maps/mp_scene/obstacles_random_section_{section}.json",
             num_obstacles=section**3,  # Number of obstacles increases with section size
             center_pos=[0.0, 0.0, 0.0],
             scale=section * section_length,
-            radius=0.2,
+            radius_min=0.15,
+            radius_max=0.3,
         )
         visualize_cc_model_3d(
             world_coll_config=f"configs/maps/ik_maps/obstacles_random_section_{section}.json",
