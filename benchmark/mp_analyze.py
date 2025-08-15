@@ -6,8 +6,62 @@ import numpy as np
 import pandas as pd
 
 
+def _calculate_group_summary(group: pd.DataFrame) -> pd.Series:
+    """
+    Helper function to compute summary statistics for a given data group (DataFrame).
+    In this version, position and rotation errors are calculated only for successful cases.
+    """
+    actual_eval_num = len(group)
+    if actual_eval_num == 0:
+        return pd.Series()
+
+    # --- Accuracy calculation (using all cases) ---
+    successful_trials = group["Success Rate (%)"] == 100
+    pos_ok = group["Position Error (m)"] < 0.08
+    rot_ok = group["Rotation Error (rad)"] < 0.9
+    accurate_trials_count = np.sum(successful_trials & pos_ok & rot_ok)
+    accuracy = (accurate_trials_count / actual_eval_num) * 100
+
+    # --- Filter successful cases for error analysis ---
+    # Use group["Success Rate (%)"] == 100 to filter
+    successful_group = group[group["Success Rate (%)"] == 100]
+
+    summary = {
+        "Eval Num": actual_eval_num,
+        "Accuracy (%)": accuracy,
+        "Success Rate Mean (%)": group["Success Rate (%)"].mean(),
+        "Success Rate Std (%)": group["Success Rate (%)"].std(),
+        "Kinematic Reachability Rate Mean (%)": group[
+            "Kinematic Reachability Rate (%)"
+        ].mean(),
+        "Kinematic Reachability Rate Std (%)": group[
+            "Kinematic Reachability Rate (%)"
+        ].std(),
+        # If there are no successful cases, .mean()/.std() will automatically return NaN, which is correct
+        "Position Error Mean (m)": successful_group["Position Error (m)"].mean(),
+        "Position Error Std (m)": successful_group["Position Error (m)"].std(),
+        "Rotation Error Mean (rad)": successful_group["Rotation Error (rad)"].mean(),
+        "Rotation Error Std (rad)": successful_group["Rotation Error (rad)"].std(),
+        # Time is usually calculated for all cases to reflect average duration
+        "Time Mean (s)": group["Time (s)"].mean(),
+        "Time Std (s)": group["Time (s)"].std(),
+    }
+
+    # Dynamically handle failure statistics columns
+    failure_cols = [
+        col for col in group.columns if "Rate" in col and col not in summary
+    ]
+    for col in failure_cols:
+        base_col_name = col.replace(" (%)", "")
+        if base_col_name in group.columns:
+            mean_val = group[base_col_name].mean()
+            summary_col_name = base_col_name.replace("Rate", "Rate Mean") + " (%)"
+            summary[summary_col_name] = mean_val
+
+    return pd.Series(summary)
+
+
 def save_results(results_dir: str, detailed_csv_path: str):
-    # Search for the aggregated results files, not individual trial files.
     search_path = os.path.join(
         results_dir, "all_trials_results", "*_all_trials_results.npz"
     )
@@ -25,30 +79,37 @@ def save_results(results_dir: str, detailed_csv_path: str):
         try:
             filename = os.path.basename(file_path)
             parts = filename.split("_")
+            # Extract scene_name from the path
+            scene_name = file_path.split(os.sep)[-3]
+
             planner_type = parts[0]
-            num_sections = int(parts[2])
+            opt_after_planner = parts[2] == "True"
+            num_sections = int(parts[4])
+
+            method_name = planner_type.upper()
+            if planner_type in ["prm", "rrt"] and opt_after_planner:
+                method_name += "+Opt"
 
             data = np.load(file_path, allow_pickle=True)
 
-            # Basic Metrics from the aggregated file
-            # These are now arrays of results from all trials for a given config.
             success_rates = data["success_rates"]
+            actual_eval_num = len(success_rates)
+            if actual_eval_num == 0:
+                print(f"Skipping file {filename} because it contains no trial data.")
+                continue
+
             kinematic_rates = data["kinematic_rates"]
             pos_errors = data["pos_errors"]
             rot_errors = data["rot_errors"]
             times = data["times"]
             failure_stats_list = data["failure_stats"]
 
-            actual_eval_num = len(success_rates)
-            if actual_eval_num == 0:
-                print(f"Skipping {filename} as it contains no trials.")
-                continue
-
             # Collect data for each individual trial for the detailed CSV
             for i in range(actual_eval_num):
                 trial_data = {
-                    "Method": planner_type.upper(),
+                    "Method": method_name,
                     "Num Sections": num_sections,
+                    "scene_name": scene_name,
                     "Trial": i + 1,
                     "Success Rate (%)": success_rates[i],
                     "Kinematic Reachability Rate (%)": kinematic_rates[i],
@@ -60,95 +121,103 @@ def save_results(results_dir: str, detailed_csv_path: str):
                 if failure_stats_list.size > 0 and i < len(failure_stats_list):
                     trial_failure_stats = failure_stats_list[i]
                     for key, value in trial_failure_stats.items():
-                        # Clean up key for column name
                         col_name = key.replace("_", " ").title()
                         if "Rate" in col_name:
                             col_name += " (%)"
-                        # Exclude raw counts from the detailed table for clarity
                         if "Num " not in col_name and "Total Samples" not in col_name:
                             trial_data[col_name] = value
+
                 all_trials_data.append(trial_data)
-
-            # Calculate aggregated summary
-            summary = {
-                "Method": planner_type.upper(),
-                "Num Sections": num_sections,
-                "Eval Num": actual_eval_num,
-                "Success Rate Mean (%)": np.nanmean(success_rates),
-                "Success Rate Std (%)": np.nanstd(success_rates),
-                "Kinematic Reachability Rate Mean (%)": np.nanmean(kinematic_rates),
-                "Kinematic Reachability Rate Std (%)": np.nanstd(kinematic_rates),
-                "Position Error Mean (m)": np.nanmean(pos_errors),
-                "Position Error Std (m)": np.nanstd(pos_errors),
-                "Rotation Error Mean (rad)": np.nanmean(rot_errors),
-                "Rotation Error Std (rad)": np.nanstd(rot_errors),
-                "Time Mean (s)": np.nanmean(times),
-                "Time Std (s)": np.nanstd(times),
-            }
-
-            # Detailed Failure Analysis for Summary
-            if failure_stats_list.size > 0:
-                failure_df = pd.DataFrame(list(failure_stats_list))
-                # drop columns that are not rates
-                failure_df = failure_df.drop(
-                    columns=["total_samples", "num_success", "num_fail"],
-                    errors="ignore",
-                )
-                failure_means = failure_df.mean()
-
-                for key, value in failure_means.items():
-                    # Add "Mean" and "(%)" to the column names for clarity
-                    col_name = (
-                        key.replace("_", " ").title().replace("Rate", "Rate Mean")
-                    )
-                    if "Rate" in col_name:
-                        col_name += " (%)"
-                    summary[col_name] = value
-
-            all_summary_data.append(summary)
 
         except Exception as e:
             print(f"Error processing file {file_path}: {e}")
 
-    # Save Detailed All-Trials CSV
     if not all_trials_data:
-        print("No trial data was processed successfully.")
-    else:
-        detailed_df = pd.DataFrame(all_trials_data)
-        os.makedirs(os.path.dirname(detailed_csv_path), exist_ok=True)
-        detailed_df.to_csv(detailed_csv_path, index=False, float_format="%.4f")
-        print(f"\nDetailed all-trials data saved to: {detailed_csv_path}")
-
-    # Save Aggregated Summary CSV
-    if not all_summary_data:
         print("No summary data was processed successfully.")
         return
 
-    summary_df = pd.DataFrame(all_summary_data)
+    # Create a DataFrame containing all trial data
+    all_trials_df = pd.DataFrame(all_trials_data)
 
-    # Reorder columns for better readability
-    cols_order = [
-        "Method",
-        "Num Sections",
-        "Eval Num",
-        "Success Rate Mean (%)",
-        "Success Rate Std (%)",
-        "Kinematic Reachability Rate Mean (%)",
-        "Kinematic Reachability Rate Std (%)",
-        "Position Error Mean (m)",
-        "Position Error Std (m)",
-        "Rotation Error Mean (rad)",
-        "Rotation Error Std (rad)",
-        "Time Mean (s)",
-        "Time Std (s)",
-    ]
-    failure_cols = [col for col in summary_df.columns if col not in cols_order]
-    final_cols = cols_order + sorted(failure_cols)
-    final_cols_exist = [col for col in final_cols if col in summary_df.columns]
-    summary_df = summary_df[final_cols_exist]
+    # Ensure output directory exists
+    output_dir = os.path.dirname(detailed_csv_path)
+    os.makedirs(output_dir, exist_ok=True)
 
-    print("\n--- Results Summary ---")
-    print(summary_df.to_string())
+    # Save detailed CSV file containing all trials
+    all_trials_detailed_path = os.path.join(output_dir, "all_trials_detailed.csv")
+    all_trials_df.to_csv(all_trials_detailed_path, index=False, float_format="%.4f")
+    print(f"\nDetailed data for all trials saved to: {all_trials_detailed_path}")
+
+    # Filter and save successful trials
+    successful_trials_df = all_trials_df[
+        all_trials_df["Success Rate (%)"] == 100
+    ].copy()
+    successful_trials_detailed_path = os.path.join(
+        output_dir, "successful_trials_detailed.csv"
+    )
+    successful_trials_df.to_csv(
+        successful_trials_detailed_path, index=False, float_format="%.4f"
+    )
+    print(
+        f"Detailed data for successful trials saved to: {successful_trials_detailed_path}"
+    )
+
+    # Group by different dimensions and save summary files
+    grouping_keys = {
+        "method": ["Method"],
+        "num_sections": ["Num Sections"],
+        "scene_name": ["scene_name"],
+    }
+
+    # Helper function to format and save summary
+    def save_summary_df(df, group_vars, filename):
+        # Arrange column order for better readability
+        id_vars = group_vars
+        metric_vars = [col for col in df.columns if col not in id_vars]
+        desired_order = [
+            "Eval Num",
+            "Accuracy (%)",
+            "Success Rate Mean (%)",
+            "Success Rate Std (%)",
+            "Kinematic Reachability Rate Mean (%)",
+            "Kinematic Reachability Rate Std (%)",
+            "Position Error Mean (m)",
+            "Position Error Std (m)",
+            "Rotation Error Mean (rad)",
+            "Rotation Error Std (rad)",
+            "Time Mean (s)",
+            "Time Std (s)",
+        ]
+        ordered_metrics = [col for col in desired_order if col in metric_vars]
+        remaining_metrics = sorted(
+            [col for col in metric_vars if col not in ordered_metrics]
+        )
+        final_cols = id_vars + ordered_metrics + remaining_metrics
+        df = df[final_cols]
+
+        summary_csv_path = os.path.join(output_dir, filename)
+        df.to_csv(summary_csv_path, index=False, float_format="%.4f")
+
+        print(f"\n--- Summary grouped by {', '.join(group_vars)} ---")
+        print(f"Summary data saved to: {summary_csv_path}")
+        print(df.to_string())
+
+    for summary_type, group_vars in grouping_keys.items():
+        summary_df = (
+            all_trials_df.groupby(group_vars)
+            .apply(_calculate_group_summary)
+            .reset_index()
+        )
+        save_summary_df(summary_df, group_vars, f"summary_by_{summary_type}.csv")
+
+    # Create and save overall summary (summary.csv)
+    overall_summary_df = (
+        all_trials_df.groupby(["Method", "Num Sections"])
+        .apply(_calculate_group_summary)
+        .reset_index()
+    )
+    save_summary_df(overall_summary_df, ["Method", "Num Sections"], "summary.csv")
+
     return all_trials_data
 
 
@@ -344,7 +413,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--results_dir",
         type=str,
-        default="results/13.pick_from_shelf",
+        default="results/mp_test",
         help="Directory where the .npz result files are stored.",
     )
     parser.add_argument(
@@ -363,5 +432,5 @@ if __name__ == "__main__":
         results_dir=args.results_dir,
         detailed_csv_path=detailed_path,
     )
-    if all_trials_data:
-        analyze_results(all_trials_data, args.results_dir)
+    # if all_trials_data:
+    #     analyze_results(all_trials_data, args.results_dir)

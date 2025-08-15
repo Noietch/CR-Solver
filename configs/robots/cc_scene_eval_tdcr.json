@@ -3,7 +3,7 @@
     "num_points_per_section": 10,
     "length": 1.0,
     "radius": 0.01,
-    "disk_radius": 0.08,
+    "disk_radius": 0.008,
     "num_tendons_per_section": 3,
     "lower_limits_theta": 0,
     "upper_limits_theta": 3.14, 
