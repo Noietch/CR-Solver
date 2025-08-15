@@ -511,6 +511,51 @@ def _traj_optimize(
     return cfg
 
 
+def test_time_of_prm_opt(
+    robot_type: str,
+    solver: tuple[Callable, ParallelPRM],
+    traj_opt_solver: tuple,  # (traj_opt_jit, traj_options)
+    target_timesteps: int,
+    start_position: Array,
+    start_wxyz: Array,
+    target_position: Array,
+    target_wxyz: Array,
+    world_geom: Sequence[CollGeom],
+):
+    ik_solver, prm_solver = solver
+    # Test ik time
+    ik_start = time.time()
+    cfg_pair = ik_solver(
+        start_wxyz, start_position, target_wxyz, target_position, world_geom
+    )
+    jax.block_until_ready(cfg_pair)
+    ik_end = time.time()
+
+    # Test prm time
+    cfg = prm_solver.find_path(cfg_pair[0], cfg_pair[1], world_geom)
+    jax.block_until_ready(cfg)
+    prm_end = time.time()
+    ik_time = ik_end - ik_start
+    prm_time = prm_end - ik_end
+    if cfg is None:
+        opt_time = float("nan")
+        print("No path found")
+        return ik_time, prm_time, opt_time
+    traj_opt, traj_options = traj_opt_solver
+
+    # Test optimize time
+    opt_start = time.time()
+    path_cfg = resample_trajectory(cfg, target_timesteps)
+    path_cfg = _traj_optimize(robot_type, traj_opt, traj_options, world_geom, path_cfg)
+    jax.block_until_ready(path_cfg)
+    opt_time = time.time() - opt_start
+    print(f"Finish optimizing PRM path with TrajOpt...")
+    print(
+        f"IK Time: {ik_time:.4f}s | PRM Time: {prm_time:.4f}s | Opt Time: {opt_time:.4f}s"
+    )
+    return ik_time, prm_time, opt_time
+
+
 def _solve_with_trajopt(
     solver: tuple[Callable, Callable, TrajOptimizerOptions, str],
     start_position: Array,
@@ -1005,6 +1050,224 @@ def eval_mp_all_sections(
     return all_results_summary
 
 
+def eval_prm_opt_time(
+    robot_type: str,
+    robot_config_path: str,
+    world_config_path: str,
+    section_list: list,
+    eval_num: int,
+    save_dir: str,
+    min_sample_dist_ratio: float,
+):
+    """
+    Evaluates the time taken by each component of the PRM+TrajOpt pipeline.
+    (IK, PRM planning, Trajectory Optimization).
+    """
+    all_results_summary = []
+
+    for num_sections in section_list:
+        # Load robot config
+        config = json.load(open(robot_config_path))
+        config["num_sections"] = num_sections
+
+        if robot_type == "cc":
+            robot = CCRobot.from_config(config)
+            robot_coll = RobotCollision.from_config(config)
+        elif robot_type == "tdcr":
+            robot = TDCRRobot.from_config(config)
+            robot_coll = RobotCollision.from_config(config)
+
+        robot_total_length = robot.config.length * robot.config.num_sections
+        # Load world config
+        world_coll = WorldCollision.from_config(world_config_path)
+        world_geom_list = world_coll.collision_geoms_no_ground
+
+        # Set up trajopt parameters
+        timesteps = 100
+        traj_options = TrajOptimizerOptions()
+        traj_solver = TrajOptimizer(robot, robot_coll, timesteps, options=traj_options)
+        start_end_ik_solver = traj_solver._ik_solver_best
+        if robot_type == "cc":
+            traj_opt = jax.jit(traj_solver.optimize)
+        elif robot_type == "tdcr":
+            traj_opt = jax.jit(traj_solver.optimize_tdcr)
+
+        traj_opt_solver_methods = (traj_opt, traj_options)
+        batched_fk = jax.jit(jax.vmap(robot._forward_kinematics))
+
+        # Initialize PRM solver
+        prm_options = PRMOptions(batch_size=2000, parallel_edge_checks=200)
+        prm_traj_solver = ParallelPRM(robot, robot_coll, prm_options)
+        roadmap_path = os.path.join(save_dir, "roadmaps", f"roadmap_{num_sections}.pkl")
+        os.makedirs(os.path.dirname(roadmap_path), exist_ok=True)
+        if os.path.exists(roadmap_path):
+            print(f"Loading existing roadmap for time test: {roadmap_path}...")
+            prm_traj_solver.load_roadmap(roadmap_path)
+        else:
+            print(f"Building new roadmap for time test: {roadmap_path}...")
+            prm_traj_solver.build_roadmap(1000, world_geom_list)
+            prm_traj_solver.save_roadmap(roadmap_path)
+
+        prm_solver_tuple = (start_end_ik_solver, prm_traj_solver)
+
+        # Warm-up
+        print(f"Warming up PRM+Opt time test for {num_sections} sections...")
+        warm_up_num = 5
+        temp_dir = os.path.join(
+            save_dir,
+            "temp",
+            f"time_test_sections_{num_sections}_eval_{warm_up_num}.npz",
+        )
+        dummy_start_states, dummy_end_states = sample_collision_free_start_end_states(
+            robot=robot,
+            eval_num=warm_up_num,
+            robot_coll=robot_coll,
+            world_geom=world_geom_list,
+            batched_fk=batched_fk,
+            min_distance=0.1,
+            save_load_path=temp_dir,
+        )
+
+        for i in range(min(warm_up_num, dummy_start_states.theta.shape[0])):
+            print(f"  Warm-up iteration {i+1}/{warm_up_num}...")
+            dummy_start = jax.tree_util.tree_map(
+                lambda x: x[i : i + 1], dummy_start_states
+            )
+            dummy_end = jax.tree_util.tree_map(lambda x: x[i : i + 1], dummy_end_states)
+
+            s_fk = batched_fk(dummy_start)
+            e_fk = batched_fk(dummy_end)
+            s_pos = jaxlie.SE3.from_matrix(s_fk[0, -1]).translation()
+            s_wxyz = jaxlie.SE3.from_matrix(s_fk[0, -1]).rotation().wxyz
+            e_pos = jaxlie.SE3.from_matrix(e_fk[0, -1]).translation()
+            e_wxyz = jaxlie.SE3.from_matrix(e_fk[0, -1]).rotation().wxyz
+
+            _, _, opt_time = test_time_of_prm_opt(
+                robot_type,
+                prm_solver_tuple,
+                traj_opt_solver_methods,
+                timesteps,
+                s_pos,
+                s_wxyz,
+                e_pos,
+                e_wxyz,
+                world_geom_list,
+            )
+            if not np.isnan(opt_time):
+                print("Warm-up successful.")
+                break
+        print("Warm-up complete.")
+
+        # Sample all pairs for evaluation
+        sample_data_path = f"{save_dir}/sampled_states/time_test_sections_{num_sections}_eval_{eval_num}.npz"
+        os.makedirs(os.path.dirname(sample_data_path), exist_ok=True)
+        start_states, end_states = sample_collision_free_start_end_states(
+            robot=robot,
+            eval_num=eval_num,
+            robot_coll=robot_coll,
+            world_geom=world_geom_list,
+            batched_fk=batched_fk,
+            min_distance=robot_total_length * min_sample_dist_ratio,
+            save_load_path=sample_data_path,
+        )
+
+        actual_eval_num = start_states.theta.shape[0]
+        if actual_eval_num == 0:
+            print("Failed to sample any valid start/end pairs. Skipping time test.")
+            continue
+
+        # Run evaluation
+        ik_times, prm_times, opt_times = [], [], []
+        for i in range(actual_eval_num):
+            print(
+                f"\n--- Timing Pair {i+1}/{actual_eval_num} for {num_sections} sections ---"
+            )
+            start_state_i = jax.tree_util.tree_map(lambda x: x[i : i + 1], start_states)
+            end_state_i = jax.tree_util.tree_map(lambda x: x[i : i + 1], end_states)
+
+            s_fk = batched_fk(start_state_i)
+            e_fk = batched_fk(end_state_i)
+            s_pos = jaxlie.SE3.from_matrix(s_fk[0, -1]).translation()
+            s_wxyz = jaxlie.SE3.from_matrix(s_fk[0, -1]).rotation().wxyz
+            e_pos = jaxlie.SE3.from_matrix(e_fk[0, -1]).translation()
+            e_wxyz = jaxlie.SE3.from_matrix(e_fk[0, -1]).rotation().wxyz
+
+            ik_time, prm_time, opt_time = test_time_of_prm_opt(
+                robot_type,
+                prm_solver_tuple,
+                traj_opt_solver_methods,
+                timesteps,
+                s_pos,
+                s_wxyz,
+                e_pos,
+                e_wxyz,
+                world_geom_list,
+            )
+            if not np.isnan(opt_time):
+                ik_times.append(ik_time)
+                prm_times.append(prm_time)
+                opt_times.append(opt_time)
+
+        # Save and summarize results
+        if not ik_times:
+            print(
+                f"No successful paths found for {num_sections} sections. No results to save."
+            )
+            continue
+
+        time_results_path = f"{save_dir}/time_test_result/prm_opt_time_results_sections_{num_sections}.npz"
+        os.makedirs(os.path.dirname(time_results_path), exist_ok=True)
+        np.savez(
+            time_results_path,
+            ik_times=np.array(ik_times),
+            prm_times=np.array(prm_times),
+            opt_times=np.array(opt_times),
+        )
+        print(f"Saved time results to {time_results_path}")
+
+        if len(ik_times) < 200:
+            print(
+                f"Insufficient IK times collected for {num_sections} sections. Collected: {len(ik_times)}"
+            )
+            print("Use all for evaluation.")
+        else:
+            print("Use 200 samples for evaluation.")
+            ik_times = ik_times[:200]
+            prm_times = prm_times[:200]
+            opt_times = opt_times[:200]
+
+        summary = {
+            "num_sections": num_sections,
+            "eval_num": len(ik_times),
+            "ik_time_mean": np.mean(ik_times),
+            "ik_time_std": np.std(ik_times),
+            "prm_time_mean": np.mean(prm_times),
+            "prm_time_std": np.std(prm_times),
+            "opt_time_mean": np.mean(opt_times),
+            "opt_time_std": np.std(opt_times),
+            "total_time_mean": np.mean(
+                np.array(ik_times) + np.array(prm_times) + np.array(opt_times)
+            ),
+            "total_time_std": np.std(
+                np.array(ik_times) + np.array(prm_times) + np.array(opt_times)
+            ),
+        }
+        all_results_summary.append(summary)
+        # Print summary with keys formatted and values in ms
+        summary_str = f"Summary for {num_sections} sections:\n"
+        for k, v in summary.items():
+            if isinstance(v, float) or isinstance(v, np.floating):
+                key_str = k.replace("_", " ").title() + " (ms)"
+                val_str = f"{v * 1000:.2f}"
+                summary_str += f"  {key_str}: {val_str}\n"
+            else:
+                key_str = k.replace("_", " ").title()
+                summary_str += f"  {key_str}: {v}\n"
+        print(summary_str)
+
+    return all_results_summary
+
+
 if __name__ == "__main__":
     robot_type = "tdcr"
     test_list = [3, 4, 5, 6]
@@ -1069,3 +1332,21 @@ if __name__ == "__main__":
 
     print("\n\n" + "=" * 30 + " FINAL SUMMARY " + "=" * 30)
     summarize_results(result_summarys)
+
+    prm_test_world = "configs/maps/mp_scene/obstacles_random_section_3.json"
+    prm_section_list = [3]
+    repeat_num_prm = 230
+    scene_name = os.path.splitext(os.path.basename(prm_test_world))[0]
+    result_dir = f"results/mp_test/{scene_name}"
+    os.makedirs(result_dir, exist_ok=True)
+    result_summary = eval_prm_opt_time(
+        robot_type=robot_type,
+        robot_config_path=robot_config_path,
+        world_config_path=prm_test_world,
+        section_list=prm_section_list,
+        eval_num=repeat_num_prm,
+        save_dir=result_dir,
+        min_sample_dist_ratio=0.05,
+    )
+    print("\n\n" + "=" * 30 + " PRM OPT TIME SUMMARY " + "=" * 30)
+    print(result_summary)
