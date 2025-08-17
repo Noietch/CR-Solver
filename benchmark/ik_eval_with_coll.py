@@ -380,7 +380,7 @@ def eval_ik_all_sections(
             robot,
             num_seeds_init=128,
             num_seeds_final=8,
-            total_steps=1000,
+            total_steps=200,
             init_steps=10,
             coll=robot_coll,
         )
@@ -423,7 +423,7 @@ def eval_ik_all_sections(
 
 if __name__ == "__main__":
     test_list = [3, 4, 5, 6]
-    eval_num_list = [1000]
+    eval_num_list = [100]
     # robot_config_path = "configs/robots/cc_extend_eval.json"
     robot_config_path = "configs/robots/cc_eval.json"
     world_config_path = "configs/maps/ik_maps/obstacles_lattice.json"
