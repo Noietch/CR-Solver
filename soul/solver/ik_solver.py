@@ -145,20 +145,20 @@ class IKSolver:
                     jaxlie.SE3.from_rotation_and_translation(
                         jaxlie.SO3(target_wxyz), target_position
                     ),
-                    pos_weight=100.0,
-                    ori_weight=50.0,
+                    pos_weight=200.0,
+                    ori_weight=200.0,
                 ),
                 (
                     limit_cost(
                         self.robot,
                         robot_var,
-                        weight=1000.0,
+                        weight=100.0,
                     )
                     if isinstance(self.robot, CCRobot)
                     else limit_cost_extend(
                         self.robot,
                         robot_var,
-                        weight=1000.0,
+                        weight=100.0,
                     )
                 ),
                 # self_collision_cost(self.robot, self.coll, robot_var, 0.05, 10.0),

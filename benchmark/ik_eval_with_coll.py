@@ -19,7 +19,6 @@ from soul.geom import (
     CollGeom,
     colldist_from_sdf,
 )
-from soul.visualization.visualizer_plot import visualize_cc_model_3d
 
 jax.config.update("jax_default_matmul_precision", "highest")
 
@@ -59,28 +58,15 @@ def ik_metric_with_coll(
         - final_rot_error: The mean rotation error for successful solutions.
         - failure_stats: Detailed failure statistics dictionary.
     """
-    result_position = result_transform.translation()
-    result_orientation = result_transform.rotation()
-
-    # Accuracy thresholds
-    position_threshold: float = 0.03
-    rotation_threshold: float = 0.03
-
-    position_error = jnp.linalg.norm(result_position - target_position, axis=-1)
-    orientation_error = jnp.linalg.norm(
-        jnp.array(
-            (jaxlie.SO3(target_orientation).inverse() @ result_orientation).log()
-        ),
-        axis=-1,
+    target_transform = jaxlie.SE3.from_rotation_and_translation(
+        jaxlie.SO3(target_orientation), target_position
+    )
+    error = jnp.linalg.norm(
+        (target_transform.inverse() @ result_transform).log(), axis=-1
     )
 
     # Individual failure masks for accuracy
-    position_fail_mask = position_error >= position_threshold
-    rotation_fail_mask = orientation_error >= rotation_threshold
-    acc_mask = jnp.logical_and(
-        position_error < position_threshold,
-        orientation_error < rotation_threshold,
-    )
+    acc_mask = error < 0.01
 
     # Check joint limit constraints
     delta = 0.01  # 0.01 is the margin for the joint limit constraint
@@ -131,8 +117,6 @@ def ik_metric_with_coll(
     num_fail = total_samples - num_success
 
     # Individual failure types
-    num_position_fail = jnp.sum(position_fail_mask)
-    num_rotation_fail = jnp.sum(rotation_fail_mask)
     num_theta_fail = jnp.sum(theta_fail_mask)
     num_phi_fail = jnp.sum(phi_fail_mask)
     num_collision_fail = jnp.sum(solution_collision_mask)
@@ -147,8 +131,6 @@ def ik_metric_with_coll(
         "num_fail": int(num_fail),
         "success_rate": float(jnp.mean(final_success_mask) * 100.0),
         # Percentages
-        "position_fail_rate": float(num_position_fail / total_samples * 100),
-        "rotation_fail_rate": float(num_rotation_fail / total_samples * 100),
         "theta_fail_rate": float(num_theta_fail / total_samples * 100),
         "phi_fail_rate": float(num_phi_fail / total_samples * 100),
         "length_fail_rate": (
@@ -163,8 +145,8 @@ def ik_metric_with_coll(
 
     final_success_rate = jnp.mean(final_success_mask) * 100.0
     # Use jnp.nanmean to avoid errors if no solutions are successful
-    final_pos_error = jnp.nan_to_num(jnp.mean(position_error[final_success_mask]))
-    final_rot_error = jnp.nan_to_num(jnp.mean(orientation_error[final_success_mask]))
+    final_pos_error = jnp.nan_to_num(jnp.mean(error[final_success_mask]))
+    final_rot_error = jnp.nan_to_num(jnp.mean(error[final_success_mask]))
 
     return final_success_rate, final_pos_error, final_rot_error, failure_stats
 
@@ -398,7 +380,7 @@ def eval_ik_all_sections(
             robot,
             num_seeds_init=128,
             num_seeds_final=8,
-            total_steps=200,
+            total_steps=1000,
             init_steps=10,
             coll=robot_coll,
         )
@@ -441,12 +423,13 @@ def eval_ik_all_sections(
 
 if __name__ == "__main__":
     test_list = [3, 4, 5, 6]
-    eval_num_list = [100]
-    robot_config_path = "configs/robots/cc_extend_eval.json"
-    # world_config_path = "configs/maps/ik_maps/obstacles_lattice.json"
-    world_config_path = "configs/maps/ik_maps/obstacles_icosahedron.json"
-    result_dir = "results/ik_with_coll_icosahedron"
-    # result_dir = "results/ik_with_coll_lattice"
-    # eval_ik_all_sections(
-    #     robot_config_path, world_config_path, test_list, eval_num_list, "cc", result_dir
-    # )
+    eval_num_list = [1000]
+    # robot_config_path = "configs/robots/cc_extend_eval.json"
+    robot_config_path = "configs/robots/cc_eval.json"
+    world_config_path = "configs/maps/ik_maps/obstacles_lattice.json"
+    # world_config_path = "configs/maps/ik_maps/obstacles_icosahedron.json"
+    # result_dir = "results/ik_with_coll_icosahedron"
+    result_dir = "results/ik_with_coll_lattice"
+    eval_ik_all_sections(
+        robot_config_path, world_config_path, test_list, eval_num_list, "cc", result_dir
+    )

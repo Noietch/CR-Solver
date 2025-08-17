@@ -27,27 +27,16 @@ def ik_metric(
     target_position: Array,
     target_orientation: Array,
 ) -> tuple[float, float, float, dict]:
-    result_position = result_transform.translation()
-    result_orientation = result_transform.rotation()
-
-    # check the accuracy of the solution
-    position_threshold: float = 0.01
-    rotation_threshold: float = 0.01
-    position_error = jnp.linalg.norm(result_position - target_position, axis=-1)
-    orientation_error = jnp.linalg.norm(
-        jnp.array(
-            (jaxlie.SO3(target_orientation).inverse() @ result_orientation).log()
-        ),
-        axis=-1,
+    # use the target position and orientation to compute the error
+    target_transform = jaxlie.SE3.from_rotation_and_translation(
+        jaxlie.SO3(target_orientation), target_position
+    )
+    error = jnp.linalg.norm(
+        (target_transform.inverse() @ result_transform).log(), axis=-1
     )
 
     # Individual failure masks
-    position_fail_mask = position_error >= position_threshold
-    rotation_fail_mask = orientation_error >= rotation_threshold
-    acc_mask = jnp.logical_and(
-        position_error < position_threshold,
-        orientation_error < rotation_threshold,
-    )
+    acc_mask = error < 0.01
 
     # check the limit constraint
     delta = 0.01
@@ -79,8 +68,6 @@ def ik_metric(
     num_fail = total_samples - num_success
 
     # Detailed failure breakdown
-    num_position_fail = jnp.sum(position_fail_mask)
-    num_rotation_fail = jnp.sum(rotation_fail_mask)
     num_theta_fail = jnp.sum(theta_fail_mask)
     num_phi_fail = jnp.sum(phi_fail_mask)
 
@@ -105,8 +92,6 @@ def ik_metric(
         "num_fail": int(num_fail),
         "success_rate": float(jnp.mean(mask) * 100.0),
         # Individual failure types
-        "num_position_fail": int(num_position_fail),
-        "num_rotation_fail": int(num_rotation_fail),
         "num_theta_fail": int(num_theta_fail),
         "num_phi_fail": int(num_phi_fail),
         # Combined failure categories
@@ -116,8 +101,6 @@ def ik_metric(
         "num_limit_only_fail": int(num_limit_only_fail),
         "num_both_fail": int(num_both_fail),
         # Percentages
-        "position_fail_rate": float(num_position_fail / total_samples * 100),
-        "rotation_fail_rate": float(num_rotation_fail / total_samples * 100),
         "theta_fail_rate": float(num_theta_fail / total_samples * 100),
         "phi_fail_rate": float(num_phi_fail / total_samples * 100),
         "accuracy_fail_rate": float(num_accuracy_fail / total_samples * 100),
@@ -129,8 +112,7 @@ def ik_metric(
 
     return (
         jnp.mean(mask) * 100.0,
-        jnp.mean(position_error[mask]),
-        jnp.mean(orientation_error[mask]),
+        jnp.mean(error[mask]),
         failure_stats,
     )
 
@@ -213,8 +195,7 @@ def eval_ik_with_no_coll(
     metric = ik_metric(robot, solution, tip_transforms, target_position, target_wxyz)
     print(f"finish solve ik of num sections {num_sections}, total time: {total_time}s")
     print(f"success rate: {metric[0]:.2f}%")
-    print(f"position error: {metric[1]}m")
-    print(f"rotation error: {metric[2]}rad")
+    print(f"error: {metric[1]}m")
 
     # Print detailed failure analysis
     failure_stats = metric[3]
@@ -227,41 +208,13 @@ def eval_ik_with_no_coll(
         f"Failed: {failure_stats['num_fail']} ({100 - failure_stats['success_rate']:.2f}%)"
     )
 
-    if failure_stats["num_fail"] > 0:
-        print("\nFailure breakdown by type:")
-        print(
-            f"  Position accuracy failed: {failure_stats['num_position_fail']} ({failure_stats['position_fail_rate']:.2f}%)"
-        )
-        print(
-            f"  Rotation accuracy failed: {failure_stats['num_rotation_fail']} ({failure_stats['rotation_fail_rate']:.2f}%)"
-        )
-        print(
-            f"  Theta joint limits violated: {failure_stats['num_theta_fail']} ({failure_stats['theta_fail_rate']:.2f}%)"
-        )
-        print(
-            f"  Phi joint limits violated: {failure_stats['num_phi_fail']} ({failure_stats['phi_fail_rate']:.2f}%)"
-        )
-
-        print("\nFailure breakdown by category:")
-        print(
-            f"  Only accuracy failed: {failure_stats['num_accuracy_only_fail']} ({failure_stats['accuracy_only_fail_rate']:.2f}%)"
-        )
-        print(
-            f"  Only joint limits violated: {failure_stats['num_limit_only_fail']} ({failure_stats['limit_only_fail_rate']:.2f}%)"
-        )
-        print(
-            f"  Both accuracy and limits failed: {failure_stats['num_both_fail']} ({failure_stats['both_fail_rate']:.2f}%)"
-        )
-
-    position_error = metric[1]
-    rotation_error = metric[2]
+    error = metric[1]
     success_rate = round(metric[0], 2)
 
     return {
         "eval num": eval_num,
         "num sections": num_sections,
-        "position error": position_error,
-        "rotation error": rotation_error,
+        "error": error,
         "success rate": success_rate,
         "total time": total_time,
         "failure_stats": failure_stats,
@@ -292,17 +245,16 @@ def eval_ik_all_sections(
             )
 
     print("\n\n--- IK test resume ---")
-    header = f"{'num sections':<10} | {'eval num':<15} | {'position error':<15} | {'rotation error':<15} | {'success rate (%)':<15} | {'total time (s)':<18} "
+    header = f"{'num sections':<10} | {'eval num':<15} | {'error':<15} | {'success rate (%)':<15} | {'total time (s)':<18} "
     print(header)
     print("-" * len(header))
     for res_item in all_results_summary:
         eval_num_str = f"{res_item['eval num']}"
-        ps_error_str = f"{res_item['position error']}"
-        rt_error_str = f"{res_item['rotation error']}"
+        error_str = f"{res_item['error']}"
         sr_str = f"{res_item['success rate']:.2f}"
         time_str = f"{res_item['total time']:.3f}"
         print(
-            f"{res_item['num sections']:<10} | {eval_num_str:<15} | {ps_error_str:<15} | {rt_error_str:<15} | {sr_str:<15} | {time_str:<18}"
+            f"{res_item['num sections']:<10} | {eval_num_str:<15} | {error_str:<15} | {sr_str:<15} | {time_str:<18}"
         )
 
 
