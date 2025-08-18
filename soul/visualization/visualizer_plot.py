@@ -2,6 +2,7 @@ import os
 import json
 from jaxtyping import Array
 import numpy as np
+import matplotlib
 import matplotlib.pyplot as plt
 
 from soul.geom.utils import load_mesh
@@ -187,69 +188,14 @@ def visualize_cc_model_3d(
     if ax is None:
         fig = plt.figure(facecolor="white")
         ax = fig.add_subplot(projection="3d")
-
-    if pose is not None:
-        if pose.ndim == 3:
-            if target_position is not None:
-                target_position = target_position[None, :]
-            transform = pose[None, :, :, :]
-        else:
-            transform = pose
-        positions = transform[:, :3, 3]
-
-        batch_size = transform.shape[0]
-        for i in range(batch_size):
-            positions = transform[i, :, :3, 3]
-            # colors = ["r", "g", "b", "y", "m", "c"]
-            colors = ["black"]
-            if num_points is not None:
-                for i in range(len(positions) // num_points):
-                    ax.plot(
-                        positions[i * num_points : (i + 1) * num_points, 0],
-                        positions[i * num_points : (i + 1) * num_points, 1],
-                        positions[i * num_points : (i + 1) * num_points, 2],
-                        c=colors[i % len(colors)],
-                        linewidth=2,
-                    )
-                for i in range(len(positions) // num_points):
-                    end_point = positions[(i + 1) * num_points - 1]
-                    ax.scatter(
-                        end_point[0],
-                        end_point[1],
-                        end_point[2],
-                        c=colors[i % len(colors)],
-                        marker="o",
-                        s=2,
-                    )
-            else:
-                ax.plot(
-                    positions[:, 0],
-                    positions[:, 1],
-                    positions[:, 2],
-                    c="black",
-                    linewidth=3,
-                )
-
-    # draw target orientation
-    if target_wxyz is not None:
-        # breakpoint()
-        for i in range(len(target_wxyz)):
-            rotation_matrix = _quaternion_to_rotation_matrix(target_wxyz[i])
-            # Calculate appropriate scale based on scene size
-            if pose is not None:
-                positions = transform[0, :, :3, 3]  # Get first batch positions
-                scene_range = np.max(positions, axis=0) - np.min(positions, axis=0)
-                scale = np.max(scene_range) * 0.1  # 10% of scene range
-            else:
-                scale = 0.1  # Default scale
-
-            # Use target_position if available, otherwise use origin
-            if target_position is not None:
-                frame_position = target_position[i]
-            else:
-                frame_position = np.array([0.0, 0.0, 0.0])  # Place at origin
-
-            _plot_coordinate_frame(ax, frame_position, rotation_matrix, scale=scale)
+        fig.patch.set_alpha(0.0)
+        ax.patch.set_alpha(0.0)
+        ax.xaxis.pane.fill = False
+        ax.yaxis.pane.fill = False
+        ax.zaxis.pane.fill = False
+        ax.xaxis.pane.set_edgecolor("w")
+        ax.yaxis.pane.set_edgecolor("w")
+        ax.zaxis.pane.set_edgecolor("w")
 
     # draw obstacle spheres
     if world_coll_config is not None:
@@ -283,6 +229,68 @@ def visualize_cc_model_3d(
             else:
                 print(f"Unsupported obstacle type: {obstacle['type']}")
 
+    if pose is not None:
+        if pose.ndim == 3:
+            if target_position is not None:
+                target_position = target_position[None, :]
+            transform = pose[None, :, :, :]
+        else:
+            transform = pose
+        positions = transform[:, :3, 3]
+
+        batch_size = transform.shape[0]
+        for i in range(batch_size):
+            positions = transform[i, :, :3, 3]
+            # colors = ["r", "g", "b", "y", "m", "c"]
+            colors = ["#ffd966", "#ffb570", "#ea6b66"]
+            if num_points is not None:
+                for i in range(len(positions) // num_points):
+                    ax.plot(
+                        positions[i * num_points : (i + 1) * num_points, 0],
+                        positions[i * num_points : (i + 1) * num_points, 1],
+                        positions[i * num_points : (i + 1) * num_points, 2],
+                        c=colors[i % len(colors)],
+                        linewidth=2,
+                    )
+                for i in range(len(positions) // num_points):
+                    end_point = positions[(i + 1) * num_points - 1]
+                    ax.scatter(
+                        end_point[0],
+                        end_point[1],
+                        end_point[2],
+                        c=colors[i % len(colors)],
+                        marker="o",
+                        s=2,
+                    )
+            else:
+                ax.plot(
+                    positions[:, 0],
+                    positions[:, 1],
+                    positions[:, 2],
+                    c="black",
+                    linewidth=3,
+                )
+
+    # draw target orientation
+    if target_wxyz is not None:
+        for i in range(len(target_wxyz)):
+            rotation_matrix = _quaternion_to_rotation_matrix(target_wxyz[i])
+            # Calculate appropriate scale based on scene size
+            if pose is not None:
+                positions = transform[0, :, :3, 3]  # Get first batch positions
+                scene_range = np.max(positions, axis=0) - np.min(positions, axis=0)
+                scale = np.max(scene_range) * 0.1  # 10% of scene range
+            else:
+                scale = 0.1  # Default scale
+
+            # Use target_position if available, otherwise use origin
+            if target_position is not None:
+                frame_position = target_position[i]
+            else:
+                frame_position = np.array([0.0, 0.0, 0.0])  # Place at origin
+
+            _plot_coordinate_frame(ax, frame_position, rotation_matrix, scale=scale)
+
     # Set new limits with equal scaling
     ax.set_xlim3d(-1.3, 1.3)
     ax.set_ylim3d(-1.3, 1.3)
@@ -296,8 +304,10 @@ def visualize_cc_model_3d(
     ax.yaxis.set_major_locator(plt.MaxNLocator(3))
     ax.zaxis.set_major_locator(plt.MaxNLocator(3))
 
+    ax.grid(False)
+
     if save_path is not None:
-        plt.savefig(save_path)
+        plt.savefig(save_path, bbox_inches="tight", dpi=300)
 
 
 def visualize_mp_scene(
@@ -319,6 +329,14 @@ def visualize_mp_scene(
     if ax is None:
         fig = plt.figure(facecolor="white")
         ax = fig.add_subplot(projection="3d")
+        fig.patch.set_alpha(0.0)
+        ax.patch.set_alpha(0.0)
+        ax.xaxis.pane.fill = False
+        ax.yaxis.pane.fill = False
+        ax.zaxis.pane.fill = False
+        ax.xaxis.pane.set_edgecolor("w")
+        ax.yaxis.pane.set_edgecolor("w")
+        ax.zaxis.pane.set_edgecolor("w")
 
     def _draw_poses(poses, color, style, label_prefix):
         if poses is None:
@@ -421,4 +439,6 @@ def visualize_mp_scene(
     ax.zaxis.set_major_locator(plt.MaxNLocator(3))
 
     if save_path is not None:
-        plt.savefig(save_path)
+        plt.savefig(save_path, bbox_inches="tight", dpi=300)
+    else:
+        plt.show()

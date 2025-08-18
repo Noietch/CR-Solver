@@ -374,6 +374,10 @@ class TrajOptimizer:
             .analyze()
             .solve(
                 verbose=False,
+                termination=jaxls.TerminationConfig(
+                    max_iterations=3,
+                    early_termination=False,
+                ),
                 initial_vals=jaxls.VarValues.make((traj_vars.with_value(init_traj),)),
             )
         )

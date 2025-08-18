@@ -6,8 +6,62 @@ import numpy as np
 import pandas as pd
 
 
+def _calculate_group_summary(group: pd.DataFrame) -> pd.Series:
+    """
+    Helper function to compute summary statistics for a given data group (DataFrame).
+    In this version, position and rotation errors are calculated only for successful cases.
+    """
+    actual_eval_num = len(group)
+    if actual_eval_num == 0:
+        return pd.Series()
+
+    # --- Accuracy calculation (using all cases) ---
+    successful_trials = group["Success Rate (%)"] == 100
+    pos_ok = group["Position Error (m)"] < 0.08
+    rot_ok = group["Rotation Error (rad)"] < 0.9
+    accurate_trials_count = np.sum(successful_trials & pos_ok & rot_ok)
+    accuracy = (accurate_trials_count / actual_eval_num) * 100
+
+    # --- Filter successful cases for error analysis ---
+    # Use group["Success Rate (%)"] == 100 to filter
+    successful_group = group[group["Success Rate (%)"] == 100]
+
+    summary = {
+        "Eval Num": actual_eval_num,
+        "Accuracy (%)": accuracy,
+        "Success Rate Mean (%)": group["Success Rate (%)"].mean(),
+        "Success Rate Std (%)": group["Success Rate (%)"].std(),
+        "Kinematic Reachability Rate Mean (%)": group[
+            "Kinematic Reachability Rate (%)"
+        ].mean(),
+        "Kinematic Reachability Rate Std (%)": group[
+            "Kinematic Reachability Rate (%)"
+        ].std(),
+        # If there are no successful cases, .mean()/.std() will automatically return NaN, which is correct
+        "Position Error Mean (m)": successful_group["Position Error (m)"].mean(),
+        "Position Error Std (m)": successful_group["Position Error (m)"].std(),
+        "Rotation Error Mean (rad)": successful_group["Rotation Error (rad)"].mean(),
+        "Rotation Error Std (rad)": successful_group["Rotation Error (rad)"].std(),
+        # Time is usually calculated for all cases to reflect average duration
+        "Time Mean (s)": group["Time (s)"].mean(),
+        "Time Std (s)": group["Time (s)"].std(),
+    }
+
+    # Dynamically handle failure statistics columns
+    failure_cols = [
+        col for col in group.columns if "Rate" in col and col not in summary
+    ]
+    for col in failure_cols:
+        base_col_name = col.replace(" (%)", "")
+        if base_col_name in group.columns:
+            mean_val = group[base_col_name].mean()
+            summary_col_name = base_col_name.replace("Rate", "Rate Mean") + " (%)"
+            summary[summary_col_name] = mean_val
+
+    return pd.Series(summary)
+
+
 def save_results(results_dir: str, detailed_csv_path: str):
-    # Search for the aggregated results files, not individual trial files.
     search_path = os.path.join(
         results_dir, "all_trials_results", "*_all_trials_results.npz"
     )
@@ -25,30 +79,37 @@ def save_results(results_dir: str, detailed_csv_path: str):
         try:
             filename = os.path.basename(file_path)
             parts = filename.split("_")
+            # Extract scene_name from the path
+            scene_name = file_path.split(os.sep)[-3]
+
             planner_type = parts[0]
-            num_sections = int(parts[2])
+            opt_after_planner = parts[2] == "True"
+            num_sections = int(parts[4])
+
+            method_name = planner_type.upper()
+            if planner_type in ["prm", "rrt"] and opt_after_planner:
+                method_name += "+Opt"
 
             data = np.load(file_path, allow_pickle=True)
 
-            # Basic Metrics from the aggregated file
-            # These are now arrays of results from all trials for a given config.
             success_rates = data["success_rates"]
+            actual_eval_num = len(success_rates)
+            if actual_eval_num == 0:
+                print(f"Skipping file {filename} because it contains no trial data.")
+                continue
+
             kinematic_rates = data["kinematic_rates"]
             pos_errors = data["pos_errors"]
             rot_errors = data["rot_errors"]
             times = data["times"]
             failure_stats_list = data["failure_stats"]
 
-            actual_eval_num = len(success_rates)
-            if actual_eval_num == 0:
-                print(f"Skipping {filename} as it contains no trials.")
-                continue
-
             # Collect data for each individual trial for the detailed CSV
             for i in range(actual_eval_num):
                 trial_data = {
-                    "Method": planner_type.upper(),
+                    "Method": method_name,
                     "Num Sections": num_sections,
+                    "scene_name": scene_name,
                     "Trial": i + 1,
                     "Success Rate (%)": success_rates[i],
                     "Kinematic Reachability Rate (%)": kinematic_rates[i],
@@ -60,95 +121,103 @@ def save_results(results_dir: str, detailed_csv_path: str):
                 if failure_stats_list.size > 0 and i < len(failure_stats_list):
                     trial_failure_stats = failure_stats_list[i]
                     for key, value in trial_failure_stats.items():
-                        # Clean up key for column name
                         col_name = key.replace("_", " ").title()
                         if "Rate" in col_name:
                             col_name += " (%)"
-                        # Exclude raw counts from the detailed table for clarity
                         if "Num " not in col_name and "Total Samples" not in col_name:
                             trial_data[col_name] = value
+
                 all_trials_data.append(trial_data)
-
-            # Calculate aggregated summary
-            summary = {
-                "Method": planner_type.upper(),
-                "Num Sections": num_sections,
-                "Eval Num": actual_eval_num,
-                "Success Rate Mean (%)": np.nanmean(success_rates),
-                "Success Rate Std (%)": np.nanstd(success_rates),
-                "Kinematic Reachability Rate Mean (%)": np.nanmean(kinematic_rates),
-                "Kinematic Reachability Rate Std (%)": np.nanstd(kinematic_rates),
-                "Position Error Mean (m)": np.nanmean(pos_errors),
-                "Position Error Std (m)": np.nanstd(pos_errors),
-                "Rotation Error Mean (rad)": np.nanmean(rot_errors),
-                "Rotation Error Std (rad)": np.nanstd(rot_errors),
-                "Time Mean (s)": np.nanmean(times),
-                "Time Std (s)": np.nanstd(times),
-            }
-
-            # Detailed Failure Analysis for Summary
-            if failure_stats_list.size > 0:
-                failure_df = pd.DataFrame(list(failure_stats_list))
-                # drop columns that are not rates
-                failure_df = failure_df.drop(
-                    columns=["total_samples", "num_success", "num_fail"],
-                    errors="ignore",
-                )
-                failure_means = failure_df.mean()
-
-                for key, value in failure_means.items():
-                    # Add "Mean" and "(%)" to the column names for clarity
-                    col_name = (
-                        key.replace("_", " ").title().replace("Rate", "Rate Mean")
-                    )
-                    if "Rate" in col_name:
-                        col_name += " (%)"
-                    summary[col_name] = value
-
-            all_summary_data.append(summary)
 
         except Exception as e:
             print(f"Error processing file {file_path}: {e}")
 
-    # Save Detailed All-Trials CSV
     if not all_trials_data:
-        print("No trial data was processed successfully.")
-    else:
-        detailed_df = pd.DataFrame(all_trials_data)
-        os.makedirs(os.path.dirname(detailed_csv_path), exist_ok=True)
-        detailed_df.to_csv(detailed_csv_path, index=False, float_format="%.4f")
-        print(f"\nDetailed all-trials data saved to: {detailed_csv_path}")
-
-    # Save Aggregated Summary CSV
-    if not all_summary_data:
         print("No summary data was processed successfully.")
         return
 
-    summary_df = pd.DataFrame(all_summary_data)
+    # Create a DataFrame containing all trial data
+    all_trials_df = pd.DataFrame(all_trials_data)
 
-    # Reorder columns for better readability
-    cols_order = [
-        "Method",
-        "Num Sections",
-        "Eval Num",
-        "Success Rate Mean (%)",
-        "Success Rate Std (%)",
-        "Kinematic Reachability Rate Mean (%)",
-        "Kinematic Reachability Rate Std (%)",
-        "Position Error Mean (m)",
-        "Position Error Std (m)",
-        "Rotation Error Mean (rad)",
-        "Rotation Error Std (rad)",
-        "Time Mean (s)",
-        "Time Std (s)",
-    ]
-    failure_cols = [col for col in summary_df.columns if col not in cols_order]
-    final_cols = cols_order + sorted(failure_cols)
-    final_cols_exist = [col for col in final_cols if col in summary_df.columns]
-    summary_df = summary_df[final_cols_exist]
+    # Ensure output directory exists
+    output_dir = os.path.dirname(detailed_csv_path)
+    os.makedirs(output_dir, exist_ok=True)
 
-    print("\n--- Results Summary ---")
-    print(summary_df.to_string())
+    # Save detailed CSV file containing all trials
+    all_trials_detailed_path = os.path.join(output_dir, "all_trials_detailed.csv")
+    all_trials_df.to_csv(all_trials_detailed_path, index=False, float_format="%.4f")
+    print(f"\nDetailed data for all trials saved to: {all_trials_detailed_path}")
+
+    # Filter and save successful trials
+    successful_trials_df = all_trials_df[
+        all_trials_df["Success Rate (%)"] == 100
+    ].copy()
+    successful_trials_detailed_path = os.path.join(
+        output_dir, "successful_trials_detailed.csv"
+    )
+    successful_trials_df.to_csv(
+        successful_trials_detailed_path, index=False, float_format="%.4f"
+    )
+    print(
+        f"Detailed data for successful trials saved to: {successful_trials_detailed_path}"
+    )
+
+    # Group by different dimensions and save summary files
+    grouping_keys = {
+        "method": ["Method"],
+        "num_sections": ["Num Sections"],
+        "scene_name": ["scene_name"],
+    }
+
+    # Helper function to format and save summary
+    def save_summary_df(df, group_vars, filename):
+        # Arrange column order for better readability
+        id_vars = group_vars
+        metric_vars = [col for col in df.columns if col not in id_vars]
+        desired_order = [
+            "Eval Num",
+            "Accuracy (%)",
+            "Success Rate Mean (%)",
+            "Success Rate Std (%)",
+            "Kinematic Reachability Rate Mean (%)",
+            "Kinematic Reachability Rate Std (%)",
+            "Position Error Mean (m)",
+            "Position Error Std (m)",
+            "Rotation Error Mean (rad)",
+            "Rotation Error Std (rad)",
+            "Time Mean (s)",
+            "Time Std (s)",
+        ]
+        ordered_metrics = [col for col in desired_order if col in metric_vars]
+        remaining_metrics = sorted(
+            [col for col in metric_vars if col not in ordered_metrics]
+        )
+        final_cols = id_vars + ordered_metrics + remaining_metrics
+        df = df[final_cols]
+
+        summary_csv_path = os.path.join(output_dir, filename)
+        df.to_csv(summary_csv_path, index=False, float_format="%.4f")
+
+        print(f"\n--- Summary grouped by {', '.join(group_vars)} ---")
+        print(f"Summary data saved to: {summary_csv_path}")
+        print(df.to_string())
+
+    for summary_type, group_vars in grouping_keys.items():
+        summary_df = (
+            all_trials_df.groupby(group_vars)
+            .apply(_calculate_group_summary)
+            .reset_index()
+        )
+        save_summary_df(summary_df, group_vars, f"summary_by_{summary_type}.csv")
+
+    # Create and save overall summary (summary.csv)
+    overall_summary_df = (
+        all_trials_df.groupby(["Method", "Num Sections"])
+        .apply(_calculate_group_summary)
+        .reset_index()
+    )
+    save_summary_df(overall_summary_df, ["Method", "Num Sections"], "summary.csv")
+
     return all_trials_data
 
 
@@ -233,6 +302,110 @@ def analyze_results(all_trials_data: list, results_dir: str):
     print(new_summary_df.to_string())
 
 
+def error_calculate(reference_csv_path: str, planned_csv_path: str) -> dict:
+    """
+    Compute per-timestep position and rotation errors from reference and planned CSVs.
+
+    The CSVs must contain columns: x, y, z, qw, qx, qy, qz (quaternion in wxyz order).
+    Errors are aligned by the row index; if the files have different lengths, the
+    shorter length is used.
+
+    Returns a dictionary with arrays and summary statistics:
+      - position_errors_mm, rotation_errors_deg (converted arrays)
+      - position_error_mean_mm, position_error_std_mm
+      - rotation_error_mean_deg, rotation_error_std_deg
+    """
+    required_columns = ["x", "y", "z", "qw", "qx", "qy", "qz"]
+
+    def _load_and_validate(csv_path: str) -> "pd.DataFrame":
+        if not os.path.exists(csv_path):
+            raise FileNotFoundError(f"CSV not found: {csv_path}")
+        df = pd.read_csv(csv_path)
+        missing = [c for c in required_columns if c not in df.columns]
+        if missing:
+            raise ValueError(
+                f"CSV {csv_path} missing required columns: {', '.join(missing)}"
+            )
+        return df
+
+    def _quat_wxyz_to_rotmat(q: "np.ndarray") -> "np.ndarray":
+        # Follows the same convention as benchmark/mp_plot.py
+        w, x, y, z = q
+        norm = np.sqrt(w * w + x * x + y * y + z * z)
+        if norm > 0:
+            w, x, y, z = w / norm, x / norm, y / norm, z / norm
+        return np.array(
+            [
+                [1 - 2 * (y * y + z * z), 2 * (x * y - z * w), 2 * (x * z + y * w)],
+                [2 * (x * y + z * w), 1 - 2 * (x * x + z * z), 2 * (y * z - x * w)],
+                [2 * (x * z - y * w), 2 * (y * z + x * w), 1 - 2 * (x * x + y * y)],
+            ]
+        )
+
+    ref_df = _load_and_validate(reference_csv_path)
+    plan_df = _load_and_validate(planned_csv_path)
+
+    # Align length
+    T = min(len(ref_df), len(plan_df))
+    if T == 0:
+        raise ValueError("Empty CSV(s): no rows to compare")
+
+    ref_df = ref_df.iloc[:T].reset_index(drop=True)
+    plan_df = plan_df.iloc[:T].reset_index(drop=True)
+
+    # Extract positions and quaternions
+    ref_positions = ref_df[["x", "y", "z"]].to_numpy(dtype=float)
+    plan_positions = plan_df[["x", "y", "z"]].to_numpy(dtype=float)
+
+    ref_quats_wxyz = ref_df[["qw", "qx", "qy", "qz"]].to_numpy(dtype=float)
+    plan_quats_wxyz = plan_df[["qw", "qx", "qy", "qz"]].to_numpy(dtype=float)
+
+    # Position errors (meters)
+    position_errors_m = np.linalg.norm(plan_positions - ref_positions, axis=1)
+
+    # Rotation errors (radians) via R_rel = R_ref^T * R_plan, angle = acos((trace(R_rel) - 1)/2)
+    ref_rot_mats = np.stack([_quat_wxyz_to_rotmat(q) for q in ref_quats_wxyz], axis=0)
+    plan_rot_mats = np.stack([_quat_wxyz_to_rotmat(q) for q in plan_quats_wxyz], axis=0)
+    R_rel = np.einsum(
+        "tij,tjk->tik", np.transpose(ref_rot_mats, (0, 2, 1)), plan_rot_mats
+    )
+    traces = np.clip((np.trace(R_rel, axis1=1, axis2=2) - 1.0) / 2.0, -1.0, 1.0)
+    rotation_errors_rad = np.arccos(traces)
+
+    # Summary statistics (SI units)
+    position_error_mean_m = float(np.nanmean(position_errors_m))
+    position_error_std_m = float(np.nanstd(position_errors_m))
+    rotation_error_mean_rad = float(np.nanmean(rotation_errors_rad))
+    rotation_error_std_rad = float(np.nanstd(rotation_errors_rad))
+
+    # Convenience conversions
+    position_errors_mm = position_errors_m * 1000.0
+    rotation_errors_deg = np.rad2deg(rotation_errors_rad)
+    position_error_mean_mm = float(np.nanmean(position_errors_mm))
+    position_error_std_mm = float(np.nanstd(position_errors_mm))
+    rotation_error_mean_deg = float(np.nanmean(rotation_errors_deg))
+    rotation_error_std_deg = float(np.nanstd(rotation_errors_deg))
+
+    # Concise printout
+    print("--- Error Summary (aligned by row index) ---")
+    print(f"Timesteps compared: {T}")
+    print(
+        f"Position Error (mean ± std): {position_error_mean_mm:.4f} ± {position_error_std_mm:.4f} mm"
+    )
+    print(
+        f"Rotation Error (mean ± std): {rotation_error_mean_deg:.4f} ± {rotation_error_std_deg:.4f} deg"
+    )
+
+    return {
+        "position_errors_mm": position_errors_mm,
+        "position_error_mean_mm": position_error_mean_mm,
+        "position_error_std_mm": position_error_std_mm,
+        "rotation_errors_deg": rotation_errors_deg,
+        "rotation_error_mean_deg": rotation_error_mean_deg,
+        "rotation_error_std_deg": rotation_error_std_deg,
+    }
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description="Analyze motion planning evaluation results and generate a CSV summary."
@@ -240,7 +413,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--results_dir",
         type=str,
-        default="results/13.pick_from_shelf",
+        default="results/mp_test",
         help="Directory where the .npz result files are stored.",
     )
     parser.add_argument(
@@ -259,5 +432,5 @@ if __name__ == "__main__":
         results_dir=args.results_dir,
         detailed_csv_path=detailed_path,
     )
-    if all_trials_data:
-        analyze_results(all_trials_data, args.results_dir)
+    # if all_trials_data:
+    #     analyze_results(all_trials_data, args.results_dir)

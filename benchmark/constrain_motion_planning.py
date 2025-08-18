@@ -1,31 +1,42 @@
 import jax
+import os
+
+# Initialize JAX persistent compilation cache
+os.environ["JAX_COMPILATION_CACHE_DIR"] = "/tmp/jax_cache"
+jax.config.update("jax_compilation_cache_dir", "/tmp/jax_cache")
+jax.config.update("jax_persistent_cache_min_entry_size_bytes", -1)
+jax.config.update("jax_persistent_cache_min_compile_time_secs", 0)
+jax.config.update(
+    "jax_persistent_cache_enable_xla_caches", "xla_gpu_per_fusion_autotune_cache_dir"
+)
 import jax.numpy as jnp
 import jaxlie
 import time
-import viser
 import numpy as np
-import os
 import csv
 import matplotlib.pyplot as plt
 from soul.robots.cc_robot import CCRobot
 from soul.robots.cc_robot_extend import CCRobot as CCRobotExtend
 from soul.geom import RobotCollision, WorldCollision
-from soul.solver import ConstrainedMotionPlanner
-from soul.visualization.visualizer_viser import ViserSoftRobot, ViserWorld
-from benchmark.mp_plot import visualize_constrain_motion_planning
+from soul.solver.traj_optimizer import TrajOptimizer
+from benchmark.mp_plot import (
+    visualize_constrain_motion_planning,
+    plot_constrain_motion_planning,
+    plot_tendon_length,
+    plot_error,
+)
+from soul.robots.tdcr_robot import TDCRRobot
 
-# TODO: 移动到example，只保留运行代码
-# TODO: 美化图像
 
 DISABLE_JIT = False
-
 if DISABLE_JIT:
-    import os
-    import jax
-
     os.environ["JAX_DISABLE_JIT"] = "True"
     jax.config.update("jax_disable_jit", True)
 
+
+from jax.experimental.compilation_cache import compilation_cache as cc
+
+cc.set_cache_dir("/tmp/jax_cache")
 
 LETTER_HEIGHT = 2.5
 LETTER_WIDTH = 1.5
@@ -70,8 +81,8 @@ def create_A():
         (LETTER_WIDTH / 2, LETTER_HEIGHT),
         (LETTER_WIDTH, 0),
         None,
-        (LETTER_WIDTH * 0.3, LETTER_HEIGHT / 3),
-        (LETTER_WIDTH * 0.8, LETTER_HEIGHT / 3),
+        # (LETTER_WIDTH * 0.3, LETTER_HEIGHT / 3),
+        # (LETTER_WIDTH * 0.8, LETTER_HEIGHT / 3),
     ]
 
 
@@ -81,15 +92,24 @@ def get_icra_traj(
     end_position: np.ndarray,
     end_wxyz: np.ndarray,  # Unused but kept for consistent signature
     timesteps: int,
+    word_funcs: dict = None,
+    word_str: str = "ICRA",
 ) -> jaxlie.SE3:
     """
-    Generates a 3D "ICRA" trajectory starting at the start_handle's pose.
+    Generates a 3D word trajectory starting at the start_handle's pose.
+
     The width is controlled by the x-difference between handles.
     The height is controlled by the y-difference between handles.
     """
-    # word_funcs = {'I': create_I, 'C': create_C, 'R': create_R, 'A': create_A}
-    word_funcs = {"A": create_A}
-    word_str = "ICRA"
+    # Ensure array types for jaxlie
+    start_position = np.array(start_position)
+    start_wxyz = np.array(start_wxyz)
+    end_position = np.array(end_position)
+    end_wxyz = np.array(end_wxyz)
+    # Default to only letter A if not provided
+    if word_funcs is None:
+        word_funcs = {"A": create_A}
+
     letter_spacing = LETTER_WIDTH * 1.8
 
     # 1. Generate base 2D letter points in a local frame
@@ -174,28 +194,6 @@ def get_icra_traj(
     return traj
 
 
-def save_ref_traj_to_csv(reference_traj: jaxlie.SE3, file_path: str):
-    """Saves the reference trajectory to a CSV file.
-
-    Args:
-        reference_traj: The SE3 trajectory to save.
-        file_path: The path to the CSV file.
-    """
-    translations = np.asarray(reference_traj.translation())
-    # wxyz is equivalent to qw, qx, qy, qz
-    quaternions_wxyz = np.asarray(reference_traj.rotation().wxyz)
-
-    data_to_save = np.hstack([translations, quaternions_wxyz])
-
-    header = ["x", "y", "z", "qw", "qx", "qy", "qz"]
-
-    with open(file_path, "w", newline="") as f:
-        writer = csv.writer(f)
-        writer.writerow(header)
-        writer.writerows(data_to_save)
-    print(f"Saved reference trajectory to {file_path}")
-
-
 @jax.jit
 def calculate_traj_metrics(
     reference_traj: jaxlie.SE3,
@@ -209,7 +207,7 @@ def calculate_traj_metrics(
         planned_traj: The executed trajectory.
 
     Returns:
-        A dictionary with position and rotation error stats (mean and std).
+        A dictionary with per-timestep errors plus summary stats.
     """
     # Position error
     ref_pos = reference_traj.translation()
@@ -222,6 +220,8 @@ def calculate_traj_metrics(
     rotation_errors = jnp.linalg.norm((ref_rot.inverse() @ plan_rot).log(), axis=-1)
 
     metrics = {
+        "position_errors": position_errors,
+        "rotation_errors": rotation_errors,
         "pos_error_mean": jnp.mean(position_errors),
         "pos_error_std": jnp.std(position_errors),
         "rot_error_mean": jnp.mean(rotation_errors),
@@ -269,6 +269,10 @@ def get_square_traj(
     timesteps: int,
 ) -> jaxlie.SE3:
     """Generates a 3D square trajectory based on handle positions."""
+    start_position = np.array(start_position)
+    start_wxyz = np.array(start_wxyz)
+    end_position = np.array(end_position)
+    end_wxyz = np.array(end_wxyz)
     points_2d = np.array(create_square())
     handle_diff = np.array(end_position) - np.array(start_position)
     target_side_length = max(abs(handle_diff[0]), 0.1)
@@ -331,261 +335,292 @@ def get_sine_traj(
     return traj
 
 
-def viser_main():
-    world_coll_config_path = (
-        "configs/maps/constrain_motion_planning/obstacles_con_A.json"
-    )
-    # Setup Environment
-    robot = CCRobot.from_config("configs/robots/cc_con_eval.json")
-    robot_coll = RobotCollision.from_config("configs/robots/cc_con_eval.json")
+def save_ref_traj_to_csv(reference_traj: jaxlie.SE3, file_path: str):
+    """Saves the reference trajectory to a CSV file.
+
+    Args:
+        reference_traj: The SE3 trajectory to save.
+        file_path: The path to the CSV file.
+    """
+    translations = np.asarray(reference_traj.translation())
+    # wxyz is equivalent to qw, qx, qy, qz
+    quaternions_wxyz = np.asarray(reference_traj.rotation().wxyz)
+
+    data_to_save = np.hstack([translations, quaternions_wxyz])
+
+    header = ["x", "y", "z", "qw", "qx", "qy", "qz"]
+
+    with open(file_path, "w", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow(header)
+        writer.writerows(data_to_save)
+    print(f"Saved reference trajectory to {file_path}")
+
+
+def run_case(
+    robot: CCRobot,
+    traj_follow_jit,
+    world_coll_config_path: str,
+    traj_type: str,
+    letters: str,
+    start_handle_position: tuple,
+    start_handle_wxyz: tuple,
+    end_handle_position: tuple,
+    end_handle_wxyz: tuple,
+    timesteps: int = 150,
+):
+    # Setup world collision per case
     world_coll = WorldCollision.from_config(world_coll_config_path)
 
-    # Setup Visualization
-    server = viser.ViserServer()
-    robot_vis = ViserSoftRobot(server, robot, robot_coll, root_node_name="/robot")
-    robot_vis.create_robot_visualizations()
-    obstacles_vis = ViserWorld(
-        server, world_coll, is_handle_able=True, config_path=world_coll_config_path
-    )
-    obstacles_vis.create_mesh_visualizations()
-    """  
-    for square
-    start_handle_position = (-0.01, -2.46, 0.9)
-    start_handle_wxyz = (0.83, 0.54, 0.06, 0.1)
-    end_handle_position = (0.76, -1.31, 2.75)
-    end_handle_wxyz = (1.0, 0, 0, 0)
-
-    for sine
-    start_handle_position = (0.5, -2.17, 0.89)
-    start_handle_wxyz = (1, 0, 0, 0)
-    end_handle_position = (0.51, -2.17, 1.49)
-    end_handle_wxyz = (1.0, 0, 0, 0)
-    
-    Handle settings for words
-    for letter "A"
-    start_handle_position = (-0.01, -2.51, 0.76)
-    start_handle_wxyz = (0.82, 0.47, 0.25, 0.2)
-    end_handle_position = (1.23, -1.25, 2.75)
-    end_handle_wxyz = (1.0, 0, 0, 0)
-    
-    for letter "R"
-    start_handle_position = (-0.05, -2.45, 0.93)
-    start_handle_wxyz = (0.85, 0.49, 0.15, 0.14)
-    end_handle_position = (0.79, -1.26, 2.75)
-    end_handle_wxyz = (1.0, 0, 0, 0)
-    
-    for letter "C"
-    start_handle_position = (-0.01, -2.46, 0.9)
-    start_handle_wxyz = (0.83, 0.54, 0.06, 0.1)
-    end_handle_position = (0.75, -1.31, 2.75)
-    end_handle_wxyz = (1.0, 0, 0, 0)
-    
-    for letter "I"
-    start_handle_position = (-0.01, -2.45, 0.91)
-    start_handle_wxyz = (0.83, 0.54, 0.06, 0.1)
-    end_handle_position = (0.75, -1.37, 2.75)
-    end_handle_wxyz = (1.0, 0, 0, 0)
-    """
-
-    start_handle_position = (-0.01, -2.51, 0.76)
-    start_handle_wxyz = (0.82, 0.47, 0.25, 0.2)
-    end_handle_position = (1.23, -1.25, 2.75)
-    end_handle_wxyz = (1.0, 0, 0, 0)
-    radius = robot.config.length * robot.config.num_sections
-
-    # Setup GUI
-    start_handle = server.scene.add_transform_controls(
-        "/start", scale=0.3, position=start_handle_position, wxyz=start_handle_wxyz
-    )
-    end_handle = server.scene.add_transform_controls(
-        "/end", scale=0.3, position=end_handle_position, wxyz=end_handle_wxyz
-    )
-    server.scene.add_icosphere(
-        "/target_sphere",
-        radius=radius,
-        color=(1.0, 0.8, 0.8),
-        position=(0.0, 0.0, 0.0),
-    )
-
-    with server.gui.add_folder("Trajectory Controls"):
-        linear_button = server.gui.add_button("Plan Linear Traj", disabled=False)
-        square_button = server.gui.add_button("Plan Square Traj", disabled=False)
-        sine_button = server.gui.add_button("Plan Sine Traj", disabled=False)
-        icra_button = server.gui.add_button("Plan ICRA Traj", disabled=False)
-        replay_button = server.gui.add_button("Replay", disabled=True)
-
-    with server.gui.add_folder("Handles Tfs"):
-        start_pos_text = server.gui.add_text(
-            "Start Pos",
-            initial_value=str(tuple(np.round(start_handle.position, 2))),
-            disabled=True,
-        )
-        start_wxyz_text = server.gui.add_text(
-            "Start wxyz",
-            initial_value=str(tuple(np.round(start_handle.wxyz, 2))),
-            disabled=True,
-        )
-        end_pos_text = server.gui.add_text(
-            "End Pos",
-            initial_value=str(tuple(np.round(end_handle.position, 2))),
-            disabled=True,
-        )
-        end_wxyz_text = server.gui.add_text(
-            "End wxyz",
-            initial_value=str(tuple(np.round(end_handle.wxyz, 2))),
-            disabled=True,
-        )
-
-    # Set up trajopt parameters
-    timesteps = 150
-    traj_solver = ConstrainedMotionPlanner(robot, robot_coll, timesteps)
-    traj_follow_jit = jax.jit(traj_solver.tip_traj_follow)
-
-    global_traj = None
-
-    def plan_and_visualize(ref_traj_func):
-        """Generic function to plan and visualize a trajectory."""
-        print(f"Generating trajectory with {ref_traj_func.__name__}...")
-        nonlocal global_traj
-        replay_button.disabled = True
-
-        reference_traj = ref_traj_func(
-            start_handle.position,
-            start_handle.wxyz,
-            end_handle.position,
-            end_handle.wxyz,
+    # Select reference trajectory
+    if traj_type == "linear":
+        ref_func = get_linear_traj
+        ref_traj = ref_func(
+            start_handle_position,
+            start_handle_wxyz,
+            end_handle_position,
+            end_handle_wxyz,
             timesteps,
         )
-        robot_vis.visualize_tip_traj(
-            reference_traj, color=np.array([1.0, 0.0, 0.0]), name="reference_traj"
+    elif traj_type == "square":
+        ref_func = get_square_traj
+        ref_traj = ref_func(
+            start_handle_position,
+            start_handle_wxyz,
+            end_handle_position,
+            end_handle_wxyz,
+            timesteps,
         )
-
-        print("Start planning....")
-        # Update obstacle information from the visualizer
-        start_time = time.time()
-        cfg = traj_follow_jit(reference_traj, [obstacles_vis.world_coll.obstacles])
-        jax.block_until_ready(cfg)
-        end_time = time.time()
-        planning_time = end_time - start_time
-        print(f"Planning finished in {planning_time:.4f} seconds.")
-
-        global_traj = robot.forward_kinematics(cfg)
-
-        planned_tip_traj = jaxlie.SE3.from_matrix(global_traj[:, -1, :, :])
-
-        calculate_traj_metrics_jit = jax.jit(calculate_traj_metrics)
-        # Calculate and print metrics
-        metrics = calculate_traj_metrics_jit(reference_traj, planned_tip_traj)
-        print("--- Trajectory Metrics ---")
-        print(f"Position Error (mean): {metrics['pos_error_mean']:.4f}m")
-        print(f"Position Error (std):  {metrics['pos_error_std']:.4f}m")
-        print(f"Rotation Error (mean): {metrics['rot_error_mean']:.4f}rad")
-        print(f"Rotation Error (std):  {metrics['rot_error_std']:.4f}rad")
-        print(f"Planning Time: {planning_time:.4f}s")
-
-        # Save results
-        save_dir = os.path.join("results", "traj_following", ref_traj_func.__name__)
-        os.makedirs(save_dir, exist_ok=True)
-
-        # Save reference trajectory to CSV
-        ref_csv_filename = f"{ref_traj_func.__name__}_reference.csv"
-        ref_csv_save_path = os.path.join(save_dir, ref_csv_filename)
-        save_ref_traj_to_csv(reference_traj, ref_csv_save_path)
-
-        filename = f"{ref_traj_func.__name__}.npz"
-        save_path = os.path.join(save_dir, filename)
-
-        # Get obstacle information for saving.
-        obstacles_for_saving = obstacles_vis.world_coll.obstacles
-
-        if isinstance(robot, CCRobotExtend):
-            np.savez(
-                save_path,
-                solution_states_theta=np.asarray(cfg.theta),
-                solution_states_phi=np.asarray(cfg.phi),
-                solution_states_length=np.asarray(cfg.length),
-                obstacles=obstacles_for_saving,
-                fk_result=np.asarray(global_traj),
-                target_position=np.asarray(reference_traj.translation()),
-                target_wxyz=np.asarray(reference_traj.rotation().wxyz),
-                planned_tip_traj=np.asarray(planned_tip_traj.as_matrix()),
-                planning_time=planning_time,
-                **{k: np.array(v) for k, v in metrics.items()},
+    elif traj_type == "sine":
+        ref_func = get_sine_traj
+        ref_traj = ref_func(
+            start_handle_position,
+            start_handle_wxyz,
+            end_handle_position,
+            end_handle_wxyz,
+            timesteps,
+        )
+    else:  # icra word/letters
+        ref_func = get_icra_traj
+        all_letter_funcs = {"I": create_I, "C": create_C, "R": create_R, "A": create_A}
+        selected_funcs = {
+            ch: all_letter_funcs[ch] for ch in letters if ch in all_letter_funcs
+        }
+        if not selected_funcs:
+            raise ValueError(
+                "No valid letters selected for ICRA trajectory. Choose from I, C, R, A."
             )
-        else:
-            np.savez(
-                save_path,
-                solution_states_theta=np.asarray(cfg.theta),
-                solution_states_phi=np.asarray(cfg.phi),
-                obstacles=obstacles_for_saving,
-                fk_result=np.asarray(global_traj),
-                target_position=np.asarray(reference_traj.translation()),
-                target_wxyz=np.asarray(reference_traj.rotation().wxyz),
-                planned_tip_traj=np.asarray(planned_tip_traj.as_matrix()),
-                planning_time=planning_time,
-                **{k: np.array(v) for k, v in metrics.items()},
-            )
-        print(f"Saved trajectory data to {save_path}")
-
-        # Plot and save the figure
-        fig = plt.figure(facecolor="white", figsize=(12, 6))
-        ax = fig.add_subplot(111, projection="3d")
-        visualize_constrain_motion_planning(
-            save_path=save_path,
-            world_config_path=world_coll_config_path,
-            ax=ax,
+        ref_traj = ref_func(
+            start_handle_position,
+            start_handle_wxyz,
+            end_handle_position,
+            end_handle_wxyz,
+            timesteps,
+            word_funcs=selected_funcs,
+            word_str=letters,
         )
 
-        plt.tight_layout()
-        save_path = "results/motion_planning_examples.png"
-        plt.savefig(save_path)
-        print(f"Saved plot to {save_path}")
-        plt.close()
+    # Plan trajectory
+    print("Start planning....")
+    # Warmup: run once to trigger JIT compilation before timing
+    _ = traj_follow_jit(ref_traj, [world_coll.obstacles])
+    jax.block_until_ready(_)
 
-        robot_vis.visualize_traj_collisions(robot, cfg)
-        robot_vis.visualize_tip_traj(
-            global_traj, color=np.array([0.0, 0.0, 1.0]), name="planned_traj"
+    start_time = time.time()
+    cfg = traj_follow_jit(ref_traj, [world_coll.obstacles])
+    jax.block_until_ready(cfg)
+    end_time = time.time()
+    planning_time = end_time - start_time
+    print(f"Planning finished in {planning_time:.4f} seconds.")
+
+    # Compute TDCR tendon lengths vs time if applicable
+    tendon_lengths_series = None
+    if isinstance(robot, TDCRRobot):
+        calc_tendon_lengths_batch = jax.jit(jax.vmap(robot.calculate_tendon_lengths))
+        tendon_lengths_series = np.asarray(calc_tendon_lengths_batch(cfg))
+
+    # FK and metrics
+    global_traj = robot.forward_kinematics(cfg)
+    planned_tip_traj = jaxlie.SE3.from_matrix(global_traj[:, -1, :, :])
+
+    calculate_traj_metrics_jit = jax.jit(calculate_traj_metrics)
+    metrics = calculate_traj_metrics_jit(ref_traj, planned_tip_traj)
+    print("--- Trajectory Metrics ---")
+    print(f"Position Error (mean): {metrics['pos_error_mean']:.4f}m")
+    print(f"Position Error (std):  {metrics['pos_error_std']:.4f}m")
+    print(f"Rotation Error (mean): {metrics['rot_error_mean']:.4f}rad")
+    print(f"Rotation Error (std):  {metrics['rot_error_std']:.4f}rad")
+    print(f"Planning Time: {planning_time:.4f}s")
+
+    # Save results (unique per case)
+    case_suffix = letters if traj_type == "icra" else traj_type
+    save_dir = os.path.join(
+        "results", "traj_following", f"{ref_func.__name__}_{case_suffix}"
+    )
+    os.makedirs(save_dir, exist_ok=True)
+
+    ref_csv_filename = f"{ref_func.__name__}_reference.csv"
+    ref_csv_save_path = os.path.join(save_dir, ref_csv_filename)
+    save_ref_traj_to_csv(ref_traj, ref_csv_save_path)
+
+    # Save TDCR tendon lengths series to CSV
+    if tendon_lengths_series is not None:
+        csv_path = os.path.join(save_dir, "tendon_lengths.csv")
+        time_series = np.arange(tendon_lengths_series.shape[0])  # timestep index
+        header = ",".join(
+            ["timestep"]
+            + [f"tendon_{i+1}" for i in range(tendon_lengths_series.shape[1])]
         )
+        data = np.column_stack([time_series, tendon_lengths_series])
+        np.savetxt(csv_path, data, delimiter=",", header=header, comments="")
+        print(f"Saved TDCR tendon length time series to {csv_path}")
 
-        for i in range(timesteps):
-            time.sleep(0.02)
-            robot_vis.update_pose(global_traj[i])
+    filename = f"{ref_func.__name__}.npz"
+    save_path = os.path.join(save_dir, filename)
 
-        replay_button.disabled = False
-        print("Animation finished. Ready to replay or plan new trajectory.")
+    obstacles_for_saving = world_coll.obstacles
 
-    def on_handle_update(handle: viser.TransformControlsHandle):
-        """Update GUI when handles are moved."""
-        start_pos_text.value = str(np.round(start_handle.position, 2))
-        start_wxyz_text.value = str(np.round(start_handle.wxyz, 2))
-        end_pos_text.value = str(np.round(end_handle.position, 2))
-        end_wxyz_text.value = str(np.round(end_handle.wxyz, 2))
+    if isinstance(robot, CCRobotExtend):
+        np.savez(
+            save_path,
+            solution_states_theta=np.asarray(cfg.theta),
+            solution_states_phi=np.asarray(cfg.phi),
+            solution_states_length=np.asarray(cfg.length),
+            obstacles=obstacles_for_saving,
+            fk_result=np.asarray(global_traj),
+            target_position=np.asarray(ref_traj.translation()),
+            target_wxyz=np.asarray(ref_traj.rotation().wxyz),
+            planned_tip_traj=np.asarray(planned_tip_traj.as_matrix()),
+            planning_time=planning_time,
+            **{k: np.array(v) for k, v in metrics.items()},
+        )
+    else:
+        np.savez(
+            save_path,
+            solution_states_theta=np.asarray(cfg.theta),
+            solution_states_phi=np.asarray(cfg.phi),
+            obstacles=obstacles_for_saving,
+            fk_result=np.asarray(global_traj),
+            target_position=np.asarray(ref_traj.translation()),
+            target_wxyz=np.asarray(ref_traj.rotation().wxyz),
+            planned_tip_traj=np.asarray(planned_tip_traj.as_matrix()),
+            planning_time=planning_time,
+            **{k: np.array(v) for k, v in metrics.items()},
+        )
+    print(f"Saved trajectory data to {save_path}")
 
-    def replay_callback(_: viser.GuiButtonHandle):
-        nonlocal global_traj
-        if global_traj is None:
-            print("No trajectory to replay.")
-            return
-        print("Replaying last trajectory...")
-        for i in range(timesteps):
-            time.sleep(0.02)
-            robot_vis.update_pose(global_traj[i])
-        print("Replay finished.")
+    # Plot and save the figure
+    fig = plt.figure(facecolor="white", figsize=(12, 6))
+    ax = fig.add_subplot(111, projection="3d")
+    visualize_constrain_motion_planning(
+        save_path=save_path,
+        world_config_path=world_coll_config_path,
+        ax=ax,
+    )
 
-    linear_button.on_click(lambda _: plan_and_visualize(get_linear_traj))
-    square_button.on_click(lambda _: plan_and_visualize(get_square_traj))
-    sine_button.on_click(lambda _: plan_and_visualize(get_sine_traj))
-    icra_button.on_click(lambda _: plan_and_visualize(get_icra_traj))
-    replay_button.on_click(replay_callback)
-
-    start_handle.on_update(on_handle_update)
-    end_handle.on_update(on_handle_update)
-
-    on_handle_update(start_handle)
-
-    while True:
-        time.sleep(0.01)
+    plt.tight_layout()
+    fig_save_path = os.path.join(save_dir, "motion_planning_examples.png")
+    plt.savefig(fig_save_path)
+    print(f"Saved plot to {fig_save_path}")
+    plt.close()
 
 
 if __name__ == "__main__":
-    viser_main()
+    # Select robot type here without CLI: set to "cc" or "tdcr"
+    robot_type = "tdcr"  # change to "cc" to use constant-curvature robot
+    timesteps = 150
+
+    # Choose config based on robot type and construct robot + collision
+    if robot_type == "cc":
+        robot_config = "configs/robots/cc_con_eval.json"
+        robot = CCRobot.from_config(robot_config)
+        robot_coll = RobotCollision.from_config(robot_config)
+    elif robot_type == "tdcr":
+        robot_config = "configs/robots/cc_con_tdcr.json"
+        robot = TDCRRobot.from_config(robot_config)
+        robot_coll = RobotCollision.from_config(robot_config)
+
+    # Create JIT-compiled planner once for all cases
+    traj_solver = TrajOptimizer(robot, robot_coll, timesteps)
+    traj_follow_jit = jax.jit(traj_solver.optimize_tip_traj_follow)
+
+    cases = [
+        {
+            "name": "square",
+            "traj": "square",
+            "obstacle": "configs/maps/constrain_motion_planning/obstacles_con_square.json",
+            "start_pos": (-0.05, -2.3, 0.96),
+            "start_wxyz": (0.83, 0.54, 0.06, 0.1),
+            "end_pos": (0.7, -1.45, 2.75),
+            "end_wxyz": (1.0, 0, 0, 0),
+            "letters": "",
+        },
+        {
+            "name": "sine",
+            "traj": "sine",
+            "obstacle": "configs/maps/constrain_motion_planning/obstacles_con_sine.json",
+            "start_pos": (0.5, -2.17, 0.89),
+            "start_wxyz": (1.0, 0.0, 0.0, 0.0),
+            "end_pos": (0.51, -2.17, 1.49),
+            "end_wxyz": (1.0, 0.0, 0.0, 0.0),
+            "letters": "",
+        },
+        {
+            "name": "A",
+            "traj": "icra",
+            "obstacle": "configs/maps/constrain_motion_planning/obstacles_con_A.json",
+            "start_pos": (-0.01, -2.51, 0.76),
+            "start_wxyz": (0.82, 0.47, 0.25, 0.2),
+            "end_pos": (1.23, -1.25, 2.75),
+            "end_wxyz": (1.0, 0.0, 0.0, 0.0),
+            "letters": "A",
+        },
+        {
+            "name": "R",
+            "traj": "icra",
+            "obstacle": "configs/maps/constrain_motion_planning/obstacles_con_R.json",
+            "start_pos": (-0.11, -2.36, 0.87),
+            "start_wxyz": (0.85, 0.49, 0.15, 0.14),
+            "end_pos": (0.79, -1.26, 2.75),
+            "end_wxyz": (1.0, 0.0, 0.0, 0.0),
+            "letters": "R",
+        },
+        {
+            "name": "C",
+            "traj": "icra",
+            "obstacle": "configs/maps/constrain_motion_planning/obstacles_con_C.json",
+            "start_pos": (-0.01, -2.46, 0.9),
+            "start_wxyz": (0.83, 0.54, 0.06, 0.1),
+            "end_pos": (0.75, -1.31, 2.75),
+            "end_wxyz": (1.0, 0.0, 0.0, 0.0),
+            "letters": "C",
+        },
+        {
+            "name": "I",
+            "traj": "icra",
+            "obstacle": "configs/maps/constrain_motion_planning/obstacles_con_I.json",
+            "start_pos": (-0.01, -2.45, 0.91),
+            "start_wxyz": (0.83, 0.54, 0.06, 0.1),
+            "end_pos": (0.75, -1.37, 2.75),
+            "end_wxyz": (1.0, 0.0, 0.0, 0.0),
+            "letters": "I",
+        },
+    ]
+
+    for case in cases:
+        print(f"\n=== Running case: {case['name']} (robot: {robot_type}) ===")
+        run_case(
+            robot=robot,
+            traj_follow_jit=traj_follow_jit,
+            world_coll_config_path=case["obstacle"],
+            traj_type=case["traj"],
+            letters=case["letters"],
+            start_handle_position=case["start_pos"],
+            start_handle_wxyz=case["start_wxyz"],
+            end_handle_position=case["end_pos"],
+            end_handle_wxyz=case["end_wxyz"],
+            timesteps=timesteps,
+        )
+    plot_constrain_motion_planning()
+    plot_tendon_length()
+    plot_error()

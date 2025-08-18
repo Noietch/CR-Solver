@@ -261,8 +261,8 @@ class IKSolver:
                     jaxlie.SE3.from_rotation_and_translation(
                         jaxlie.SO3(start_wxyz), start_position
                     ),
-                    pos_weight=5.0,
-                    ori_weight=1.0,
+                    pos_weight=50.0,
+                    ori_weight=10.0,
                 ),
                 pose_cost(
                     self.robot,
@@ -270,8 +270,8 @@ class IKSolver:
                     jaxlie.SE3.from_rotation_and_translation(
                         jaxlie.SO3(end_wxyz), end_position
                     ),
-                    pos_weight=5.0,
-                    ori_weight=1.0,
+                    pos_weight=50.0,
+                    ori_weight=10.0,
                 ),
                 limit_cost(
                     batch_robot,
