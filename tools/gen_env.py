@@ -1,4 +1,5 @@
 import json
+import os
 import numpy as np
 
 from soul.visualization.visualizer_plot import visualize_cc_model_3d
@@ -219,6 +220,8 @@ def generate_random_env(
     scale: float = 1.0,
     radius_min: float = 0.15,
     radius_max: float = 0.30,
+    robot_radius: float = 0.1,
+    start_from_initialization: bool = False,
 ):
     """
     Generate a random environment with spherical obstacles.
@@ -230,9 +233,10 @@ def generate_random_env(
     - scale: Scale factor for the environment size
     - radius: Radius of the spherical obstacles
     """
+    os.makedirs(os.path.dirname(save_path), exist_ok=True)
     obstacles_dict = {}
 
-    for i in range(num_obstacles):
+    def generate_one_obstacle(i: int) -> dict:
         obstacle_key = f"obstacle_{i+1}"
         center = [
             np.random.uniform(-scale, scale) + center_pos[0],
@@ -245,6 +249,29 @@ def generate_random_env(
             "center": center,
             "radius": radius,
         }
+        return obstacles_dict
+
+    def whether_obstacle_in_collision(x, y) -> bool:
+        # Check if the obstacle is within the robot's radius
+        obstacle_center = np.array([x, y, 0])
+        return np.linalg.norm(obstacle_center) < robot_radius
+
+    for i in range(num_obstacles):
+        obstacle_dict = generate_one_obstacle(i)
+        if start_from_initialization:
+            x, y = (
+                obstacle_dict[f"obstacle_{i+1}"]["center"][0],
+                obstacle_dict[f"obstacle_{i+1}"]["center"][1],
+            )
+            is_in_base_point = whether_obstacle_in_collision(x, y)
+            while is_in_base_point:
+                obstacle_dict = generate_one_obstacle(i)
+                x, y = (
+                    obstacle_dict[f"obstacle_{i+1}"]["center"][0],
+                    obstacle_dict[f"obstacle_{i+1}"]["center"][1],
+                )
+                is_in_base_point = whether_obstacle_in_collision(x, y)
+        obstacles_dict.update(obstacle_dict)
 
     # Save to JSON file
     with open(save_path, "w") as f:
@@ -289,21 +316,24 @@ if __name__ == "__main__":
     # )
 
     # Random environment
-    section_list = [3, 4, 5, 6]
+    section_list = [3]
     section_length = 1.0
+    start_from_initialization = True
 
     for section in section_list:
         generate_random_env(
-            f"configs/maps/mp_scene/obstacles_random_section_{section}.json",
+            f"configs/maps/mp_scene/obstacles_random_start_init_{start_from_initialization}_section_{section}.json",
             num_obstacles=section**3,  # Number of obstacles increases with section size
             center_pos=[0.0, 0.0, 0.0],
             scale=section * section_length,
-            radius_min=0.15,
-            radius_max=0.3,
+            radius_min=0.1,
+            radius_max=0.2,
+            robot_radius=0.01,
+            start_from_initialization=start_from_initialization,
         )
         visualize_cc_model_3d(
-            world_coll_config=f"configs/maps/ik_maps/obstacles_random_section_{section}.json",
-            save_path=f"visualization/obstacles_random_section_{section}.png",
+            world_coll_config=f"configs/maps/mp_scene/obstacles_random_start_init_{start_from_initialization}_section_{section}.json",
+            save_path=f"visualization/obstacles_random_start_init_{start_from_initialization}_section_{section}.png",
         )
 
     print("\nAll environments generated successfully!")

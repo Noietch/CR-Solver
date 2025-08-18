@@ -308,15 +308,13 @@ def eval_ik_with_coll(
     solution_collision_mask = is_solution_collision_vmap(
         solution_states, robot, robot_coll, world_geom
     )
-    final_success_rate, final_error, failure_stats = (
-        ik_metric_with_coll(
-            robot,
-            solution_states,
-            tip_transforms,
-            target_position,
-            target_wxyz,
-            solution_collision_mask,
-        )
+    final_success_rate, final_error, failure_stats = ik_metric_with_coll(
+        robot,
+        solution_states,
+        tip_transforms,
+        target_position,
+        target_wxyz,
+        solution_collision_mask,
     )
 
     print(f"--- With Collision Results ---")

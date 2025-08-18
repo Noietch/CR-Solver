@@ -171,6 +171,7 @@ def sample_collision_free_start_end_states(
     min_distance: float = 0.1,
     batch_size: int = 256,
     save_load_path: str = None,
+    start_from_initialization: bool = False,
 ) -> tuple[ConstantCurvatureState, ConstantCurvatureState]:
     """
     Samples a specified number of pairs of collision-free start and end states,
@@ -264,42 +265,99 @@ def sample_collision_free_start_end_states(
     max_pairing_attempts = num_available * 10  # Safety break for pairing
 
     print("Pairing states...")
-    for _ in range(max_pairing_attempts):
-        if len(final_start_states_list) >= eval_num:
-            break
-        if np.sum(~used_indices) < 2:
-            print("Warning: Not enough available states to form a new pair.")
-            break
 
-        # Get available indices
-        available_indices = jnp.where(~used_indices)[0]
-        # Pick two random, unique indices from the available pool
-        idx1, idx2 = np.random.choice(
-            np.array(available_indices), size=2, replace=False
+    if start_from_initialization:
+        # initialization with theta, phi = 0
+        print("Adding initialization states (theta=0, phi=0) as start states...")
+
+        # Create single initialization state with theta=0, phi=0
+        init_state = ConstantCurvatureState(
+            base_position=jnp.zeros((1, 3)),
+            theta=jnp.full((1, robot.config.num_sections), 1e-7),
+            phi=jnp.full((1, robot.config.num_sections), 1e-7),
         )
 
-        pos1 = positions_pool[idx1]
-        pos2 = positions_pool[idx2]
+        for _ in range(max_pairing_attempts):
+            if len(final_start_states_list) >= eval_num:
+                break
+            if np.sum(~used_indices) < 2:
+                print("Warning: Not enough available states to form a new pair.")
+                break
 
-        distance = jnp.linalg.norm(pos1 - pos2)
+            # Get available indices
+            available_indices = jnp.where(~used_indices)[0]
+            # Pick two random, unique indices from the available pool
+            idx2 = np.random.choice(np.array(available_indices), size=1, replace=False)
+            idx2_int = int(idx2.item())
 
-        if distance >= min_distance:
-            start_state = jax.tree_util.tree_map(
-                lambda x: x[idx1 : idx1 + 1], state_pool
+            init_fk_transforms = batched_fk(init_state)
+            init_tip_transform = jaxlie.SE3.from_matrix(init_fk_transforms[0, -1, ...])
+
+            pos1 = init_tip_transform.translation()
+            pos2 = positions_pool[idx2_int]
+
+            distance = jnp.linalg.norm(pos2 - pos1)
+
+            if distance >= min_distance:
+                start_state = init_state
+                end_state = jax.tree_util.tree_map(
+                    lambda x: x[idx2_int : idx2_int + 1], state_pool
+                )
+
+                final_start_states_list.append(start_state)
+                final_end_states_list.append(end_state)
+
+                used_indices = used_indices.at[idx2_int].set(True)
+
+                if (
+                    len(final_start_states_list) % 10 == 0
+                    or len(final_start_states_list) == eval_num
+                ):
+                    print(
+                        f"  ... found {len(final_start_states_list)}/{eval_num} pairs"
+                    )
+
+    else:
+        for _ in range(max_pairing_attempts):
+            if len(final_start_states_list) >= eval_num:
+                break
+            if np.sum(~used_indices) < 2:
+                print("Warning: Not enough available states to form a new pair.")
+                break
+
+            # Get available indices
+            available_indices = jnp.where(~used_indices)[0]
+            # Pick two random, unique indices from the available pool
+            idx1, idx2 = np.random.choice(
+                np.array(available_indices), size=2, replace=False
             )
-            end_state = jax.tree_util.tree_map(lambda x: x[idx2 : idx2 + 1], state_pool)
 
-            final_start_states_list.append(start_state)
-            final_end_states_list.append(end_state)
+            pos1 = positions_pool[idx1]
+            pos2 = positions_pool[idx2]
 
-            used_indices = used_indices.at[idx1].set(True)
-            used_indices = used_indices.at[idx2].set(True)
+            distance = jnp.linalg.norm(pos1 - pos2)
 
-            if (
-                len(final_start_states_list) % 10 == 0
-                or len(final_start_states_list) == eval_num
-            ):
-                print(f"  ... found {len(final_start_states_list)}/{eval_num} pairs")
+            if distance >= min_distance:
+                start_state = jax.tree_util.tree_map(
+                    lambda x: x[idx1 : idx1 + 1], state_pool
+                )
+                end_state = jax.tree_util.tree_map(
+                    lambda x: x[idx2 : idx2 + 1], state_pool
+                )
+
+                final_start_states_list.append(start_state)
+                final_end_states_list.append(end_state)
+
+                used_indices = used_indices.at[idx1].set(True)
+                used_indices = used_indices.at[idx2].set(True)
+
+                if (
+                    len(final_start_states_list) % 10 == 0
+                    or len(final_start_states_list) == eval_num
+                ):
+                    print(
+                        f"  ... found {len(final_start_states_list)}/{eval_num} pairs"
+                    )
 
     if len(final_start_states_list) < eval_num:
         print(
@@ -309,10 +367,10 @@ def sample_collision_free_start_end_states(
         if not final_start_states_list:
             raise RuntimeError("Could not sample any valid state pairs.")
 
-    final_start_states = jax.tree_util.tree_map(
+    final_start_states: ConstantCurvatureState = jax.tree_util.tree_map(
         lambda *x: jnp.concatenate(x, axis=0), *final_start_states_list
     )
-    final_end_states = jax.tree_util.tree_map(
+    final_end_states: ConstantCurvatureState = jax.tree_util.tree_map(
         lambda *x: jnp.concatenate(x, axis=0), *final_end_states_list
     )
 
@@ -805,6 +863,7 @@ def eval_mp_all_sections(
     min_sample_dist_ratio: float,
     opt_after_planner: bool = False,
     planner_type: str = "trajopt",
+    start_from_initialization: bool = False,
 ) -> list:
     all_results_summary = []
 
@@ -895,7 +954,9 @@ def eval_mp_all_sections(
         # Create some dummy data for warm-up
         warm_up_num = 20
         temp_dir = os.path.join(
-            save_dir, "temp", f"sections_{num_sections}_eval_{warm_up_num}.npz"
+            save_dir,
+            "temp",
+            f"sections_{num_sections}_eval_{warm_up_num}_start_init_{start_from_initialization}.npz",
         )
         os.makedirs(os.path.dirname(temp_dir), exist_ok=True)
         dummy_start_states, dummy_end_states = sample_collision_free_start_end_states(
@@ -906,6 +967,7 @@ def eval_mp_all_sections(
             batched_fk=batched_fk,
             min_distance=robot_total_length * min_sample_dist_ratio,
             save_load_path=temp_dir,
+            start_from_initialization=start_from_initialization,
         )
 
         for i in range(dummy_start_states.theta.shape[0]):
@@ -952,9 +1014,7 @@ def eval_mp_all_sections(
         print(
             f"\n--- Sampling {eval_num} pairs for {planner_type.upper()} with {num_sections} sections ---"
         )
-        sample_data_path = (
-            f"{save_dir}/sampled_states/sections_{num_sections}_eval_{eval_num}.npz"
-        )
+        sample_data_path = f"{save_dir}/sampled_states/sections_{num_sections}_eval_{eval_num}_start_init_{start_from_initialization}.npz"
         start_states, end_states = sample_collision_free_start_end_states(
             robot=robot,
             eval_num=eval_num,
@@ -963,6 +1023,7 @@ def eval_mp_all_sections(
             batched_fk=batched_fk,
             min_distance=robot_total_length * min_sample_dist_ratio,
             save_load_path=sample_data_path,
+            start_from_initialization=start_from_initialization,
         )
 
         actual_eval_num = start_states.theta.shape[0]
@@ -1294,6 +1355,8 @@ if __name__ == "__main__":
     repeat_num = 200  # Evaluate 50 times for each configuration
     robot_config_path = "configs/robots/cc_scene_eval_tdcr.json"
 
+    start_from_initialization = True
+
     # Correctly format the world config paths
     world_config_paths = [
         f"configs/maps/mp_scene/obstacles_random_section_{i}.json" for i in test_list
@@ -1303,7 +1366,9 @@ if __name__ == "__main__":
         "configs/maps/mp_scene/15.grab_from_box.json",
         "configs/maps/mp_scene/mp_demo.json",
     ]
-    world_config_paths = ["configs/maps/ik_maps/obstacles_icosahedron.json"]
+    world_config_paths = [
+        "configs/maps/mp_scene/obstacles_random_start_init_True_section_3.json"
+    ]
 
     planner_types = ["rrt"]  # ["trajopt", "prm", "rrt"]
     opt_options = [True, False]
@@ -1343,6 +1408,7 @@ if __name__ == "__main__":
                     opt_after_planner=opt,
                     robot_type=robot_type,
                     planner_type=planner,
+                    start_from_initialization=start_from_initialization,
                 )
                 if result_summary:
                     result_summarys.extend(result_summary)

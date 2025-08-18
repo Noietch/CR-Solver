@@ -50,7 +50,7 @@ class ViserSoftRobot:
     def _generate_section_colors(self, num_sections):
         if self.robot_color is not None:
             return [self.robot_color] * num_sections
-        
+
         colors = []
         for i in range(num_sections):
             # use HSV to generate uniform colors
@@ -480,7 +480,7 @@ class ViserRenderer:
     ):
         self.server = server
         self.world = world
-        
+
         self.robot = robot
 
     def render_traj_video(
@@ -527,28 +527,30 @@ class ViserRenderer:
     ):
         """
         Render trajectory by creating a robot for each pose and displaying all simultaneously.
-        
+
         Creates individual robot instances for each trajectory pose with different colors/transparency
         to visualize the complete trajectory in a single image.
-        
+
         Args:
             event: Viser GUI event for rendering
             traj: Robot trajectory as either SE3 poses or numpy array
             skip_frames: Number of frames to skip for performance (0 = render every frame)
             save_path: Path to save the image (optional)
-            
+
         Returns:
             Single rendered image showing all trajectory poses
         """
         traj_len = traj.shape[0] if hasattr(traj, "shape") else len(traj)
         trajectory_robots = []
-        
+
         try:
             # Create robots for each trajectory pose
-            for i in tqdm(range(0, traj_len, skip_frames + 1), desc="Creating trajectory robots"):
+            for i in tqdm(
+                range(0, traj_len, skip_frames + 1), desc="Creating trajectory robots"
+            ):
                 # Calculate color based on position in trajectory
                 progress = i / max(1, traj_len - 1)
-                
+
                 # Color transition from blue (start) to red (end)
                 if progress <= 0.5:
                     # Blue to green
@@ -558,7 +560,7 @@ class ViserRenderer:
                     # Green to red
                     color = ((progress - 0.5) * 2, 1.0 - (progress - 0.5) * 2, 0.0)
                     alpha = 0.5 + 0.5 * (progress - 0.5)  # More opaque at end
-                
+
                 # Create robot for this pose
                 robot_instance = ViserSoftRobot(
                     self.server,
@@ -568,43 +570,43 @@ class ViserRenderer:
                     enable_backbone=False,
                     robot_color=color,
                 )
-                
+
                 # Create visualization and set pose
                 robot_instance.create_robot_visualizations(alpha=alpha)
                 robot_instance.update_pose(traj[i])
-                
+
                 trajectory_robots.append(robot_instance)
-            
+
             # Hide original robot to avoid interference
             self._set_robot_visibility(False)
-            
+
             # Render the complete scene with all trajectory robots
             image = event.client.get_render(height=720, width=1280)
-            
+
             # Save the image if path provided
             if save_path:
-                if save_path.endswith('.gif') or save_path.endswith('.mp4'):
+                if save_path.endswith(".gif") or save_path.endswith(".mp4"):
                     # For video formats, change extension to PNG
-                    save_path = save_path.rsplit('.', 1)[0] + '_trajectory.png'
-                elif not save_path.endswith('.png'):
-                    save_path = save_path + '_trajectory.png'
+                    save_path = save_path.rsplit(".", 1)[0] + "_trajectory.png"
+                elif not save_path.endswith(".png"):
+                    save_path = save_path + "_trajectory.png"
                 iio.imwrite(save_path, image)
                 print(f"Trajectory image saved to {save_path}")
-                
+
             return image
-            
+
         finally:
             # Clean up trajectory robots
             for robot_instance in trajectory_robots:
                 self._cleanup_robot(robot_instance)
-            
+
             # Restore original robot visibility
             self._set_robot_visibility(True)
-    
+
     def _cleanup_robot(self, robot_instance):
         """
         Clean up a robot instance by removing all its visual components.
-        
+
         Args:
             robot_instance: ViserSoftRobot instance to cleanup
         """
@@ -612,14 +614,14 @@ class ViserRenderer:
         for handle in robot_instance.robot_cylinder_handles:
             handle.remove()
         robot_instance.robot_cylinder_handles = []
-        
+
         # Remove all backbone cylinder handles
         for handle in robot_instance.robot_backbone_cylinder_handles:
             handle.remove()
         robot_instance.robot_backbone_cylinder_handles = []
-        
+
         # Remove sphere handles if they exist
-        if hasattr(robot_instance, 'sphere_handles'):
+        if hasattr(robot_instance, "sphere_handles"):
             for handle in robot_instance.sphere_handles:
                 handle.remove()
             robot_instance.sphere_handles = []

@@ -31,7 +31,12 @@ def set_3d_tick_labelsize(
         ax.zaxis.set_tick_params(labelsize=size, pad=pad, direction="in")
 
 
-def viser_main(robot_config_path: str, world_config_paths: str, mp_result_path: str, robot_type: str = "tdcr"):
+def viser_main(
+    robot_config_path: str,
+    world_config_paths: str,
+    mp_result_path: str,
+    robot_type: str = "tdcr",
+):
     # Setup Robot Environment
     config = json.load(open(robot_config_path))
     # num_sections = int(world_config_paths.split(os.sep)[-1].split('_')[-1].split('.')[0])
@@ -145,7 +150,7 @@ def viser_main(robot_config_path: str, world_config_paths: str, mp_result_path: 
         os.makedirs(os.path.dirname(save_path), exist_ok=True)
         num_timesteps = len(planned_traj)
         sample_indices = None
-        num_pose = 5
+        num_pose = 15
         if sample_indices is None:
             sample_indices = np.linspace(0, num_timesteps - 1, num_pose, dtype=int)
         selected_poses = planned_traj[sample_indices]
@@ -162,19 +167,35 @@ def viser_main(robot_config_path: str, world_config_paths: str, mp_result_path: 
             planned_tip_pos[:, 0],
             planned_tip_pos[:, 1],
             planned_tip_pos[:, 2],
-            c="#ea6b66",  # red
-            linewidth=6,
+            c="#1f77b4",  # blue
+            linewidth=3,
             label="Experiment",
         )
+        # Swap x and y axes by plotting y as x and x as y
+        ax.set_xlim3d(-3, 3)
+        ax.set_ylim3d(-3, 3)
+        ax.set_zlim3d(-0.5, 3)
+
+        # Set equal aspect ratio (swap x and y dimensions)
+        ax.set_box_aspect([6, -6, 3.5])
         ax.patch.set_alpha(0.0)
+
+        # # Swap axis labels
+        # ax.set_xlabel("Y")
+        # ax.set_ylabel("X")
+        # ax.set_zlabel("Z")
+
+        # Swap tick labels (optional, for clarity)
+        ax.xaxis.set_label_coords(0.5, -0.1)
+        ax.yaxis.set_label_coords(-0.1, 0.5)
         ax.xaxis.pane.fill = False
         ax.yaxis.pane.fill = False
         ax.zaxis.pane.fill = False
         ax.xaxis.pane.set_edgecolor("w")
         ax.yaxis.pane.set_edgecolor("w")
         ax.zaxis.pane.set_edgecolor("w")
-        ax.legend(frameon=False, markerscale=1)
-        plt.savefig(save_path, bbox_inches="tight", dpi=900)
+        # ax.legend(frameon=False, markerscale=1)
+        plt.savefig(save_path, bbox_inches="tight", dpi=300)
         print(f"Figure saved to {save_path}")
 
     def on_prev_click(event: viser.GuiEvent):
@@ -198,6 +219,10 @@ def viser_main(robot_config_path: str, world_config_paths: str, mp_result_path: 
             robot_vis.update_pose(planned_traj[i])
             time.sleep(1 / 60.0)
         print("Replay finished.")
+
+    def visualize_traj_collisions(event: viser.GuiEvent):
+        global planned_traj
+        robot_vis.visualize_traj_collisions(robot, planned_paths_constant)
 
     def render_video_callback(event: viser.GuiEvent):
         global planned_traj
@@ -228,6 +253,8 @@ def viser_main(robot_config_path: str, world_config_paths: str, mp_result_path: 
     replay_button.on_click(on_replay_click)
     render_video_button.on_click(render_video_callback)
     render_image_button.on_click(render_image_callback)
+    visualize_traj_collisions_bottom.on_click(visualize_traj_collisions)
+    visualize_mp_button.on_click(visualize_mp)
 
     # Load the first trial initially
     load_and_display_trial(current_trial_idx)
@@ -237,23 +264,13 @@ def viser_main(robot_config_path: str, world_config_paths: str, mp_result_path: 
 
 
 if __name__ == "__main__":
-    """in file trajopt_opt_False_sections_6_all_trials_trajectories.npz
-        "trial_id": int
-        "start_states_theta": np.asarray(start_states.theta),
-        "start_states_phi": np.asarray(start_states.phi),
-        "end_states_theta": np.asarray(end_states.theta),
-        "end_states_phi": np.asarray(end_states.phi),
-        "target_position": np.asarray(target_position),
-        "target_wxyz": np.asarray(target_wxyz),
-        "fk_result": np.asarray(fk_result),
-        "solution_states_theta": np.asarray(solution_states.theta),
-        "solution_states_phi": np.asarray(solution_states.phi),
-        "planned_tip_traj": np.asarray(planned_tip_traj.as_matrix()),
-        格式：
-        trial_{trial_num}_{key}
-    """
 
     robot_config_path = "configs/robots/cc_scene_eval_tdcr.json"
-    world_config_paths = "configs/maps/mp_scene/obstacles_random_section_6.json"
-    mp_result_path = "/home/yhq/workspace/yi_DiffSoft/results/debug_traj_inf_coll/obstacles_random_section_6/all_trials_trajectories/trajopt_opt_False_sections_6_all_trials_trajectories.npz"
-    viser_main(robot_config_path, world_config_paths, mp_result_path, robot_type="tdcr")  # Change to "cc" for CCRobot
+    world_config_paths = (
+        "configs/maps/mp_scene/obstacles_random_start_init_True_section_3.json"
+    )
+    mp_result_path = "results/debug_draw/obstacles_random_start_init_True_section_3/all_trials_trajectories/trajopt_opt_False_sections_3_all_trials_trajectories.npz"
+
+    viser_main(
+        robot_config_path, world_config_paths, mp_result_path, robot_type="tdcr"
+    )  # Change to "cc" for CCRobot
