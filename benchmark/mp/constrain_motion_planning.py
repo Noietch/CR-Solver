@@ -19,7 +19,7 @@ from soul.robots.cc_robot import CCRobot
 from soul.robots.cc_robot_extend import CCRobot as CCRobotExtend
 from soul.geom import RobotCollision, WorldCollision
 from soul.solver.traj_optimizer import TrajOptimizer
-from benchmark.mp_plot import (
+from benchmark.mp.mp_plot import (
     visualize_constrain_motion_planning,
     plot_constrain_motion_planning,
     plot_tendon_length,
