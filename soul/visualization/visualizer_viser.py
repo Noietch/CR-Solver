@@ -314,6 +314,9 @@ class ViserSoftRobot:
     ):
         if isinstance(traj, jaxlie.SE3):
             traj = traj.translation()
+        elif traj.ndim == 3 and traj.shape[-2:] == (4, 4):
+            # Extract translation from 4x4 transformation matrix
+            traj = traj[..., :3, 3]  # Extract translation part (x, y, z)
         else:
             traj = jaxlie.SE3.from_matrix(traj).wxyz_xyz[..., -1, 4:]
         self.server.scene.add_point_cloud(
