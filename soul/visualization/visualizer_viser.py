@@ -25,6 +25,7 @@ class ViserSoftRobot:
         robot_coll: RobotCollision,
         root_node_name: str,
         enable_backbone: bool = True,
+        robot_color: tuple | None = None,
     ):
         self.server = server
         self.robot = robot  # 保存robot实例
@@ -35,6 +36,7 @@ class ViserSoftRobot:
         self.robot_backbone_cylinder_handles = []
         self.enable_backbone = enable_backbone
         self._update_counter = 0  # For frame skipping optimization
+        self.robot_color = robot_color
 
     def reset_pose(self):
         default_state = ConstantCurvatureState(
@@ -46,6 +48,9 @@ class ViserSoftRobot:
         return poses
 
     def _generate_section_colors(self, num_sections):
+        if self.robot_color is not None:
+            return [self.robot_color] * num_sections
+        
         colors = []
         for i in range(num_sections):
             # use HSV to generate uniform colors
@@ -457,10 +462,12 @@ class ViserWorld:
                 )
 
         # add ground visualizations
-        self.server.scene.add_grid(
+        self.server.scene.add_box(
             "/ground",
-            width=100,
-            height=100,
+            color=(0.5, 0.5, 0.5),
+            dimensions=(1000, 1000, 0.01),
+            position=(0, 0, 0),
+            wxyz=(1, 0, 0, 0),
         )
 
 
@@ -472,8 +479,9 @@ class ViserRenderer:
         world: ViserWorld,
     ):
         self.server = server
-        self.robot = robot
         self.world = world
+        
+        self.robot = robot
 
     def render_traj_video(
         self,
@@ -514,74 +522,110 @@ class ViserRenderer:
         self,
         event: viser.GuiEvent,
         traj: jnp.ndarray | jaxlie.SE3,
-        skip_frames: int = 0,
+        skip_frames: int = 20,
         save_path: str = None,
     ):
         """
-        Render trajectory as a single composite image by overlaying robot poses on environment.
-
+        Render trajectory by creating a robot for each pose and displaying all simultaneously.
+        
+        Creates individual robot instances for each trajectory pose with different colors/transparency
+        to visualize the complete trajectory in a single image.
+        
         Args:
-            event: Viser GUI event for accessing client
+            event: Viser GUI event for rendering
             traj: Robot trajectory as either SE3 poses or numpy array
             skip_frames: Number of frames to skip for performance (0 = render every frame)
-            save_path: Path to save the composite image (optional)
+            save_path: Path to save the image (optional)
+            
+        Returns:
+            Single rendered image showing all trajectory poses
         """
-        if save_path is None:
-            raise ValueError("Save path must be provided for trajectory image")
-
-        print("Rendering trajectory image...")
-
-        # Step 1: Store original visibility states and render environment-only image
-        self._set_robot_visibility(False)
-        env_image = event.client.get_render(height=720, width=1280)
-
-        # Step 2: Restore robot visibility and render trajectory frames
-        self._set_robot_visibility(True)
-
-        print("Rendering robot trajectory frames...")
-        robot_images = self.render_traj_video(event, traj, skip_frames)
-
-        # Start with environment as base
-        env_array = np.array(env_image, dtype=np.float32)
-        composite_image = env_array.copy()
-
-        # Overlay each robot frame with alpha blending
-        alpha_per_frame = 0.2  # Distribute transparency across frames
-
-        for i, robot_frame in enumerate(robot_images):
-            robot_array = np.array(robot_frame, dtype=np.float32)
-
-            # Calculate alpha based on frame position (start/end more opaque)
-            if i == 0 or i == len(robot_images) - 1:
-                alpha = 0.9  # Start and end poses more opaque
-            else:
-                alpha = alpha_per_frame * 2  # Intermediate poses more transparent
-
-            # Create mask for robot pixels (non-environment pixels)
-            # Assuming environment pixels are relatively similar to the background
-            diff = np.abs(robot_array - env_array).mean(axis=2)
-            robot_mask = diff > 10  # Threshold for detecting robot pixels
-
-            # Apply alpha blending only where robot is present
-            for c in range(3):  # RGB channels
-                composite_image[:, :, c] = np.where(
-                    robot_mask,
-                    composite_image[:, :, c] * (1 - alpha)
-                    + robot_array[:, :, c] * alpha,
-                    composite_image[:, :, c],
+        traj_len = traj.shape[0] if hasattr(traj, "shape") else len(traj)
+        trajectory_robots = []
+        
+        try:
+            # Create robots for each trajectory pose
+            for i in tqdm(range(0, traj_len, skip_frames + 1), desc="Creating trajectory robots"):
+                # Calculate color based on position in trajectory
+                progress = i / max(1, traj_len - 1)
+                
+                # Color transition from blue (start) to red (end)
+                if progress <= 0.5:
+                    # Blue to green
+                    color = (0.0, progress * 2, 1.0 - progress * 2)
+                    alpha = 0.3 + 0.4 * progress  # More transparent at start
+                else:
+                    # Green to red
+                    color = ((progress - 0.5) * 2, 1.0 - (progress - 0.5) * 2, 0.0)
+                    alpha = 0.5 + 0.5 * (progress - 0.5)  # More opaque at end
+                
+                # Create robot for this pose
+                robot_instance = ViserSoftRobot(
+                    self.server,
+                    self.robot.robot,
+                    self.robot.robot_coll,
+                    root_node_name=f"/traj_robot_{i}",
+                    enable_backbone=False,
+                    robot_color=color,
                 )
-
-        # Convert back to uint8 and save
-        final_image = np.clip(composite_image, 0, 255).astype(np.uint8)
-
-        # Save the composite image
-        iio.imwrite(save_path, final_image)
-        print(f"Trajectory image saved to {save_path}")
-
-        return final_image
+                
+                # Create visualization and set pose
+                robot_instance.create_robot_visualizations(alpha=alpha)
+                robot_instance.update_pose(traj[i])
+                
+                trajectory_robots.append(robot_instance)
+            
+            # Hide original robot to avoid interference
+            self._set_robot_visibility(False)
+            
+            # Render the complete scene with all trajectory robots
+            image = event.client.get_render(height=720, width=1280)
+            
+            # Save the image if path provided
+            if save_path:
+                if save_path.endswith('.gif') or save_path.endswith('.mp4'):
+                    # For video formats, change extension to PNG
+                    save_path = save_path.rsplit('.', 1)[0] + '_trajectory.png'
+                elif not save_path.endswith('.png'):
+                    save_path = save_path + '_trajectory.png'
+                iio.imwrite(save_path, image)
+                print(f"Trajectory image saved to {save_path}")
+                
+            return image
+            
+        finally:
+            # Clean up trajectory robots
+            for robot_instance in trajectory_robots:
+                self._cleanup_robot(robot_instance)
+            
+            # Restore original robot visibility
+            self._set_robot_visibility(True)
+    
+    def _cleanup_robot(self, robot_instance):
+        """
+        Clean up a robot instance by removing all its visual components.
+        
+        Args:
+            robot_instance: ViserSoftRobot instance to cleanup
+        """
+        # Remove all cylinder handles
+        for handle in robot_instance.robot_cylinder_handles:
+            handle.remove()
+        robot_instance.robot_cylinder_handles = []
+        
+        # Remove all backbone cylinder handles
+        for handle in robot_instance.robot_backbone_cylinder_handles:
+            handle.remove()
+        robot_instance.robot_backbone_cylinder_handles = []
+        
+        # Remove sphere handles if they exist
+        if hasattr(robot_instance, 'sphere_handles'):
+            for handle in robot_instance.sphere_handles:
+                handle.remove()
+            robot_instance.sphere_handles = []
 
     def _set_robot_visibility(self, is_visible: bool):
-        """Restore original visibility states."""
+        """Set visibility for the main robot."""
         for handle in self.robot.robot_cylinder_handles:
             handle.visible = is_visible
         for handle in self.robot.robot_backbone_cylinder_handles:

@@ -234,7 +234,7 @@ class Sphere(CollGeom):
         pose_i: jaxlie.SE3 = jax.tree.map(lambda x: x[index], self.pose)
         pos = onp.array(pose_i.translation())
         radius_val = float(self.radius[index])
-        sphere_mesh = trimesh.creation.icosphere(radius=radius_val, subdivisions=1)
+        sphere_mesh = trimesh.creation.icosphere(radius=radius_val, subdivisions=3)
         # Only apply translation for sphere
         tf = onp.eye(4)
         tf[:3, 3] = pos
