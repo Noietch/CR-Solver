@@ -152,13 +152,13 @@ class IKSolver:
                     limit_cost(
                         self.robot,
                         robot_var,
-                        weight=100.0,
+                        weight=1000.0,
                     )
                     if isinstance(self.robot, CCRobot)
                     else limit_cost_extend(
                         self.robot,
                         robot_var,
-                        weight=100.0,
+                        weight=1000.0,
                     )
                 ),
                 # self_collision_cost(self.robot, self.coll, robot_var, 0.05, 10.0),

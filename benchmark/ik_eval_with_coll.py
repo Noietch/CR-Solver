@@ -39,7 +39,7 @@ def ik_metric_with_coll(
     target_position: Array,
     target_orientation: Array,
     solution_collision_mask: Array,
-) -> tuple[float, float, float, dict]:
+) -> tuple[float, float, dict]:
     """
     Calculates IK success metrics considering accuracy, joint limits, and collision avoidance.
 
@@ -54,8 +54,7 @@ def ik_metric_with_coll(
     Returns:
         A tuple containing:
         - final_success_rate: The percentage of solutions that are accurate, within limits, and collision-free.
-        - final_pos_error: The mean position error for successful solutions.
-        - final_rot_error: The mean rotation error for successful solutions.
+        - final_error: The mean error for successful solutions.
         - failure_stats: Detailed failure statistics dictionary.
     """
     target_transform = jaxlie.SE3.from_rotation_and_translation(
@@ -145,10 +144,9 @@ def ik_metric_with_coll(
 
     final_success_rate = jnp.mean(final_success_mask) * 100.0
     # Use jnp.nanmean to avoid errors if no solutions are successful
-    final_pos_error = jnp.nan_to_num(jnp.mean(error[final_success_mask]))
-    final_rot_error = jnp.nan_to_num(jnp.mean(error[final_success_mask]))
+    final_error = jnp.nan_to_num(jnp.mean(error[final_success_mask]))
 
-    return final_success_rate, final_pos_error, final_rot_error, failure_stats
+    return final_success_rate, final_error, failure_stats
 
 
 def sample_states_test(robot: CCRobot, num_states: int) -> ConstantCurvatureState:
@@ -310,7 +308,7 @@ def eval_ik_with_coll(
     solution_collision_mask = is_solution_collision_vmap(
         solution_states, robot, robot_coll, world_geom
     )
-    final_success_rate, final_pos_error, final_rot_error, failure_stats = (
+    final_success_rate, final_error, failure_stats = (
         ik_metric_with_coll(
             robot,
             solution_states,
@@ -325,8 +323,6 @@ def eval_ik_with_coll(
     print(
         f"Final Success Rate (accurate, within limits, AND collision-free): {final_success_rate:.2f}%"
     )
-    print(f"Final Position Error: {final_pos_error:.3f}m")
-    print(f"Final Rotation Error: {final_rot_error:.3f}rad")
     print(f"finish solve ik of num sections {num_sections}, total time: {total_time}s")
 
     # Print detailed failure analysis
@@ -343,8 +339,7 @@ def eval_ik_with_coll(
     return {
         "eval num": eval_num,
         "num sections": num_sections,
-        "position error": final_pos_error,
-        "rotation error": final_rot_error,
+        "error": final_error,
         "success rate": final_success_rate,
         "total time": total_time,
         "failure_stats": failure_stats,
@@ -407,29 +402,31 @@ def eval_ik_all_sections(
             )
 
     print("\n\n--- IK test resume ---")
-    header = f"{'num sections':<10} | {'eval num':<15} | {'position error':<15} | {'rotation error':<15} | {'success rate (%)':<15} | {'total time (s)':<18} "
+    header = f"{'num sections':<10} | {'eval num':<15} | {'error':<15} | {'success rate (%)':<15} | {'total time (s)':<18} "
     print(header)
     print("-" * len(header))
     for res_item in all_results_summary:
         eval_num_str = f"{res_item['eval num']}"
-        ps_error_str = f"{res_item['position error']}"
-        rt_error_str = f"{res_item['rotation error']}"
+        error_str = f"{res_item['error']}"
         sr_str = f"{res_item['success rate']:.2f}"
         time_str = f"{res_item['total time']:.3f}"
         print(
-            f"{res_item['num sections']:<10} | {eval_num_str:<15} | {ps_error_str:<15} | {rt_error_str:<15} | {sr_str:<15} | {time_str:<18}"
+            f"{res_item['num sections']:<10} | {eval_num_str:<15} | {error_str:<15} | {sr_str:<15} | {time_str:<18}"
         )
 
 
 if __name__ == "__main__":
-    test_list = [3, 4, 5, 6]
+    test_list = [3]
     eval_num_list = [100]
-    # robot_config_path = "configs/robots/cc_extend_eval.json"
-    robot_config_path = "configs/robots/cc_eval.json"
+    robot_config_path = "configs/robots/cc_extend_eval.json"
+    # robot_config_path = "configs/robots/cc_eval.json"
     world_config_path = "configs/maps/ik_maps/obstacles_lattice.json"
-    # world_config_path = "configs/maps/ik_maps/obstacles_icosahedron.json"
-    # result_dir = "results/ik_with_coll_icosahedron"
     result_dir = "results/ik_with_coll_lattice"
     eval_ik_all_sections(
-        robot_config_path, world_config_path, test_list, eval_num_list, "cc", result_dir
+        robot_config_path,
+        world_config_path,
+        test_list,
+        eval_num_list,
+        "cc_extend",
+        result_dir,
     )

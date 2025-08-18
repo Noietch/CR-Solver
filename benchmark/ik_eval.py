@@ -195,10 +195,10 @@ def eval_ik_with_no_coll(
     metric = ik_metric(robot, solution, tip_transforms, target_position, target_wxyz)
     print(f"finish solve ik of num sections {num_sections}, total time: {total_time}s")
     print(f"success rate: {metric[0]:.2f}%")
-    print(f"error: {metric[1]}m")
+    print(f"error: {metric[1]}")
 
     # Print detailed failure analysis
-    failure_stats = metric[3]
+    failure_stats = metric[2]
     print("\n--- Detailed Failure Analysis ---")
     print(f"Total samples: {failure_stats['total_samples']}")
     print(
