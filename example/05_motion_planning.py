@@ -144,7 +144,7 @@ def viser_main(robot_type: str = "cc", default_method: str = "trajopt"):
         collision_weight_slider = server.gui.add_slider(
             "Collision Weight",
             min=0.0,
-            max=200.0,
+            max=400.0,
             step=5.0,
             initial_value=traj_options.collision_weight,
             hint="Weight for collision avoidance",

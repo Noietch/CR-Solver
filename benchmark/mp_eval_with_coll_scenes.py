@@ -38,7 +38,6 @@ from soul.geom import (
     colldist_from_sdf,
 )
 
-# TODO: 移除PRM的sample阶段计时
 jax.config.update("jax_default_matmul_precision", "highest")
 
 DISABLE_JIT = False
@@ -260,7 +259,7 @@ def sample_collision_free_start_end_states(
     # Pair states from the pool
     final_start_states_list = []
     final_end_states_list = []
-    used_indices = np.zeros(state_pool.theta.shape[0], dtype=bool)
+    used_indices = jnp.zeros(state_pool.theta.shape[0], dtype=bool)
     num_available = state_pool.theta.shape[0]
     max_pairing_attempts = num_available * 10  # Safety break for pairing
 
@@ -273,9 +272,11 @@ def sample_collision_free_start_end_states(
             break
 
         # Get available indices
-        available_indices = np.where(~used_indices)[0]
+        available_indices = jnp.where(~used_indices)[0]
         # Pick two random, unique indices from the available pool
-        idx1, idx2 = np.random.choice(available_indices, size=2, replace=False)
+        idx1, idx2 = np.random.choice(
+            np.array(available_indices), size=2, replace=False
+        )
 
         pos1 = positions_pool[idx1]
         pos2 = positions_pool[idx2]
@@ -291,8 +292,8 @@ def sample_collision_free_start_end_states(
             final_start_states_list.append(start_state)
             final_end_states_list.append(end_state)
 
-            used_indices[idx1] = True
-            used_indices[idx2] = True
+            used_indices = used_indices.at[idx1].set(True)
+            used_indices = used_indices.at[idx2].set(True)
 
             if (
                 len(final_start_states_list) % 10 == 0
@@ -363,23 +364,32 @@ def is_state_in_collision(
     robot_coll: RobotCollision,
     world_geom: Sequence[CollGeom],
 ) -> bool:
-    """Check if the robot is in collision with obstacles or itself using low-level functions."""
-    margin = 0.05  # Use the same margin as the solver
+    """
+    Check if the robot is in collision with obstacles or itself.
 
-    def check_single_geom(geom):
+    A collision is defined as any distance less than 0 (i.e., penetration)
+    between the robot and any world geometry, or between parts of the robot itself.
+    """
+
+    # Check for collision with each world geometry object.
+    def check_single_geom(geom: CollGeom) -> bool:
+        # compute_world_collision_distance returns signed distances.
+        # A negative value indicates penetration/collision.
         world_dist = robot_coll.compute_world_collision_distance(robot, state, geom)
-        return jnp.sum(colldist_from_sdf(world_dist, margin).flatten())
+        return jnp.any(world_dist < 0.0)
 
-    # Sum costs over all geometries
-    total_cost = jnp.sum(jnp.array([check_single_geom(g) for g in world_geom]))
-    return total_cost > 1e-6
+    # Create a boolean array indicating if a collision occurs with each geometry.
+    collision_results = jnp.array([check_single_geom(g) for g in world_geom])
+
+    # If any of the checks returned True, there is a collision.
+    return jnp.any(collision_results)
 
 
 @jax.jit
 def is_path_in_collision(
     start_state: ConstantCurvatureState,
     end_state: ConstantCurvatureState,
-    robot,
+    robot: CCRobot,
     robot_coll: RobotCollision,
     world_geom: Sequence[CollGeom],
     num_steps: int = 10,
@@ -461,10 +471,10 @@ def summarize_results(all_results_summary: list):
         )
         kr_str = f"{res_item['kinematic_rate_mean']:.2f} ± {res_item['kinematic_rate_std']:.2f}"
         ps_error_str = (
-            f"{res_item['pos_error_mean']:.4f} ± {res_item['pos_error_std']:.4f}"
+            f"{res_item['pos_error_mean']:.2f} ± {res_item['pos_error_std']:.2f}"
         )
         rt_error_str = (
-            f"{res_item['rot_error_mean']:.4f} ± {res_item['rot_error_std']:.4f}"
+            f"{res_item['rot_error_mean']:.2f} ± {res_item['rot_error_std']:.2f}"
         )
         time_str = f"{res_item['time_mean']:.3f} ± {res_item['time_std']:.3f}"
 
@@ -481,7 +491,7 @@ def _traj_optimize(
     traj_options: TrajOptimizerOptions,
     world_coll: Sequence[CollGeom],
     cfg: Array,
-) -> Array:
+) -> ConstantCurvatureState:
     """Optimizes a trajectory using the TrajOpt framework."""
     if robot_type == "cc":
         cfg = traj_opt(
@@ -563,7 +573,7 @@ def _solve_with_trajopt(
     target_position: Array,
     target_wxyz: Array,
     world_geom: Sequence[CollGeom],
-):
+) -> ConstantCurvatureState:
     """Specific solving logic for TrajOpt."""
     start_end_interpolate_jit, traj_opt_jit, traj_options, robot_type = solver
     cfg = start_end_interpolate_jit(
@@ -581,7 +591,7 @@ def _solve_with_prm(
     target_position: Array,
     target_wxyz: Array,
     world_geom: Sequence[CollGeom],
-):
+) -> ConstantCurvatureState:
     """Specific solving logic for PRM."""
     ik_solver, prm_solver = solver
     cfg_pair = ik_solver(
@@ -598,7 +608,7 @@ def _solve_with_rrt(
     target_position: Array,
     target_wxyz: Array,
     world_geom: Sequence[CollGeom],
-):
+) -> ConstantCurvatureState:
     """Specific solving logic for RRT."""
     ik_solver, rrt_solver = solver
     cfg_pair = ik_solver(
@@ -616,7 +626,7 @@ def _eval_planner(
     target_timesteps: int,
     whether_use_trajopt_after_planner: bool,
     traj_opt_solver: tuple,  # (traj_opt_jit, traj_options)
-    robot,
+    robot: CCRobot,
     batched_fk: Callable[[ConstantCurvatureState], Array],
     robot_coll: RobotCollision,
     world_geom: Sequence[CollGeom],
@@ -685,11 +695,14 @@ def _eval_planner(
             "start_states_phi": np.asarray(start_states.phi),
             "end_states_theta": np.asarray(end_states.theta),
             "end_states_phi": np.asarray(end_states.phi),
+            "start_position": np.asarray(start_position),
+            "start_wxyz": np.asarray(start_wxyz),
             "target_position": np.asarray(target_position),
             "target_wxyz": np.asarray(target_wxyz),
             "fk_result": np.asarray(fk_result),
             "solution_states_theta": np.asarray(solution_states.theta),
             "solution_states_phi": np.asarray(solution_states.phi),
+            "planned_paths": all_paths.save_dict(),
             "planned_tip_traj": np.asarray(planned_tip_traj.as_matrix()),
         }
 
@@ -840,16 +853,23 @@ def eval_mp_all_sections(
         rrt_traj_solver = OptimizedRRT(robot, robot_coll, rrt_options)
 
         # Initialize PRM solver
-        prm_options = PRMOptions(batch_size=2000, parallel_edge_checks=200)
+        prm_options = PRMOptions(
+            max_planning_attempts=3, batch_size=2000, parallel_edge_checks=200
+        )
         prm_traj_solver = ParallelPRM(robot, robot_coll, prm_options)
-        roadmap_path = os.path.join(save_dir, "roadmaps", f"roadmap_{num_sections}.pkl")
+        road_map_nodes = 1000
+        roadmap_path = os.path.join(
+            save_dir,
+            "roadmaps",
+            f"roadmap_section_{num_sections}_node_{road_map_nodes}.pkl",
+        )
         os.makedirs(os.path.dirname(roadmap_path), exist_ok=True)
         if os.path.exists(roadmap_path):
             print(f"Loading existing roadmap: {roadmap_path}...")
             prm_traj_solver.load_roadmap(roadmap_path)
         else:
             print(f"Building new roadmap: {roadmap_path}...")
-            prm_traj_solver.build_roadmap(1000, world_geom_list)
+            prm_traj_solver.build_roadmap(road_map_nodes, world_geom_list)
             prm_traj_solver.save_roadmap(roadmap_path)
 
         print("Init done")
@@ -884,7 +904,7 @@ def eval_mp_all_sections(
             robot_coll=robot_coll,
             world_geom=world_geom_list,
             batched_fk=batched_fk,
-            min_distance=0.1,
+            min_distance=robot_total_length * min_sample_dist_ratio,
             save_load_path=temp_dir,
         )
 
@@ -1124,7 +1144,7 @@ def eval_prm_opt_time(
             robot_coll=robot_coll,
             world_geom=world_geom_list,
             batched_fk=batched_fk,
-            min_distance=0.1,
+            min_distance=robot_total_length * min_sample_dist_ratio,
             save_load_path=temp_dir,
         )
 
@@ -1283,6 +1303,7 @@ if __name__ == "__main__":
         "configs/maps/mp_scene/15.grab_from_box.json",
         "configs/maps/mp_scene/mp_demo.json",
     ]
+    world_config_paths = ["configs/maps/ik_maps/obstacles_icosahedron.json"]
 
     planner_types = ["rrt"]  # ["trajopt", "prm", "rrt"]
     opt_options = [True, False]
@@ -1291,7 +1312,7 @@ if __name__ == "__main__":
     for world_path in world_config_paths:
         # Extract scene name for result directory
         scene_name = os.path.splitext(os.path.basename(world_path))[0]
-        result_dir = f"results/mp_test/{scene_name}"
+        result_dir = f"results/debug_draw/{scene_name}"
         os.makedirs(result_dir, exist_ok=True)
 
         print(f"\n{'='*20} Running Evaluation for Scene: {scene_name} {'='*20}")
