@@ -112,6 +112,22 @@ class ConstantCurvatureState:
                 make_tile_pattern(self.phi.shape, axis, n),
             ),
         )
+    
+    def save_dict(self) -> dict:
+        """Saves the state as a dictionary."""
+        return {
+            "base_position": self.base_position,
+            "theta": self.theta,
+            "phi": self.phi,
+        }
+
+    def load_from_dict(config: dict) -> ConstantCurvatureState:
+        """Loads the state from a dictionary."""
+        return ConstantCurvatureState(
+            base_position=config["base_position"],
+            theta=config["theta"],
+            phi=config["phi"],
+        )
 
 
 # --- CCModel Class ---
