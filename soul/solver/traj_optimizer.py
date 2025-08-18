@@ -32,7 +32,7 @@ class TrajOptimizerOptions:
     trajectory_length_weight: float = 15.0
 
     # Collision weight
-    collision_weight: float = 40.0
+    collision_weight: float = 300.0
 
     # Constraint weights
     start_pose_weight: float = 100.0

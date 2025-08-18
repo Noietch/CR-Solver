@@ -6,6 +6,7 @@ import time
 import viser
 import numpy as np
 import os
+import matplotlib.pyplot as plt
 from soul.robots.cc_robot import CCRobot, ConstantCurvatureState
 from soul.robots.tdcr_robot import TDCRRobot
 from soul.geom import RobotCollision, WorldCollision
@@ -15,12 +16,28 @@ from soul.visualization.visualizer_viser import (
     ViserWorld,
     ViserRenderer,
 )
+from soul.visualization.visualizer_plot import visualize_cc_model_3d
+
+TICK_LABELSIZE = 25
+TICK_PAD = 12
+
+
+def set_3d_tick_labelsize(
+    ax: plt.Axes, size: int = TICK_LABELSIZE, pad: int = TICK_PAD
+) -> None:
+    ax.xaxis.set_tick_params(labelsize=size, pad=pad, direction="in")
+    ax.yaxis.set_tick_params(labelsize=size, pad=pad, direction="in")
+    if hasattr(ax, "zaxis"):
+        ax.zaxis.set_tick_params(labelsize=size, pad=pad, direction="in")
 
 
 def viser_main(robot_config_path: str, world_config_paths: str, mp_result_path: str, robot_type: str = "tdcr"):
     # Setup Robot Environment
     config = json.load(open(robot_config_path))
-    num_sections = int(world_config_paths.split(os.sep)[-1].split('_')[-1].split('.')[0])
+    # num_sections = int(world_config_paths.split(os.sep)[-1].split('_')[-1].split('.')[0])
+    num_sections = int(
+        mp_result_path.split("_all_trials_trajectories")[0].split("_")[-1]
+    )
     config["num_sections"] = num_sections
     if robot_type == "cc":
         robot = CCRobot.from_config(config)
@@ -32,9 +49,9 @@ def viser_main(robot_config_path: str, world_config_paths: str, mp_result_path: 
 
     # Load motion planning results
     data = np.load(mp_result_path, allow_pickle=True)
-    
+
     # Extract trial IDs and data
-    trial_ids = sorted(list(set([int(k.split('_')[1]) for k in data.keys()])))
+    trial_ids = sorted(list(set([int(k.split("_")[1]) for k in data.keys()])))
     num_trials = len(trial_ids)
     print(f"Loaded {num_trials} trials with IDs: {trial_ids}")
 
@@ -51,12 +68,14 @@ def viser_main(robot_config_path: str, world_config_paths: str, mp_result_path: 
 
     # Global state
     current_trial_idx = 0
-    current_traj = None
+    solution_pose = None
 
     # Setup GUI
     with server.gui.add_folder("Trial Navigation"):
         trial_id_text = server.gui.add_text(
-            "Current Trial ID", initial_value=str(trial_ids[current_trial_idx]), disabled=True
+            "Current Trial ID",
+            initial_value=str(trial_ids[current_trial_idx]),
+            disabled=True,
         )
         prev_button = server.gui.add_button("Previous Trial")
         next_button = server.gui.add_button("Next Trial")
@@ -64,12 +83,15 @@ def viser_main(robot_config_path: str, world_config_paths: str, mp_result_path: 
     replay_button = server.gui.add_button("Replay Trajectory")
     render_video_button = server.gui.add_button("Render Video")
     render_image_button = server.gui.add_button("Render Image")
-    visualize_traj_collisions_bottom = server.gui.add_button("Visualize Trajectory Collisions")
-
+    visualize_traj_collisions_bottom = server.gui.add_button(
+        "Visualize Trajectory Collisions"
+    )
+    visualize_mp_button = server.gui.add_button("Save Motion Planning")
 
     def load_and_display_trial(trial_idx: int):
         global planned_traj
         global planned_paths_constant
+        global planned_tip_traj
         trial_id = trial_ids[trial_idx]
         trial_id_text.value = str(trial_id)
         print(f"Loading trial ID: {trial_id} (index: {trial_idx})")
@@ -82,31 +104,78 @@ def viser_main(robot_config_path: str, world_config_paths: str, mp_result_path: 
         num_steps = solution_states_theta.shape[0]
         base_position = jnp.zeros((num_steps, 3))
 
-        cfg = ConstantCurvatureState(
+        solution_cfg = ConstantCurvatureState(
             base_position=base_position,
             theta=solution_states_theta,
             phi=solution_states_phi,
         )
 
         # Compute the trajectory using forward kinematics
-        current_traj = forward_kinematics(cfg)
-        current_traj = jax.block_until_ready(current_traj)
+        solution_pose = forward_kinematics(solution_cfg)
+        solution_pose = jax.block_until_ready(solution_pose)
 
         planned_paths = planned_paths.item()
-        planned_paths['base_position'] = planned_paths['base_position'].squeeze(0)
-        planned_paths['theta'] = planned_paths['theta'].squeeze(0)
-        planned_paths['phi'] = planned_paths['phi'].squeeze(0)
+        planned_paths["base_position"] = planned_paths["base_position"].squeeze(0)
+        planned_paths["theta"] = planned_paths["theta"].squeeze(0)
+        planned_paths["phi"] = planned_paths["phi"].squeeze(0)
 
         planned_paths_constant = ConstantCurvatureState.load_from_dict(planned_paths)
         planned_traj = forward_kinematics(planned_paths_constant)
         jax.block_until_ready(planned_traj)
 
-
         # Display the first frame of the trajectory
-        robot_vis.update_pose(current_traj[0])
+        robot_vis.update_pose(solution_pose[0])
 
         print(f"Trajectory loaded with {len(planned_traj)} points.")
 
+    def visualize_mp(event: viser.GuiEvent):
+        nonlocal current_trial_idx
+        global planned_traj
+        global planned_tip_traj
+
+        print(f"Saving motion planning visualization of trial {current_trial_idx}...")
+        fig = plt.figure(facecolor="white", figsize=(8, 8))
+        ax = fig.add_subplot(111, projection="3d")
+        set_3d_tick_labelsize(ax)
+        save_path = os.path.join(
+            os.path.dirname(mp_result_path),
+            "visualization",
+            f"section_{num_sections}_trial_{current_trial_idx}.png",
+        )
+        os.makedirs(os.path.dirname(save_path), exist_ok=True)
+        num_timesteps = len(planned_traj)
+        sample_indices = None
+        num_pose = 5
+        if sample_indices is None:
+            sample_indices = np.linspace(0, num_timesteps - 1, num_pose, dtype=int)
+        selected_poses = planned_traj[sample_indices]
+        visualize_cc_model_3d(
+            pose=selected_poses,
+            num_points=10,
+            ax=ax,
+            world_coll_config=world_config_paths,
+        )
+
+        planned_tip_pos = planned_tip_traj[:, :3, 3]
+        set_3d_tick_labelsize(ax)
+        ax.plot(
+            planned_tip_pos[:, 0],
+            planned_tip_pos[:, 1],
+            planned_tip_pos[:, 2],
+            c="#ea6b66",  # red
+            linewidth=6,
+            label="Experiment",
+        )
+        ax.patch.set_alpha(0.0)
+        ax.xaxis.pane.fill = False
+        ax.yaxis.pane.fill = False
+        ax.zaxis.pane.fill = False
+        ax.xaxis.pane.set_edgecolor("w")
+        ax.yaxis.pane.set_edgecolor("w")
+        ax.zaxis.pane.set_edgecolor("w")
+        ax.legend(frameon=False, markerscale=1)
+        plt.savefig(save_path, bbox_inches="tight", dpi=900)
+        print(f"Figure saved to {save_path}")
 
     def on_prev_click(event: viser.GuiEvent):
         nonlocal current_trial_idx
@@ -123,7 +192,7 @@ def viser_main(robot_config_path: str, world_config_paths: str, mp_result_path: 
         if planned_traj is None:
             print("No trajectory loaded to replay.")
             return
-        
+
         print(f"Replaying trajectory for trial ID: {trial_ids[current_trial_idx]}...")
         for i in range(len(planned_traj)):
             robot_vis.update_pose(planned_traj[i])
@@ -135,7 +204,7 @@ def viser_main(robot_config_path: str, world_config_paths: str, mp_result_path: 
         if planned_traj is None:
             print("No trajectory loaded to render.")
             return
-        
+
         trial_id = trial_ids[current_trial_idx]
         save_path = f"trajectory_video_trial_{trial_id}.mp4"
         print(f"Rendering video to {save_path}...")
@@ -147,7 +216,7 @@ def viser_main(robot_config_path: str, world_config_paths: str, mp_result_path: 
         if planned_traj is None:
             print("No trajectory loaded to render.")
             return
-        
+
         trial_id = trial_ids[current_trial_idx]
         save_path = f"results/trajectory_image_trial_{trial_id}.png"
         print(f"Rendering image to {save_path}...")
@@ -165,6 +234,7 @@ def viser_main(robot_config_path: str, world_config_paths: str, mp_result_path: 
 
     while True:
         time.sleep(1 / 60.0)
+
 
 if __name__ == "__main__":
     """in file trajopt_opt_False_sections_6_all_trials_trajectories.npz

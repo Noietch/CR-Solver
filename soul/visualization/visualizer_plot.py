@@ -181,7 +181,7 @@ def visualize_cc_model_3d(
     world_coll_config: str = None,
     ax: plt.Axes = None,
 ):
-    if not os.path.exists(save_path):
+    if (save_path is not None) and (not os.path.exists(save_path)):
         dir_path = os.path.dirname(save_path)
         os.makedirs(dir_path, exist_ok=True)
 

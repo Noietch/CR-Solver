@@ -112,7 +112,7 @@ class ConstantCurvatureState:
                 make_tile_pattern(self.phi.shape, axis, n),
             ),
         )
-    
+
     def save_dict(self) -> dict:
         """Saves the state as a dictionary."""
         return {
