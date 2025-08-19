@@ -42,6 +42,7 @@ from benchmark.mp.utils import (
     sample_collision_free_start_end_states,
     is_trajectory_in_collision,
     summarize_results,
+    delete_failed_states,
 )
 
 jax.config.update("jax_default_matmul_precision", "highest")
@@ -865,10 +866,11 @@ def eval_prm_opt_time(
 if __name__ == "__main__":
     robot_type = "tdcr"
     test_list = [3, 4, 5, 6]
-    repeat_num = 200  # Evaluate 50 times for each configuration
+    repeat_num = 70  # Evaluate 50 times for each configuration
     robot_config_path = "configs/robots/cc_scene_eval_tdcr.json"
 
-    start_from_initialization = True
+    start_from_initialization = False
+    remove_failed_trials = False
 
     # Correctly format the world config paths
     world_config_paths = [
@@ -883,14 +885,14 @@ if __name__ == "__main__":
         "configs/maps/mp_scene/obstacles_random_start_init_True_section_3.json"
     ]
 
-    planner_types = ["rrt"]  # ["trajopt", "prm", "rrt"]
-    opt_options = [True, False]
+    planner_types = ["prm"]  # ["trajopt", "prm", "rrt"]
+    opt_options = [False]
     result_summarys = []
 
     for world_path in world_config_paths:
         # Extract scene name for result directory
         scene_name = os.path.splitext(os.path.basename(world_path))[0]
-        result_dir = f"results/debug_draw/{scene_name}"
+        result_dir = f"results/debug_prm_prob/{scene_name}"
         os.makedirs(result_dir, exist_ok=True)
 
         print(f"\n{'='*20} Running Evaluation for Scene: {scene_name} {'='*20}")
@@ -928,7 +930,23 @@ if __name__ == "__main__":
                 csv_path = os.path.join(
                     result_dir, "analysis", "all_trials_detailed.csv"
                 )
-                save_results(results_dir=result_dir, detailed_csv_path=csv_path)
+                _, failed_trials_list = save_results(results_dir=result_dir, detailed_csv_path=csv_path)
+                if remove_failed_trials:
+                    for trial_dict in failed_trials_list:
+                        scene = trial_dict["scene"]
+                        num_sections = trial_dict["Num Sections"]
+                        failed_str = trial_dict["Failed Trials"]
+                        print(f"Prepare to remove trial {failed_str}")
+                        # Handle cases where Failed Trials is a comma-separated string like '7,19,23,...'
+                        if isinstance(failed_str, str):
+                            tokens = [t.strip() for t in failed_str.split(",") if t.strip()]
+                            failed_list = [int(t) for t in tokens]
+                        else:
+                            # If it's already a list/array, convert items to int
+                            failed_list = [int(i) for i in failed_str]
+                        failed_trials = jnp.array(failed_list, dtype=jnp.int32)
+                        sample_data_path = f"{result_dir}/sampled_states/sections_{num_sections}_eval_{repeat_num}_start_init_{start_from_initialization}.npz"
+                        delete_failed_states(save_load_path=sample_data_path, failed_indices=failed_trials, backup_suffix="_backup")
 
     print("\n\n" + "=" * 30 + " FINAL SUMMARY " + "=" * 30)
     summarize_results(result_summarys)

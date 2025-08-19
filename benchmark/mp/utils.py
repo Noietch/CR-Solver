@@ -363,6 +363,99 @@ def sample_collision_free_start_end_states(
     return final_start_states, final_end_states
 
 
+def delete_failed_states(
+    save_load_path: str,
+    failed_indices: Array,
+    backup_suffix: str = "_backup"
+) -> tuple[ConstantCurvatureState, ConstantCurvatureState]:
+    """
+    Load start/end states from file and remove failed trials based on their indices.
+    
+    Args:
+        save_load_path: Path to the saved states file
+        failed_indices: Array of indices corresponding to failed trials
+        backup_suffix: Suffix to add to the original file for backup
+        
+    Returns:
+        Tuple of (filtered_start_states, filtered_end_states) with failed trials removed
+    """
+    if not (save_load_path and os.path.exists(save_load_path)):
+        raise FileNotFoundError(f"States file not found: {save_load_path}")
+        
+    print(f"Loading pre-sampled states from {save_load_path}...")
+    data = np.load(save_load_path)
+    
+    # Load original states
+    original_start_theta = data["start_theta"]
+    original_start_phi = data["start_phi"] 
+    original_end_theta = data["end_theta"]
+    original_end_phi = data["end_phi"]
+    
+    total_trials = original_start_theta.shape[0]
+    print(f"Loaded {total_trials} start/end pairs.")
+    
+    if len(failed_indices) > 0:
+        print(f"Removing {len(failed_indices)} failed trials...")
+        
+        # Create backup of original file
+        backup_path = save_load_path.replace('.npz', f'{backup_suffix}.npz')
+        if not os.path.exists(backup_path):
+            print(f"Creating backup at {backup_path}")
+            np.savez(backup_path, 
+                    start_theta=original_start_theta,
+                    start_phi=original_start_phi, 
+                    end_theta=original_end_theta,
+                    end_phi=original_end_phi)
+        
+        # Create mask for successful trials (keep all indices except failed ones)
+        all_indices = jnp.arange(total_trials)
+        success_mask = jnp.isin(all_indices, failed_indices, invert=True)
+        
+        # Filter out failed trials
+        filtered_start_theta = original_start_theta[success_mask]
+        filtered_start_phi = original_start_phi[success_mask]
+        filtered_end_theta = original_end_theta[success_mask]
+        filtered_end_phi = original_end_phi[success_mask]
+        
+        # Save filtered data back to original file
+        print(f"Saving {filtered_start_theta.shape[0]} successful trials back to {save_load_path}")
+        np.savez(save_load_path,
+                start_theta=filtered_start_theta,
+                start_phi=filtered_start_phi,
+                end_theta=filtered_end_theta, 
+                end_phi=filtered_end_phi)
+                
+        # Create ConstantCurvatureState objects for successful trials
+        start_states = ConstantCurvatureState(
+            theta=jnp.array(filtered_start_theta),
+            phi=jnp.array(filtered_start_phi),
+            base_position=jnp.zeros((filtered_start_theta.shape[0], 3)),
+        )
+        end_states = ConstantCurvatureState(
+            theta=jnp.array(filtered_end_theta),
+            phi=jnp.array(filtered_end_phi),
+            base_position=jnp.zeros((filtered_end_theta.shape[0], 3)),
+        )
+        
+        print(f"Successfully removed failed trials. Remaining: {start_states.theta.shape[0]} pairs.")
+        
+    else:
+        print("No failed indices provided, returning original states.")
+        # Create ConstantCurvatureState objects for all original states
+        start_states = ConstantCurvatureState(
+            theta=jnp.array(original_start_theta),
+            phi=jnp.array(original_start_phi),
+            base_position=jnp.zeros((original_start_theta.shape[0], 3)),
+        )
+        end_states = ConstantCurvatureState(
+            theta=jnp.array(original_end_theta),
+            phi=jnp.array(original_end_phi),
+            base_position=jnp.zeros((original_end_theta.shape[0], 3)),
+        )
+    
+    return start_states, end_states
+
+
 def sample_states(robot: CCRobot, num_states: int) -> ConstantCurvatureState:
     random_key = jax.random.PRNGKey(42)
     random_key, subkey = jax.random.split(random_key)
@@ -388,7 +481,22 @@ def sample_states(robot: CCRobot, num_states: int) -> ConstantCurvatureState:
     return states
 
 
-@jax.jit
+# @jax.jit
+def is_state_in_self_collision(
+    state: ConstantCurvatureState,
+    robot: CCRobot,
+    robot_coll: RobotCollision,
+) -> bool:
+    """
+    Check if the robot is in self-collision.
+    """
+    self_collision_distances = robot_coll.compute_self_collision_distance(robot, state)
+    # breakpoint()
+
+    return jnp.any(self_collision_distances < 0.0)
+
+
+# @jax.jit
 def is_state_in_collision(
     state: ConstantCurvatureState,
     robot: CCRobot,
@@ -412,7 +520,13 @@ def is_state_in_collision(
     # Create a boolean array indicating if a collision occurs with each geometry.
     collision_results = jnp.array([check_single_geom(g) for g in world_geom])
 
-    # If any of the checks returned True, there is a collision.
+    # # Check for self-collision
+    # self_collision = is_state_in_self_collision(state, robot, robot_coll)
+
+    # # If any of the checks returned True, there is a collision.
+    # print(f"Collision check: {jnp.logical_or(jnp.any(collision_results), self_collision)}")
+    # jnp.logical_or(jnp.any(collision_results), self_collision)
+    # breakpoint()
     return jnp.any(collision_results)
 
 
