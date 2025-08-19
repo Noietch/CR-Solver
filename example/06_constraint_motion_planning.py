@@ -5,8 +5,8 @@ import viser
 import numpy as np
 from soul.robots.cc_robot import CCRobot
 from soul.geom import RobotCollision, WorldCollision
-from soul.solver import ConstrainedMotionPlanner
-from soul.visualization.visualizer_viser import ViserSoftRobot, ViserWorld
+from soul.solver.traj_optimizer import TrajOptimizer, TrajOptimizerOptions
+from soul.visualization.visualizer_viser import ViserSoftRobot, ViserWorld, ViserRenderer
 
 DISABLE_JIT = False
 
@@ -37,51 +37,11 @@ def get_linear_traj(
     return traj
 
 
-def get_sine_traj(
-    start_position: np.ndarray,
-    start_wxyz: np.ndarray,
-    end_position: np.ndarray,
-    end_wxyz: np.ndarray,
-    timesteps: int,
-):
-    start_position = np.array(start_position)
-    start_wxyz = np.array(start_wxyz)
-    end_position = np.array(end_position)
-    end_wxyz = np.array(end_wxyz)
-
-    # Linear interpolation for y and z coordinates
-    y_coords = np.linspace(start_position[1], end_position[1], timesteps)
-    z_coords = np.linspace(start_position[2], end_position[2], timesteps)
-
-    # Linear interpolation for x base values
-    x_start = start_position[0]
-    x_end = end_position[0]
-    x_base = np.linspace(x_start, x_end, timesteps)
-
-    # Add sinusoidal variation to x-axis
-    # Create a sine wave that completes one full cycle along the z-axis trajectory
-    t = np.linspace(0, 2 * np.pi, timesteps)
-    x_amplitude = 0.5  # Amplitude of the sine wave
-    x_sine = x_base + x_amplitude * np.sin(t)
-
-    # Combine sinusoidal x, linear y, and linear z coordinates
-    traj_positions = np.column_stack([x_sine, y_coords, z_coords])
-
-    # Linear interpolation for rotation
-    traj_wxyz = np.linspace(start_wxyz, end_wxyz, timesteps)
-
-    # Create SE3 trajectory
-    traj = jaxlie.SE3.from_rotation_and_translation(
-        jaxlie.SO3(wxyz=traj_wxyz), translation=traj_positions
-    )
-    return traj
-
-
 def viser_main():
     # Setup Environment
     robot = CCRobot.from_config("configs/robots/cc.json")
     robot_coll = RobotCollision.from_config("configs/robots/cc.json")
-    world_coll = WorldCollision.from_config("configs/maps/obstacles_05.json")
+    world_coll = WorldCollision.from_config("configs/maps/ik_maps/obstacles_test.json")
 
     # Setup Visualization
     server = viser.ViserServer()
@@ -89,6 +49,7 @@ def viser_main():
     robot_vis.create_robot_visualizations()
     obstacles_vis = ViserWorld(server, world_coll)
     obstacles_vis.create_mesh_visualizations()
+    render = ViserRenderer(server, robot_vis, obstacles_vis)
 
     # Setup GUI
     start_handle = server.scene.add_transform_controls(
@@ -128,7 +89,7 @@ def viser_main():
     timesteps = 100
 
     def update_reference_traj(args):
-        reference_traj = get_sine_traj(
+        reference_traj = get_linear_traj(
             start_handle.position,
             start_handle.wxyz,
             end_handle.position,
@@ -151,8 +112,12 @@ def viser_main():
         update_reference_traj(handle)
 
     # Set up trajopt parameters
-    traj_solver = ConstrainedMotionPlanner(robot, robot_coll, timesteps)
-    traj_follow_jit = jax.jit(traj_solver.tip_traj_follow)
+    options = TrajOptimizerOptions(
+        collision_weight=0.0,
+        smoothness_weight=50,
+    )
+    traj_solver = TrajOptimizer(robot, robot_coll, timesteps, options)
+    traj_follow_jit = jax.jit(traj_solver.optimize_tip_traj_follow)
 
     traj = None
 
@@ -169,7 +134,6 @@ def viser_main():
         )
         traj = robot.forward_kinematics(cfg)
         print("Finish planning....")
-        robot_vis.visualize_traj_collisions(robot, cfg)
         robot_vis.visualize_tip_traj(
             traj, color=np.array([0.0, 0.0, 1.0]), name="planned_traj"
         )
@@ -177,13 +141,14 @@ def viser_main():
             time.sleep(0.01)
             robot_vis.update_pose(traj[i])
 
-    def replay_callback(args):
+    def replay_callback(event):
         global traj
         if traj is None:
             return
-        for i in range(timesteps):
-            time.sleep(0.01)
-            robot_vis.update_pose(traj[i])
+        render.render_traj_image(event, traj, skip_frames=20, save_path=None)
+        # for i in range(timesteps):
+        #     time.sleep(0.01)
+        #     robot_vis.update_pose(traj[i])
 
     plan_button.on_click(plan_callback)
     replay_button.on_click(replay_callback)

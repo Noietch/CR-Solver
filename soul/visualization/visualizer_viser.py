@@ -596,12 +596,13 @@ class ViserRenderer:
             return image
 
         finally:
+            return
             # Clean up trajectory robots
-            for robot_instance in trajectory_robots:
-                self._cleanup_robot(robot_instance)
+            # for robot_instance in trajectory_robots:
+            #     self._cleanup_robot(robot_instance)
 
-            # Restore original robot visibility
-            self._set_robot_visibility(True)
+            # # Restore original robot visibility
+            # self._set_robot_visibility(True)
 
     def _cleanup_robot(self, robot_instance):
         """

@@ -197,15 +197,9 @@ def is_state_in_collision(
     world_geom: CollGeom,
 ) -> bool:
     """Check if the robot is in collision with obstacles or itself using low-level functions."""
-    margin = 0.05  # Use the same margin as the solver
-
-    # 1. Calculate world collision cost
     world_dist = robot_coll.compute_world_collision_distance(robot, state, world_geom)
-    world_cost = jnp.sum(colldist_from_sdf(world_dist, margin).flatten())
+    return jnp.any(jnp.any(world_dist < 0) == True)
 
-    # 2. Sum costs and check for collision
-    total_cost = world_cost
-    return total_cost > 1e-6
 
 def save_targets_to_csv(target_wxyz, target_position, num_sections, eval_num):
     import csv
@@ -256,7 +250,7 @@ def eval_ik_with_coll(
     print(f"Sampling {eval_num} collision-free target states...")
     collision_free_states = []
     total_sampled = 0
-    max_sampling_attempts = eval_num * 100  # Safety break for the while loop
+    max_sampling_attempts = eval_num * 10000  # Safety break for the while loop
     num_free_states = 0
 
     while num_free_states < eval_num and total_sampled < max_sampling_attempts:
@@ -281,7 +275,7 @@ def eval_ik_with_coll(
     print(f"Finish sampling. Total nums of free states checked: {num_free_states}")
 
     # Generate target poses, visualization, warmup similar to before
-    target_transforms = batched_fk(initial_states)
+    target_transforms = batched_fk(initial_states[:eval_num])
     tip_transform = jaxlie.SE3.from_matrix(target_transforms[:, -1, ...])
     target_wxyz = tip_transform.rotation().wxyz
     target_position = tip_transform.translation()
@@ -443,17 +437,18 @@ def eval_ik_all_sections(
 
 
 if __name__ == "__main__":
-    test_list = [3]
+    test_list = [6]
     eval_num_list = [100]
-    # robot_config_path = "configs/robots/cc_extend_eval.json"
-    robot_config_path = "configs/robots/cc_eval.json"
-    world_config_path = "configs/maps/ik_maps/obstacles_lattice.json"
-    result_dir = "results/ik_with_coll_lattice"
+    robot_config_path = "configs/robots/cc_extend_eval.json"
+    # robot_config_path = "configs/robots/cc_eval.json"
+    # world_config_path = "configs/maps/ik_maps/obstacles_lattice.json"
+    world_config_path = "configs/maps/ik_maps/obstacles_icosahedron.json"
+    result_dir = "results/ik_with_coll_cube"
     eval_ik_all_sections(
         robot_config_path,
         world_config_path,
         test_list,
         eval_num_list,
-        "cc",
+        "cc_extend",
         result_dir,
     )

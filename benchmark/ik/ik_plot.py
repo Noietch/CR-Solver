@@ -5,7 +5,13 @@ from soul.visualization.visualizer_plot import visualize_cc_model_3d
 
 
 def visualize_ik_with_coll(
-    save_path: str, world_config_path: str, ax: plt.Axes, selected_indices: list[int]
+    save_path: str, 
+    world_config_path: str, 
+    ax: plt.Axes, 
+    selected_indices: list[int],
+    x_limit: tuple[float, float] = (-1.3, 1.3),
+    y_limit: tuple[float, float] = (-1.3, 1.3),
+    z_limit: tuple[float, float] = (-1.3, 1.3),
 ):
     data = np.load(save_path)
     target_position = data["target_position"]
@@ -28,6 +34,10 @@ def visualize_ik_with_coll(
         world_coll_config=world_config_path,
         save_path=save_path.replace(".npz", "_fk.png"),
         ax=ax,
+        color="black",
+        x_limit=x_limit,
+        y_limit=y_limit,
+        z_limit=z_limit,
     )
 
 
@@ -40,7 +50,8 @@ def plot_ik_with_coll():
         "results/ik_with_coll_lattice/ik_with_coll_sections_3_eval_100.npz",
         "configs/maps/ik_maps/obstacles_lattice.json",
         ax=ax1,
-        selected_indices=[15, 16],
+        selected_indices=[0, 63, 97],
+        y_limit=(-0.8, 1.8),
     )
     visualize_ik_with_coll(
         "results/ik_with_coll_icosahedron/ik_with_coll_sections_6_eval_100.npz",
@@ -49,7 +60,7 @@ def plot_ik_with_coll():
         selected_indices=[83, 32, 90],
     )
     plt.tight_layout()
-    plt.savefig("results/ik_examples.png")
+    plt.savefig(f"results/ik_examples.png")
     plt.close()
 
 

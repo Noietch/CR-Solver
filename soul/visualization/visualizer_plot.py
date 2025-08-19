@@ -180,6 +180,10 @@ def visualize_cc_model_3d(
     save_path: str = None,
     world_coll_config: str = None,
     ax: plt.Axes = None,
+    color: str|None = None,
+    x_limit: tuple[float, float] = (-1.3, 1.3),
+    y_limit: tuple[float, float] = (-1.3, 1.3),
+    z_limit: tuple[float, float] = (-1.3, 1.3),
 ):
     if (save_path is not None) and (not os.path.exists(save_path)):
         dir_path = os.path.dirname(save_path)
@@ -243,6 +247,8 @@ def visualize_cc_model_3d(
             positions = transform[i, :, :3, 3]
             # colors = ["r", "g", "b", "y", "m", "c"]
             colors = ["#ffd966", "#ffb570", "#ea6b66"]
+            if color is not None:
+                colors = [color] * len(positions)
             if num_points is not None:
                 for i in range(len(positions) // num_points):
                     ax.plot(
@@ -292,9 +298,9 @@ def visualize_cc_model_3d(
             _plot_coordinate_frame(ax, frame_position, rotation_matrix, scale=scale)
 
     # Set new limits with equal scaling
-    ax.set_xlim3d(-1.3, 1.3)
-    ax.set_ylim3d(-1.3, 1.3)
-    ax.set_zlim3d(-1.3, 1.3)
+    ax.set_xlim3d(x_limit[0], x_limit[1])
+    ax.set_ylim3d(y_limit[0], y_limit[1])
+    ax.set_zlim3d(z_limit[0], z_limit[1])
 
     # Set equal aspect ratio
     ax.set_box_aspect([1, 1, 1])
@@ -304,7 +310,7 @@ def visualize_cc_model_3d(
     ax.yaxis.set_major_locator(plt.MaxNLocator(3))
     ax.zaxis.set_major_locator(plt.MaxNLocator(3))
 
-    ax.grid(False)
+    ax.grid(True)
 
     if save_path is not None:
         plt.savefig(save_path, bbox_inches="tight", dpi=300)

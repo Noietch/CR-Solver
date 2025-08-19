@@ -39,7 +39,9 @@ def main():
         coll=robot_coll,
     )
     ik_solver = jax.jit(solver.solve_ik_best_with_coll)
+    
     robot_vis = ViserSoftRobot(server, robot, robot_coll, root_node_name="/robot")
+    robot_vis.create_robot_visualizations()
     ik_target_handle = server.scene.add_transform_controls(
         "/ik_target",
         scale=0.8,
@@ -47,7 +49,7 @@ def main():
         wxyz=(1, 0, 0, 0),
     )
     sphere_handle = server.scene.add_transform_controls(
-        "/obstacle", scale=0.8, position=(0.8, 0.8, 0.8)
+        "/obstacle", scale=0.1, position=(0.8, 0.03, 1.126)
     )
     server.scene.add_mesh_trimesh("/obstacle/mesh", mesh=sphere_coll.to_trimesh())
     server.scene.add_grid("/ground", width=6, height=6)
@@ -62,13 +64,10 @@ def main():
             wxyz=np.array(sphere_handle.wxyz),
         )
         world_coll_list = [plane_coll, sphere_coll_world_current]
-        start_time = time.time()
         cfg = ik_solver(
             ik_target_handle.wxyz, ik_target_handle.position, world_coll_list
         )
         pose = robot.forward_kinematics(cfg)
-        elapsed_time = time.time() - start_time
-        timing_handle.value = 0.99 * timing_handle.value + 0.01 * (elapsed_time * 1000)
         robot_vis.update_pose(pose)
         target_handle.value = ik_target_handle.position
 

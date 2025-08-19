@@ -5,7 +5,7 @@ import numpy as np
 from soul.visualization.visualizer_plot import visualize_cc_model_3d
 
 
-def generate_lattice_env(save_path: str, radius: float = 0.2):
+def generate_lattice_env(save_path: str, radius: float = 0.2, offset: float = [0, 0.4, 0]):
     """
     Generate a 3D lattice environment with spherical obstacles.
 
@@ -23,9 +23,9 @@ def generate_lattice_env(save_path: str, radius: float = 0.2):
     z_spacing = 1.0
 
     # Define the grid range (3x3x3 grid centered at origin)
-    x_positions = np.array([-1.0, 0.0, 1.0]) * x_spacing
-    y_positions = np.array([-1.0, 0.0, 1.0]) * y_spacing
-    z_positions = np.array([-0.8, -0.8 + z_spacing, -0.8 + 2 * z_spacing])
+    x_positions = np.array([-1.0, 0.0, 1.0]) * x_spacing + offset[0]
+    y_positions = np.array([-1.0, 0.0, 1.0]) * y_spacing + offset[1]
+    z_positions = np.array([-0.8, -0.8 + z_spacing, -0.8 + 2 * z_spacing]) + offset[2]
 
     obstacles_dict = {}
     obstacle_count = 1
@@ -283,12 +283,12 @@ def generate_random_env(
 
 
 if __name__ == "__main__":
-    # # Lattice (27 vertices)
-    # generate_lattice_env("configs/maps/ik_maps/obstacles_lattice.json", radius=0.2)
-    # visualize_cc_model_3d(
-    #     world_coll_config="configs/maps/ik_maps/obstacles_lattice.json",
-    #     save_path="visualization/lattice_env.png",
-    # )
+    # Lattice (27 vertices)
+    generate_lattice_env("configs/maps/ik_maps/obstacles_lattice.json", radius=0.2)
+    visualize_cc_model_3d(
+        world_coll_config="configs/maps/ik_maps/obstacles_lattice.json",
+        save_path="visualization/lattice_env.png",
+    )
 
     # # Octahedron (6 vertices) - smaller radius
     # generate_octahedron_env(
@@ -316,24 +316,24 @@ if __name__ == "__main__":
     # )
 
     # Random environment
-    section_list = [3]
-    section_length = 1.0
-    start_from_initialization = True
+    # section_list = [3]
+    # section_length = 1.0
+    # start_from_initialization = True
 
-    for section in section_list:
-        generate_random_env(
-            f"configs/maps/mp_scene/obstacles_random_start_init_{start_from_initialization}_section_{section}.json",
-            num_obstacles=section**3,  # Number of obstacles increases with section size
-            center_pos=[0.0, 0.0, 0.0],
-            scale=section * section_length,
-            radius_min=0.1,
-            radius_max=0.2,
-            robot_radius=0.01,
-            start_from_initialization=start_from_initialization,
-        )
-        visualize_cc_model_3d(
-            world_coll_config=f"configs/maps/mp_scene/obstacles_random_start_init_{start_from_initialization}_section_{section}.json",
-            save_path=f"visualization/obstacles_random_start_init_{start_from_initialization}_section_{section}.png",
-        )
+    # for section in section_list:
+    #     generate_random_env(
+    #         f"configs/maps/mp_scene/obstacles_random_start_init_{start_from_initialization}_section_{section}.json",
+    #         num_obstacles=section**3,  # Number of obstacles increases with section size
+    #         center_pos=[0.0, 0.0, 0.0],
+    #         scale=section * section_length,
+    #         radius_min=0.1,
+    #         radius_max=0.2,
+    #         robot_radius=0.01,
+    #         start_from_initialization=start_from_initialization,
+    #     )
+    #     visualize_cc_model_3d(
+    #         world_coll_config=f"configs/maps/mp_scene/obstacles_random_start_init_{start_from_initialization}_section_{section}.json",
+    #         save_path=f"visualization/obstacles_random_start_init_{start_from_initialization}_section_{section}.png",
+    #     )
 
-    print("\nAll environments generated successfully!")
+    # print("\nAll environments generated successfully!")

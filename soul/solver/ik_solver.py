@@ -145,8 +145,8 @@ class IKSolver:
                     jaxlie.SE3.from_rotation_and_translation(
                         jaxlie.SO3(target_wxyz), target_position
                     ),
-                    pos_weight=200.0,
-                    ori_weight=200.0,
+                    pos_weight=100.0,
+                    ori_weight=100.0,
                 ),
                 (
                     limit_cost(
@@ -166,7 +166,7 @@ class IKSolver:
             factors.extend(
                 [
                     world_collision_cost(
-                        self.robot, self.coll, robot_var, world_coll, 0.05, 10.0
+                        self.robot, self.coll, robot_var, world_coll, 0.05, 20.0
                     )
                     for world_coll in world_coll_list
                 ]
