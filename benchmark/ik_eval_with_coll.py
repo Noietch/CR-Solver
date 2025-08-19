@@ -207,6 +207,35 @@ def is_state_in_collision(
     total_cost = world_cost
     return total_cost > 1e-6
 
+def save_targets_to_csv(target_wxyz, target_position, num_sections, eval_num):
+    import csv
+    import os
+    
+    # Create directory if it doesn't exist
+    os.makedirs("results/ik_coll", exist_ok=True)
+    
+    # Save target positions and orientations to CSV
+    csv_path = f"results/ik_coll/targets_{num_sections}_{eval_num}.csv"
+    with open(csv_path, 'w', newline='') as csvfile:
+        writer = csv.writer(csvfile)
+        
+        # Write header
+        header = ['target_wx', 'target_wy', 'target_wz', 'target_ww', 
+                    'target_px', 'target_py', 'target_pz']
+        writer.writerow(header)
+        
+        # Write data - each row is one sample
+        for i in range(eval_num):
+            row = [
+                float(target_wxyz[i, 0]),
+                float(target_wxyz[i, 1]), 
+                float(target_wxyz[i, 2]),
+                float(target_wxyz[i, 3]),
+                float(target_position[i, 0]),
+                float(target_position[i, 1]),
+                float(target_position[i, 2])
+            ]
+            writer.writerow(row)
 
 def eval_ik_with_coll(
     robot: CCRobot,
@@ -256,7 +285,7 @@ def eval_ik_with_coll(
     tip_transform = jaxlie.SE3.from_matrix(target_transforms[:, -1, ...])
     target_wxyz = tip_transform.rotation().wxyz
     target_position = tip_transform.translation()
-
+    save_targets_to_csv(target_wxyz, target_position, num_sections, eval_num)
     # warmup
     print(f"finish forward, start warmup")
     jax.block_until_ready(batched_ik_solve(target_wxyz, target_position, [world_geom]))
@@ -375,7 +404,7 @@ def eval_ik_all_sections(
             robot,
             num_seeds_init=128,
             num_seeds_final=8,
-            total_steps=200,
+            total_steps=100,
             init_steps=10,
             coll=robot_coll,
         )
@@ -418,8 +447,8 @@ def eval_ik_all_sections(
 if __name__ == "__main__":
     test_list = [3]
     eval_num_list = [100]
-    robot_config_path = "configs/robots/cc_extend_eval.json"
-    # robot_config_path = "configs/robots/cc_eval.json"
+    # robot_config_path = "configs/robots/cc_extend_eval.json"
+    robot_config_path = "configs/robots/cc_eval.json"
     world_config_path = "configs/maps/ik_maps/obstacles_lattice.json"
     result_dir = "results/ik_with_coll_lattice"
     eval_ik_all_sections(
@@ -427,6 +456,6 @@ if __name__ == "__main__":
         world_config_path,
         test_list,
         eval_num_list,
-        "cc_extend",
+        "cc",
         result_dir,
     )
