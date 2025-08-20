@@ -462,13 +462,14 @@ class ViserWorld:
                 )
 
         # add ground visualizations
-        self.server.scene.add_box(
-            "/ground",
-            color=(0.5, 0.5, 0.5),
-            dimensions=(1000, 1000, 0.01),
-            position=(0, 0, 0),
-            wxyz=(1, 0, 0, 0),
-        )
+        self.server.scene.add_grid("/ground", width=6, height=6)
+        # self.server.scene.add_box(
+        #     "/ground",
+        #     color=(0.5, 0.5, 0.5),
+        #     dimensions=(1000, 1000, 0.01),
+        #     position=(0, 0, 0),
+        #     wxyz=(1, 0, 0, 0),
+        # )
 
 
 class ViserRenderer:
@@ -568,7 +569,6 @@ class ViserRenderer:
                     self.robot.robot_coll,
                     root_node_name=f"/traj_robot_{i}",
                     enable_backbone=False,
-                    robot_color=color,
                 )
 
                 # Create visualization and set pose

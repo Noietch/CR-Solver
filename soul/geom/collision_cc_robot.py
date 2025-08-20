@@ -11,7 +11,7 @@ from jaxtyping import Array, Float, Int
 from loguru import logger
 
 from ..robots.cc_robot import CCRobot, ConstantCurvatureState
-from .collision import collide, pairwise_collide
+from .collision import collide
 from .geometry import Capsule, Sphere, CollGeom
 
 
@@ -30,8 +30,8 @@ class RobotCollision:
         cls,
         config_dict: dict | str,
         random_key: int = 0,
-        self_collision_sampling_rate: float = 0.3,
-        skip_section: int = 1,
+        self_collision_sampling_rate: float = 1.0,
+        skip_section: int = 2,
     ) -> RobotCollision:
         if isinstance(config_dict, str):
             config_dict = json.load(open(config_dict))
@@ -75,7 +75,7 @@ class RobotCollision:
     def build_self_collision_pairs(
         num_points_per_section: int,
         num_sections: int,
-        skip_section: int = 1,
+        skip_section: int = 2,
         sampling_rate: int = 0.3,
         random_key: int = 0,
     ) -> None:
@@ -135,9 +135,9 @@ class RobotCollision:
         """
 
         coll = self.at_state(robot, cfg)
-        dist_matrix = pairwise_collide(coll, coll)
+        vmapped_collide = jax.vmap(jax.vmap(collide, in_axes=(None, 0)), in_axes=(0, None))
+        dist_matrix = vmapped_collide(coll, coll)
         active_distances = dist_matrix[..., self.active_idx_i, self.active_idx_j]
-
         return active_distances
 
     def compute_world_collision_distance(
