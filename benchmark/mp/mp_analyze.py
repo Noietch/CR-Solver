@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 
 
-def _calculate_group_summary(group: pd.DataFrame) -> pd.Series:
+def _calculate_group_summary(group: pd.DataFrame) -> tuple[pd.Series, list[dict]]:
     """
     Helper function to compute summary statistics for a given data group (DataFrame).
     In this version, position and rotation errors are calculated only for successful cases.
@@ -218,7 +218,36 @@ def save_results(results_dir: str, detailed_csv_path: str):
     )
     save_summary_df(overall_summary_df, ["Method", "Num Sections"], "summary.csv")
 
-    return all_trials_data
+    # Build mapping keyed by "scene:Num Sections" -> list of failed trial numbers
+    failed_trials: dict[str, list[int]] = {}
+    for trial in all_trials_data:
+        if trial.get("Success Rate (%)", 0) < 100:
+            scene = trial.get("scene_name")
+            num_sections = trial.get("Num Sections")
+            try:
+                trial_num = int(trial.get("Trial"))
+            except Exception:
+                continue
+            if scene is not None and num_sections is not None:
+                key = f"{scene}:{num_sections}"
+                failed_trials.setdefault(key, []).append(trial_num)
+
+    # Deduplicate and sort trial lists for each key
+    for key, trials in list(failed_trials.items()):
+        failed_trials[key] = sorted(set(trials))
+
+
+    failed_trials_list = []
+    for key, trials in failed_trials.items():
+        scene, num_sections = key.split(":", 1)
+        failed_trials_list.append(
+            {
+                "scene": scene,
+                "Num Sections": num_sections,
+                "Failed Trials": ",".join(map(str, trials)),
+            }
+        )
+    return all_trials_data,failed_trials_list
 
 
 def analyze_results(all_trials_data: list, results_dir: str):
@@ -413,7 +442,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--results_dir",
         type=str,
-        default="results/mp_test",
+        default="results/debug_prm_prob/obstacles_random_start_init_True_section_3",
         help="Directory where the .npz result files are stored.",
     )
     parser.add_argument(
