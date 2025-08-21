@@ -5,7 +5,9 @@ import numpy as np
 from soul.visualization.visualizer_plot import visualize_cc_model_3d
 
 
-def generate_lattice_env(save_path: str, radius: float = 0.2, offset: float = [0, 0.4, 0]):
+def generate_lattice_env(
+    save_path: str, radius: float = 0.2, offset: float = [0, 0.4, 0]
+):
     """
     Generate a 3D lattice environment with spherical obstacles.
 

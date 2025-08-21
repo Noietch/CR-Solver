@@ -120,9 +120,9 @@ def viser_main(
         solution_pose = jax.block_until_ready(solution_pose)
 
         planned_paths = planned_paths.item()
-        planned_paths["base_position"] = planned_paths["base_position"].squeeze(0)
-        planned_paths["theta"] = planned_paths["theta"].squeeze(0)
-        planned_paths["phi"] = planned_paths["phi"].squeeze(0)
+        planned_paths["base_position"] = planned_paths["base_position"]
+        planned_paths["theta"] = planned_paths["theta"]
+        planned_paths["phi"] = planned_paths["phi"]
 
         planned_paths_constant = ConstantCurvatureState.load_from_dict(planned_paths)
         planned_traj = forward_kinematics(planned_paths_constant)

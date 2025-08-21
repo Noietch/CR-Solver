@@ -135,7 +135,9 @@ class RobotCollision:
         """
 
         coll = self.at_state(robot, cfg)
-        vmapped_collide = jax.vmap(jax.vmap(collide, in_axes=(None, 0)), in_axes=(0, None))
+        vmapped_collide = jax.vmap(
+            jax.vmap(collide, in_axes=(None, 0)), in_axes=(0, None)
+        )
         dist_matrix = vmapped_collide(coll, coll)
         active_distances = dist_matrix[..., self.active_idx_i, self.active_idx_j]
         return active_distances

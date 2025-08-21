@@ -5,9 +5,9 @@ from soul.visualization.visualizer_plot import visualize_cc_model_3d
 
 
 def visualize_ik_with_coll(
-    save_path: str, 
-    world_config_path: str, 
-    ax: plt.Axes, 
+    save_path: str,
+    world_config_path: str,
+    ax: plt.Axes,
     selected_indices: list[int],
     x_limit: tuple[float, float] = (-1.3, 1.3),
     y_limit: tuple[float, float] = (-1.3, 1.3),
