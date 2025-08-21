@@ -240,48 +240,6 @@ def eval_mp_with_coll_scene(
     )
     start_states, end_states = problem.load(sample_data_path)
 
-    # Warm up
-    for i in range(5):
-        print(f"Start warm up for {i+1}/5")
-        start_state = jax.tree_util.tree_map(lambda x: x[i : i + 1], start_states)
-        end_state = jax.tree_util.tree_map(lambda x: x[i : i + 1], end_states)
-        # Squeeze the batch dimension from start and end states
-        start_state_i = jax.tree_util.tree_map(
-            lambda x: jnp.squeeze(x, axis=0), start_state
-        )
-        end_state_i = jax.tree_util.tree_map(
-            lambda x: jnp.squeeze(x, axis=0), end_state
-        )
-        solve_with_trajopt(
-            start_state_i,
-            end_state_i,
-            world_geom_list,
-            traj_solver,
-            traj_opt,
-            traj_options,
-        )
-        solve_with_prm(
-            start_state_i,
-            end_state_i,
-            world_geom_list,
-            prm_traj_solver,
-            traj_opt,
-            traj_options,
-            True,
-            timesteps,
-        )
-        solve_with_rrt(
-            start_state_i,
-            end_state_i,
-            world_geom_list,
-            rrt_traj_solver,
-            traj_opt,
-            traj_options,
-            True,
-            timesteps,
-        )
-    print(f"Finished warm up....")
-
     actual_eval_num = start_states.theta.shape[0]
     trajopt_success = []
     traj_opt_total_time = []
