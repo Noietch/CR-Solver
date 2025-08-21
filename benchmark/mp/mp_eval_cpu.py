@@ -106,7 +106,7 @@ def eval_mp_with_coll_scene(
     eval_num: int,
     start_from_initialization: bool,
     remove_failed_trials: bool,
-    run_after_filtered:bool,
+    run_after_filtered: bool,
     min_sample_dist_ratio: float,
 ):
     robot = TDCRRobot.from_config(robot_config_path)
@@ -132,9 +132,9 @@ def eval_mp_with_coll_scene(
         f"\n--- Sampling {eval_num} pairs with {num_sections} sections and start initialization {start_from_initialization} ---"
     )
     if run_after_filtered:
-        rename_suffix="_prm_success"
+        rename_suffix = "_prm_success"
     else:
-        rename_suffix=""
+        rename_suffix = ""
     sample_data_path = f"{save_dir}/sampled_states/sections_{num_sections}_eval_{eval_num}_start_init_{start_from_initialization}{rename_suffix}.npz"
     problem = Problem(
         sample_data_path=sample_data_path,
@@ -171,19 +171,9 @@ def eval_mp_with_coll_scene(
     print(f"Finished warm up....")
 
     actual_eval_num = start_states.theta.shape[0]
-    trajopt_success = []
-    traj_opt_total_time = []
-
+    all_trials_data = []
     prm_success = []
     prm_total_time = []
-    prm_opt_success = []
-    prm_opt_total_time = []
-
-    rrt_success = []
-    rrt_total_time = []
-    rrt_opt_success = []
-    rrt_opt_total_time = []
-    all_trials_data = []
 
     for i in range(actual_eval_num):
         print(
@@ -236,16 +226,16 @@ def eval_mp_with_coll_scene(
         "eval_num": eval_num,
         "prm_road_map_nodes": road_map_nodes,
         "prm_success_rate": prm_success_rate,
-        "traj_time_avg": float(np.array(traj_opt_total_time).mean()),
+        "traj_time_avg": None,
         "prm_time_avg": float(np.array(prm_total_time).mean()),
-        "prm_opt_time_avg": float(np.array(prm_opt_total_time).mean()),
-        "rrt_time_avg": float(np.array(rrt_total_time).mean()),
-        "rrt_opt_time_avg": float(np.array(rrt_opt_total_time).mean()),
-        "traj_opt_success_id": trajopt_success,
+        "prm_opt_time_avg": None,
+        "rrt_time_avg": None,
+        "rrt_opt_time_avg": None,
+        "traj_opt_success_id": [],
         "prm_success_id": prm_success,
-        "prm_opt_success_id": prm_opt_success,
-        "rrt_success_id": rrt_success,
-        "rrt_opt_success_id": rrt_opt_success,
+        "prm_opt_success_id": [],
+        "rrt_success_id": [],
+        "rrt_opt_success_id": [],
     }
     print(log_data)
     results_json_path = os.path.join(
@@ -272,21 +262,6 @@ def eval_mp_with_coll_scene(
 
 
 if __name__ == "__main__":
-    # test_list = [3,4,5]
-    # repeat_num = 60  # Evaluate 50 times for each configuration
-    # robot_config_path = "configs/robots/cc_scene_eval_tdcr.json"
-
-    # start_from_initialization = False
-    # remove_failed_trials = True
-    # world_config_paths = [
-    #     f"configs/maps/mp_scene/obstacles_random_section_{i}.json" for i in test_list
-    # ] + [
-    #     "configs/maps/mp_scene/obstacles_13.pick_from_shelf.json",
-    #     "configs/maps/mp_scene/obstacles_14.pick_from_bookshelf.json",
-    #     "configs/maps/mp_scene/obstacles_15.grab_from_box.json",
-    #     "configs/maps/mp_scene/mp_demo.json",
-    # ]
-
     parser = argparse.ArgumentParser(description="MP evaluation args")
     parser.add_argument("--section-num", type=int, default=4, help="number of sections")
     parser.add_argument(
@@ -311,7 +286,7 @@ if __name__ == "__main__":
         action="store_false",
         help="do not remove failed trials",
     )
-    parser.set_defaults(remove_failed_trials=True)
+    parser.set_defaults(remove_failed_trials=False)
     parser.add_argument(
         "--world-config",
         dest="world_config_path",
@@ -328,7 +303,7 @@ if __name__ == "__main__":
     remove_failed_trials: bool = args.remove_failed_trials
     world_config_path: str = args.world_config_path
 
-    run_after_filtered=True
+    run_after_filtered = True
     robot_config_path = "configs/robots/cc_scene_eval_tdcr.json"
     scene_name = os.path.splitext(os.path.basename(world_config_path))[0]
     result_dir = f"results/mp_test_cpu/{scene_name}"
