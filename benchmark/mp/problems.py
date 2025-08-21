@@ -244,7 +244,7 @@ class Problem:
         total_trials = original_start_theta.shape[0]
         print(f"Loaded {total_trials} start/end pairs.")
 
-        if len(success_indices) > 0:
+        if success_indices is not None and len(success_indices) > 0:
             print(f"Load {len(success_indices)} sucessful trials...")
 
             all_indices = jnp.arange(total_trials)

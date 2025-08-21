@@ -1,12 +1,11 @@
 import jax
-from jaxtyping import Array
 import numpy as np
 import jax.numpy as jnp
 import time
 import json
 import os
 import argparse
-from typing import Callable, Sequence
+from typing import Sequence
 
 # Initialize JAX persistent compilation cache
 os.environ["JAX_COMPILATION_CACHE_DIR"] = "/tmp/jax_cache"
@@ -23,14 +22,10 @@ cc.set_cache_dir("/tmp/jax_cache")
 from soul.robots.cc_robot import ConstantCurvatureState
 from soul.robots.tdcr_robot import TDCRRobot
 from soul.solver import (
-    TrajOptimizer,
-    TrajOptimizerOptions,
     ParallelPRM,
     PRMOptions,
-    OptimizedRRT,
-    RRTOptions,
 )
-from soul.solver.motion_planner import resample_trajectory
+
 from soul.geom import (
     RobotCollision,
     WorldCollision,
@@ -44,7 +39,7 @@ from benchmark.mp.utils import (
 
 jax.config.update("jax_default_matmul_precision", "highest")
 
-DISABLE_JIT = False
+DISABLE_JIT = True
 
 if DISABLE_JIT:
     import os
@@ -61,19 +56,7 @@ def init_solver(
     save_dir: str,
     num_sections: int,
     road_map_nodes: int,
-    timesteps: int = 100,
 ):
-    traj_options = TrajOptimizerOptions()
-    traj_solver = TrajOptimizer(robot, robot_coll, timesteps, options=traj_options)
-    traj_opt = jax.jit(traj_solver.optimize_tdcr)
-
-    # Initialize RRT solver
-    rrt_options = RRTOptions(
-        batch_size=100,
-        max_iterations=1000,
-    )
-    rrt_traj_solver = OptimizedRRT(robot, robot_coll, rrt_options)
-
     # Initialize PRM solver
     prm_options = PRMOptions(batch_size=2000, parallel_edge_checks=200)
     prm_traj_solver = ParallelPRM(robot, robot_coll, prm_options)
@@ -93,46 +76,7 @@ def init_solver(
         prm_traj_solver.save_roadmap(roadmap_path)
     print("Init done")
 
-    return traj_options, traj_solver, traj_opt, rrt_traj_solver, prm_traj_solver
-
-
-def _traj_optimize(
-    traj_opt: Callable,
-    traj_options: TrajOptimizerOptions,
-    world_coll: Sequence[CollGeom],
-    cfg: Array,
-) -> ConstantCurvatureState:
-    """Optimizes a trajectory using the TrajOpt framework."""
-    cfg = traj_opt(
-        cfg,
-        world_coll,
-        limit_weight=traj_options.limit_weight,
-        smoothness_weight=traj_options.smoothness_weight,
-        trajectory_length_weight=traj_options.trajectory_length_weight,
-        collision_weight=traj_options.collision_weight,
-        start_pose_weight=traj_options.start_pose_weight,
-        end_pose_weight=traj_options.end_pose_weight,
-        tendon_vel_weight=traj_options.tendon_vel_weight,
-        tendon_acc_weight=traj_options.tendon_acc_weight,
-        dt=traj_options.dt,
-    )
-    return cfg
-
-
-def solve_with_trajopt(
-    start_state: ConstantCurvatureState,
-    end_state: ConstantCurvatureState,
-    world_coll: Sequence[CollGeom],
-    traj_solver: TrajOptimizer,
-    traj_opt: callable,
-    traj_options: TrajOptimizerOptions,
-) -> tuple[ConstantCurvatureState, float]:
-    start_time = time.time()
-    cfg = traj_solver.find_path(start_state, end_state)
-    path_cfg = _traj_optimize(traj_opt, traj_options, world_coll, cfg)
-    jax.block_until_ready(path_cfg)
-    trajopt_time = time.time() - start_time
-    return path_cfg, trajopt_time
+    return prm_traj_solver
 
 
 def solve_with_prm(
@@ -140,10 +84,6 @@ def solve_with_prm(
     end_state: ConstantCurvatureState,
     world_coll: Sequence[CollGeom],
     prm_traj_solver: ParallelPRM,
-    traj_opt: callable,
-    traj_options: TrajOptimizerOptions,
-    with_opt: bool,
-    target_timesteps: int,
 ):
     start_prm_time = time.time()
     path_cfg = prm_traj_solver.find_path(start_state, end_state, world_coll)
@@ -154,38 +94,7 @@ def solve_with_prm(
         print("No path found")
         return None, prm_time, opt_time
 
-    if with_opt and path_cfg is not None and path_cfg.theta.shape[0] > 0:
-        start_opt_time = time.time()
-        cfg = resample_trajectory(path_cfg, target_timesteps)
-        path_cfg = _traj_optimize(traj_opt, traj_options, world_coll, cfg)
-        end_opt_time = time.time()
-        opt_time = end_opt_time - start_opt_time
-
     return path_cfg, prm_time, opt_time
-
-
-def solve_with_rrt(
-    start_state: ConstantCurvatureState,
-    end_state: ConstantCurvatureState,
-    world_coll: Sequence[CollGeom],
-    rrt_traj_solver: OptimizedRRT,
-    traj_opt: callable,
-    traj_options: TrajOptimizerOptions,
-    with_opt: bool,
-    target_timesteps: int,
-) -> tuple[ConstantCurvatureState, float]:
-    start_time = time.time()
-    path_cfg = rrt_traj_solver.find_path(start_state, end_state, world_coll)
-    rrt_time = time.time() - start_time
-    if path_cfg is None:
-        print("No path found")
-        return None, rrt_time
-    if with_opt and path_cfg is not None and path_cfg.theta.shape[0] > 0:
-        path_cfg = resample_trajectory(path_cfg, target_timesteps)
-        path_cfg = _traj_optimize(traj_opt, traj_options, world_coll, path_cfg)
-        jax.block_until_ready(path_cfg)
-        rrt_time = time.time() - start_time
-    return path_cfg, rrt_time
 
 
 def eval_mp_with_coll_scene(
@@ -207,14 +116,13 @@ def eval_mp_with_coll_scene(
     robot_total_length = robot.config.length * robot.config.num_sections
 
     timesteps = 100
-    traj_options, traj_solver, traj_opt, rrt_traj_solver, prm_traj_solver = init_solver(
+    prm_traj_solver = init_solver(
         robot=robot,
         robot_coll=robot_coll,
         world_geom_list=world_geom_list,
         save_dir=save_dir,
         num_sections=num_sections,
         road_map_nodes=road_map_nodes,
-        timesteps=timesteps,
     )
 
     batched_fk = jax.jit(jax.vmap(robot._forward_kinematics))
@@ -252,34 +160,14 @@ def eval_mp_with_coll_scene(
         end_state_i = jax.tree_util.tree_map(
             lambda x: jnp.squeeze(x, axis=0), end_state
         )
-        solve_with_trajopt(
-            start_state_i,
-            end_state_i,
-            world_geom_list,
-            traj_solver,
-            traj_opt,
-            traj_options,
-        )
+
         solve_with_prm(
             start_state_i,
             end_state_i,
             world_geom_list,
             prm_traj_solver,
-            traj_opt,
-            traj_options,
-            True,
-            timesteps,
         )
-        solve_with_rrt(
-            start_state_i,
-            end_state_i,
-            world_geom_list,
-            rrt_traj_solver,
-            traj_opt,
-            traj_options,
-            True,
-            timesteps,
-        )
+
     print(f"Finished warm up....")
 
     actual_eval_num = start_states.theta.shape[0]
@@ -322,33 +210,11 @@ def eval_mp_with_coll_scene(
             i,
         )
 
-        path_cfg, trajopt_time = solve_with_trajopt(
-            start_state_i,
-            end_state_i,
-            world_geom_list,
-            traj_solver,
-            traj_opt,
-            traj_options,
-        )
-        data_to_save, successful_id, total_time = log_result(
-            base_info=base_info,
-            path_cfg=path_cfg,
-            method_name="TRAJOPT",
-            trajopt_time=trajopt_time,
-        )
-        all_trials_data.append(data_to_save)
-        trajopt_success.append(successful_id)
-        traj_opt_total_time.append(total_time)
-
         path_cfg, prm_time, opt_time = solve_with_prm(
             start_state_i,
             end_state_i,
             world_geom_list,
             prm_traj_solver,
-            traj_opt,
-            traj_options,
-            False,
-            timesteps,
         )
         data_to_save, successful_id, total_time = log_result(
             base_info=base_info,
@@ -362,91 +228,14 @@ def eval_mp_with_coll_scene(
         prm_success.append(successful_id)
         prm_total_time.append(prm_time)
 
-        path_cfg, prm_time, opt_time = solve_with_prm(
-            start_state_i,
-            end_state_i,
-            world_geom_list,
-            prm_traj_solver,
-            traj_opt,
-            traj_options,
-            True,
-            timesteps,
-        )
-        data_to_save, successful_id, total_time = log_result(
-            base_info=base_info,
-            path_cfg=path_cfg,
-            method_name="PRM",
-            prm_time=prm_time,
-            opt_time=opt_time,
-            with_opt=True,
-        )
-        all_trials_data.append(data_to_save)
-        prm_opt_success.append(successful_id)
-        prm_opt_total_time.append(prm_time)
-
-        path_cfg, rrt_time = solve_with_rrt(
-            start_state_i,
-            end_state_i,
-            world_geom_list,
-            rrt_traj_solver,
-            traj_opt,
-            traj_options,
-            False,
-            timesteps,
-        )
-        data_to_save, successful_id, total_time = log_result(
-            base_info=base_info,
-            path_cfg=path_cfg,
-            method_name="RRT",
-            rrt_time=rrt_time,
-            with_opt=False,
-        )
-        all_trials_data.append(data_to_save)
-        rrt_success.append(successful_id)
-        rrt_total_time.append(total_time)
-
-        path_cfg, rrt_time = solve_with_rrt(
-            start_state_i,
-            end_state_i,
-            world_geom_list,
-            rrt_traj_solver,
-            traj_opt,
-            traj_options,
-            True,
-            timesteps,
-        )
-        data_to_save, successful_id, total_time = log_result(
-            base_info=base_info,
-            path_cfg=path_cfg,
-            method_name="RRT",
-            rrt_time=rrt_time,
-            with_opt=True,
-        )
-        all_trials_data.append(data_to_save)
-        rrt_opt_success.append(successful_id)
-        rrt_opt_total_time.append(total_time)
-
-    trajopt_success_rate = (
-        len([x for x in trajopt_success if x is not None]) / actual_eval_num
-    )
     prm_success_rate = len([x for x in prm_success if x is not None]) / actual_eval_num
-    prm_opt_success_rate = (
-        len([x for x in prm_opt_success if x is not None]) / actual_eval_num
-    )
-    rrt_success_rate = len([x for x in rrt_success if x is not None]) / actual_eval_num
-    rrt_opt_success_rate = (
-        len([x for x in rrt_opt_success if x is not None]) / actual_eval_num
-    )
+
     log_data = {
         "scene_name": os.path.splitext(os.path.basename(world_config_path))[0],
         "num_sections": num_sections,
         "eval_num": eval_num,
         "prm_road_map_nodes": road_map_nodes,
-        "trajopt_success_rate": trajopt_success_rate,
         "prm_success_rate": prm_success_rate,
-        "prm_opt_success_rate": prm_opt_success_rate,
-        "rrt_success_rate": rrt_success_rate,
-        "rrt_opt_success_rate": rrt_opt_success_rate,
         "traj_time_avg": float(np.array(traj_opt_total_time).mean()),
         "prm_time_avg": float(np.array(prm_total_time).mean()),
         "prm_opt_time_avg": float(np.array(prm_opt_total_time).mean()),
@@ -477,10 +266,9 @@ def eval_mp_with_coll_scene(
         all_trials_data=np.array(successful_data, dtype=object),
     )
     print(f"Saved {len(successful_data)} trial(s) to {full_trajectory_data_path}")
-
     if remove_failed_trials:
         prm_success_filtered = [item for item in prm_success if item is not None]
-        problem.save(jnp.array(prm_success_filtered), rename_suffix=rename_suffix)
+        problem.save(jnp.array(prm_success_filtered), rename_suffix="_prm_success")
 
 
 if __name__ == "__main__":
@@ -540,10 +328,10 @@ if __name__ == "__main__":
     remove_failed_trials: bool = args.remove_failed_trials
     world_config_path: str = args.world_config_path
 
-    run_after_filtered=False
+    run_after_filtered=True
     robot_config_path = "configs/robots/cc_scene_eval_tdcr.json"
     scene_name = os.path.splitext(os.path.basename(world_config_path))[0]
-    result_dir = f"results/mp_test/{scene_name}"
+    result_dir = f"results/mp_test_cpu/{scene_name}"
     print(f"\n{'='*20} Running Evaluation for Scene: {scene_name} {'='*20}")
     eval_mp_with_coll_scene(
         robot_config_path=robot_config_path,
