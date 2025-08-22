@@ -568,7 +568,7 @@ class ViserRenderer:
                     self.robot.robot,
                     self.robot.robot_coll,
                     root_node_name=f"/traj_robot_{i}",
-                    enable_backbone=False,
+                    enable_backbone=True,
                 )
 
                 # Create visualization and set pose
