@@ -180,7 +180,7 @@ def visualize_cc_model_3d(
     save_path: str = None,
     world_coll_config: str = None,
     ax: plt.Axes = None,
-    color: str|None = None,
+    color: str | None = None,
     x_limit: tuple[float, float] = (-1.3, 1.3),
     y_limit: tuple[float, float] = (-1.3, 1.3),
     z_limit: tuple[float, float] = (-1.3, 1.3),

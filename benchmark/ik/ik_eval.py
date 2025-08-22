@@ -156,35 +156,44 @@ def sample_states_test(robot: CCRobot, num_states: int) -> ConstantCurvatureStat
 
     return states
 
+
 def save_targets_to_csv(target_wxyz, target_position, num_sections, eval_num):
     import csv
     import os
-    
+
     # Create directory if it doesn't exist
     os.makedirs("results/ik", exist_ok=True)
-    
+
     # Save target positions and orientations to CSV
     csv_path = f"results/ik/targets_{num_sections}_{eval_num}.csv"
-    with open(csv_path, 'w', newline='') as csvfile:
+    with open(csv_path, "w", newline="") as csvfile:
         writer = csv.writer(csvfile)
-        
+
         # Write header
-        header = ['target_wx', 'target_wy', 'target_wz', 'target_ww', 
-                    'target_px', 'target_py', 'target_pz']
+        header = [
+            "target_wx",
+            "target_wy",
+            "target_wz",
+            "target_ww",
+            "target_px",
+            "target_py",
+            "target_pz",
+        ]
         writer.writerow(header)
-        
+
         # Write data - each row is one sample
         for i in range(eval_num):
             row = [
                 float(target_wxyz[i, 0]),
-                float(target_wxyz[i, 1]), 
+                float(target_wxyz[i, 1]),
                 float(target_wxyz[i, 2]),
                 float(target_wxyz[i, 3]),
                 float(target_position[i, 0]),
                 float(target_position[i, 1]),
-                float(target_position[i, 2])
+                float(target_position[i, 2]),
             ]
             writer.writerow(row)
+
 
 def eval_ik_with_no_coll(
     robot: CCRobot,

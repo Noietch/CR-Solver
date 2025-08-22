@@ -103,6 +103,18 @@ class TrajOptimizer:
         phi = jnp.linspace(results[0].phi, results[1].phi, self.timesteps)
         return ConstantCurvatureState(base_position=base_position, theta=theta, phi=phi)
 
+    def find_path(
+        self,
+        start_state: ConstantCurvatureState,
+        end_state: ConstantCurvatureState,
+    ):
+        base_position = jnp.linspace(
+            start_state.base_position, end_state.base_position, self.timesteps
+        )
+        theta = jnp.linspace(start_state.theta, end_state.theta, self.timesteps)
+        phi = jnp.linspace(start_state.phi, end_state.phi, self.timesteps)
+        return ConstantCurvatureState(base_position=base_position, theta=theta, phi=phi)
+
     def optimize(
         self,
         init_traj: ConstantCurvatureState,

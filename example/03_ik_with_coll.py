@@ -39,7 +39,7 @@ def main():
         coll=robot_coll,
     )
     ik_solver = jax.jit(solver.solve_ik_best_with_coll)
-    
+
     robot_vis = ViserSoftRobot(server, robot, robot_coll, root_node_name="/robot")
     robot_vis.create_robot_visualizations()
     ik_target_handle = server.scene.add_transform_controls(

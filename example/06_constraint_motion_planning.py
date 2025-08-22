@@ -6,7 +6,11 @@ import numpy as np
 from soul.robots.cc_robot import CCRobot
 from soul.geom import RobotCollision, WorldCollision
 from soul.solver.traj_optimizer import TrajOptimizer, TrajOptimizerOptions
-from soul.visualization.visualizer_viser import ViserSoftRobot, ViserWorld, ViserRenderer
+from soul.visualization.visualizer_viser import (
+    ViserSoftRobot,
+    ViserWorld,
+    ViserRenderer,
+)
 
 DISABLE_JIT = False
 
