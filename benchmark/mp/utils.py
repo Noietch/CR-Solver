@@ -4,7 +4,8 @@ import numpy as np
 import jax.numpy as jnp
 import jaxlie
 import os
-from typing import Sequence
+from typing import Sequence, Any, Tuple, Union, List
+import json
 from soul.robots.cc_robot import CCRobot, ConstantCurvatureState
 from soul.robots.tdcr_robot import TDCRRobot
 from soul.geom import (
@@ -228,6 +229,14 @@ def log_result(
         )
         fk_result = batched_fk(path_cfg)
         planned_tip_traj = jaxlie.SE3.from_matrix(fk_result[:, -1, ...])
+
+        # Calculate trajectory length
+        tip_positions = planned_tip_traj.translation()  # shape: (T, 3)
+        traj_segment_lengths = jnp.linalg.norm(
+            tip_positions[1:] - tip_positions[:-1], axis=-1
+        )
+        traj_length = jnp.sum(traj_segment_lengths)
+
         start_transforms = batched_fk(start_state)
         start_tip_transform = jaxlie.SE3.from_matrix(start_transforms[0, -1, ...])
         start_wxyz = start_tip_transform.rotation().wxyz
@@ -287,6 +296,7 @@ def log_result(
             "fk_result": np.asarray(fk_result),
             "solution_states_theta": np.asarray(solution_states.theta),
             "solution_states_phi": np.asarray(solution_states.phi),
+            "traj_length": float(traj_length),
             "planned_paths": path_cfg.save_dict(),
             "planned_tip_traj": np.asarray(planned_tip_traj.as_matrix()),
             "is_success": final_success_rate > 99.0,
@@ -306,6 +316,124 @@ def log_result(
         print(f"[Warning] No solution found by {method_name}")
         # Return summary and empty data dictionary
         successful_id = None
-        return data_to_save, successful_id, 0
+        return data_to_save, successful_id, None, None
 
-    return data_to_save, successful_id, total_time
+    return data_to_save, successful_id, total_time, float(traj_length)
+
+
+def remove_none(*seqs: Sequence[Any]) -> Union[List[Any], Tuple[List[Any], ...]]:
+    filtered = [[x for x in seq if x is not None] for seq in seqs]
+    if len(filtered) == 1:
+        return filtered[0]
+    return tuple(filtered)
+
+
+def save_result(
+    save_dir: str,
+    world_config_path: str,
+    eval_num: int,
+    actual_eval_num: int,
+    num_sections: int,
+    road_map_nodes: int,
+    trajopt_success: List[int],
+    traj_opt_total_time: List[float],
+    traj_opt_traj_length: List[float],
+    prm_success: List[int],
+    prm_total_time: List[float],
+    prm_traj_length: List[float],
+    prm_opt_success: List[int],
+    prm_opt_total_time: List[float],
+    prm_opt_traj_length: List[float],
+    rrt_success: List[int],
+    rrt_total_time: List[float],
+    rrt_traj_length: List[float],
+    rrt_opt_success: List[int],
+    rrt_opt_total_time: List[float],
+    rrt_opt_traj_length: List[float],
+):
+    (
+        trajopt_success,
+        traj_opt_total_time,
+        traj_opt_traj_length,
+        prm_success,
+        prm_total_time,
+        prm_traj_length,
+        prm_opt_success,
+        prm_opt_total_time,
+        prm_opt_traj_length,
+        rrt_success,
+        rrt_total_time,
+        rrt_traj_length,
+        rrt_opt_success,
+        rrt_opt_total_time,
+        rrt_opt_traj_length,
+    ) = remove_none(
+        trajopt_success,
+        traj_opt_total_time,
+        traj_opt_traj_length,
+        prm_success,
+        prm_total_time,
+        prm_traj_length,
+        prm_opt_success,
+        prm_opt_total_time,
+        prm_opt_traj_length,
+        rrt_success,
+        rrt_total_time,
+        rrt_traj_length,
+        rrt_opt_success,
+        rrt_opt_total_time,
+        rrt_opt_traj_length,
+    )
+
+    trajopt_success_rate = len(trajopt_success) / actual_eval_num
+    prm_success_rate = len(prm_success) / actual_eval_num
+    prm_opt_success_rate = len(prm_opt_success) / actual_eval_num
+    rrt_success_rate = len(rrt_success) / actual_eval_num
+    rrt_opt_success_rate = len(rrt_opt_success) / actual_eval_num
+
+    traj_time_avg = float(np.array(traj_opt_total_time).mean())
+    prm_time_avg = float(np.array(prm_total_time).mean())
+    prm_opt_time_avg = float(np.array(prm_opt_total_time).mean())
+    rrt_time_avg = float(np.array(rrt_total_time).mean())
+    rrt_opt_time_avg = float(np.array(rrt_opt_total_time).mean())
+
+    traj_opt_traj_length = float(np.array(traj_opt_traj_length).mean())
+    prm_traj_length = float(np.array(prm_traj_length).mean())
+    prm_opt_traj_length = float(np.array(prm_opt_traj_length).mean())
+    rrt_traj_length = float(np.array(rrt_traj_length).mean())
+    rrt_opt_traj_length = float(np.array(rrt_opt_traj_length).mean())
+
+    log_data = {
+        "scene_name": os.path.splitext(os.path.basename(world_config_path))[0],
+        "num_sections": num_sections,
+        "eval_num": actual_eval_num,
+        "prm_road_map_nodes": road_map_nodes,
+        "trajopt_success_rate": trajopt_success_rate,
+        "prm_success_rate": prm_success_rate,
+        "prm_opt_success_rate": prm_opt_success_rate,
+        "rrt_success_rate": rrt_success_rate,
+        "rrt_opt_success_rate": rrt_opt_success_rate,
+        "traj_time_avg": traj_time_avg,
+        "prm_time_avg": prm_time_avg,
+        "prm_opt_time_avg": prm_opt_time_avg,
+        "rrt_time_avg": rrt_time_avg,
+        "rrt_opt_time_avg": rrt_opt_time_avg,
+        "traj_opt_traj_length": traj_opt_traj_length,
+        "prm_traj_length": prm_traj_length,
+        "prm_opt_traj_length": prm_opt_traj_length,
+        "rrt_traj_length": rrt_traj_length,
+        "rrt_opt_traj_length": rrt_opt_traj_length,
+        "traj_opt_success_id": trajopt_success,
+        "prm_success_id": prm_success,
+        "prm_opt_success_id": prm_opt_success,
+        "rrt_success_id": rrt_success,
+        "rrt_opt_success_id": rrt_opt_success,
+    }
+    print(log_data)
+    results_json_path = os.path.join(
+        save_dir, f"sections_{num_sections}_eval_{eval_num}_results.json"
+    )
+    os.makedirs(os.path.dirname(results_json_path), exist_ok=True)
+    with open(results_json_path, "w") as f:
+        json.dump(log_data, f, indent=4)
+    print(f"Saved results to {results_json_path}")

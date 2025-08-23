@@ -98,6 +98,13 @@ class Problem:
         )
         return state_pool
 
+    def return_state(self, theta: Array, phi: Array) -> ConstantCurvatureState:
+        return ConstantCurvatureState(
+            base_position=jnp.zeros((theta.shape[0], 3)),
+            theta=jnp.array(theta),
+            phi=jnp.array(phi),
+        )
+
     def gen_problems(self):
         print(
             f"Sampling {self.eval_num} collision-free start-end pairs with min distance {self.min_distance}..."
@@ -121,8 +128,7 @@ class Problem:
         if self.start_from_initialization:
             print("Adding initialization states (theta=0, phi=0) as start states...")
             # Create single initialization state with theta=0, phi=0
-            init_state = ConstantCurvatureState(
-                base_position=jnp.zeros((1, 3)),
+            init_state = self.return_state(
                 theta=jnp.full((1, self.robot.config.num_sections), 1e-7),
                 phi=jnp.full((1, self.robot.config.num_sections), 1e-7),
             )
@@ -212,7 +218,7 @@ class Problem:
                 f"Saving {len(success_indices)} successful trials back to {save_load_path}"
             )
             save_load_path = save_load_path.replace(".npz", f"{rename_suffix}.npz")
-        print(f"Saving sampled states to {self.sample_data_path}...")
+        print(f"Saving sampled states to {save_load_path}...")
         os.makedirs(os.path.dirname(save_load_path), exist_ok=True)
         np.savez(
             save_load_path,
@@ -255,32 +261,26 @@ class Problem:
             filtered_end_theta = original_end_theta[success_mask]
             filtered_end_phi = original_end_phi[success_mask]
 
-            start_states = ConstantCurvatureState(
-                theta=jnp.array(filtered_start_theta),
-                phi=jnp.array(filtered_start_phi),
-                base_position=jnp.zeros((filtered_start_theta.shape[0], 3)),
+            start_states = self.return_state(
+                theta=filtered_start_theta,
+                phi=filtered_start_phi,
             )
-            end_states = ConstantCurvatureState(
-                theta=jnp.array(filtered_end_theta),
-                phi=jnp.array(filtered_end_phi),
-                base_position=jnp.zeros((filtered_end_theta.shape[0], 3)),
+            end_states = self.return_state(
+                theta=filtered_end_theta,
+                phi=filtered_end_phi,
             )
-
             print(
                 f"Successfully removed failed trials. Remaining: {start_states.theta.shape[0]} pairs."
             )
 
         else:
             print("No failed indices provided, returning original states.")
-            start_states = ConstantCurvatureState(
-                theta=jnp.array(original_start_theta),
-                phi=jnp.array(original_start_phi),
-                base_position=jnp.zeros((original_start_theta.shape[0], 3)),
+            start_states = self.return_state(
+                theta=original_start_theta,
+                phi=original_start_phi,
             )
-            end_states = ConstantCurvatureState(
-                theta=jnp.array(original_end_theta),
-                phi=jnp.array(original_end_phi),
-                base_position=jnp.zeros((original_end_theta.shape[0], 3)),
+            end_states = self.return_state(
+                theta=original_end_theta,
+                phi=original_end_phi,
             )
-
         return start_states, end_states

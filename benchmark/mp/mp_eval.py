@@ -3,7 +3,6 @@ from jaxtyping import Array
 import numpy as np
 import jax.numpy as jnp
 import time
-import json
 import os
 import argparse
 from typing import Callable, Sequence
@@ -38,9 +37,8 @@ from soul.geom import (
 )
 
 from benchmark.mp.problems import Problem
-from benchmark.mp.utils import (
-    log_result,
-)
+from benchmark.mp.utils import log_result, save_result
+from benchmark.mp.mp_analyze import save_log_to_csv
 
 jax.config.update("jax_default_matmul_precision", "highest")
 
@@ -62,8 +60,9 @@ def init_solver(
     num_sections: int,
     road_map_nodes: int,
     timesteps: int = 100,
+    max_iter_num: int = 3
 ):
-    traj_options = TrajOptimizerOptions()
+    traj_options = TrajOptimizerOptions(max_iter_num=max_iter_num)
     traj_solver = TrajOptimizer(robot, robot_coll, timesteps, options=traj_options)
     traj_opt = jax.jit(traj_solver.optimize_tdcr)
 
@@ -154,12 +153,11 @@ def solve_with_prm(
         print("No path found")
         return None, prm_time, opt_time
 
-    if with_opt and path_cfg is not None and path_cfg.theta.shape[0] > 0:
+    if with_opt and path_cfg.theta.shape[0] > 0:
         start_opt_time = time.time()
         cfg = resample_trajectory(path_cfg, target_timesteps)
         path_cfg = _traj_optimize(traj_opt, traj_options, world_coll, cfg)
-        end_opt_time = time.time()
-        opt_time = end_opt_time - start_opt_time
+        opt_time = time.time() - start_opt_time
 
     return path_cfg, prm_time, opt_time
 
@@ -180,7 +178,7 @@ def solve_with_rrt(
     if path_cfg is None:
         print("No path found")
         return None, rrt_time
-    if with_opt and path_cfg is not None and path_cfg.theta.shape[0] > 0:
+    if with_opt and path_cfg.theta.shape[0] > 0:
         path_cfg = resample_trajectory(path_cfg, target_timesteps)
         path_cfg = _traj_optimize(traj_opt, traj_options, world_coll, path_cfg)
         jax.block_until_ready(path_cfg)
@@ -199,6 +197,7 @@ def eval_mp_with_coll_scene(
     remove_failed_trials: bool,
     run_after_filtered: bool,
     min_sample_dist_ratio: float,
+    max_iter_num: int
 ):
     robot = TDCRRobot.from_config(robot_config_path)
     robot_coll = RobotCollision.from_config(robot_config_path)
@@ -215,6 +214,7 @@ def eval_mp_with_coll_scene(
         num_sections=num_sections,
         road_map_nodes=road_map_nodes,
         timesteps=timesteps,
+        max_iter_num=max_iter_num
     )
 
     batched_fk = jax.jit(jax.vmap(robot._forward_kinematics))
@@ -243,16 +243,21 @@ def eval_mp_with_coll_scene(
     actual_eval_num = start_states.theta.shape[0]
     trajopt_success = []
     traj_opt_total_time = []
+    traj_opt_traj_length = []
 
     prm_success = []
     prm_total_time = []
+    prm_traj_length = []
     prm_opt_success = []
     prm_opt_total_time = []
+    prm_opt_traj_length = []
 
     rrt_success = []
     rrt_total_time = []
+    rrt_traj_length = []
     rrt_opt_success = []
     rrt_opt_total_time = []
+    rrt_opt_traj_length = []
     all_trials_data = []
 
     for i in range(actual_eval_num):
@@ -281,14 +286,14 @@ def eval_mp_with_coll_scene(
         )
 
         path_cfg, trajopt_time = solve_with_trajopt(
-            start_state_i,
-            end_state_i,
-            world_geom_list,
-            traj_solver,
-            traj_opt,
-            traj_options,
+            start_state=start_state_i,
+            end_state=end_state_i,
+            world_coll=world_geom_list,
+            traj_solver=traj_solver,
+            traj_opt=traj_opt,
+            traj_options=traj_options,
         )
-        data_to_save, successful_id, total_time = log_result(
+        data_to_save, successful_id, total_time, traj_length = log_result(
             base_info=base_info,
             path_cfg=path_cfg,
             method_name="TRAJOPT",
@@ -297,18 +302,19 @@ def eval_mp_with_coll_scene(
         all_trials_data.append(data_to_save)
         trajopt_success.append(successful_id)
         traj_opt_total_time.append(total_time)
+        traj_opt_traj_length.append(traj_length)
 
         path_cfg, prm_time, opt_time = solve_with_prm(
-            start_state_i,
-            end_state_i,
-            world_geom_list,
-            prm_traj_solver,
-            traj_opt,
-            traj_options,
-            False,
-            timesteps,
+            start_state=start_state_i,
+            end_state=end_state_i,
+            world_coll=world_geom_list,
+            prm_traj_solver=prm_traj_solver,
+            traj_opt=traj_opt,
+            traj_options=traj_options,
+            with_opt=False,
+            target_timesteps=timesteps,
         )
-        data_to_save, successful_id, total_time = log_result(
+        data_to_save, successful_id, total_time, traj_length = log_result(
             base_info=base_info,
             path_cfg=path_cfg,
             method_name="PRM",
@@ -318,19 +324,20 @@ def eval_mp_with_coll_scene(
         )
         all_trials_data.append(data_to_save)
         prm_success.append(successful_id)
-        prm_total_time.append(prm_time)
+        prm_total_time.append(total_time)
+        prm_traj_length.append(traj_length)
 
         path_cfg, prm_time, opt_time = solve_with_prm(
-            start_state_i,
-            end_state_i,
-            world_geom_list,
-            prm_traj_solver,
-            traj_opt,
-            traj_options,
-            True,
-            timesteps,
+            start_state=start_state_i,
+            end_state=end_state_i,
+            world_coll=world_geom_list,
+            prm_traj_solver=prm_traj_solver,
+            traj_opt=traj_opt,
+            traj_options=traj_options,
+            with_opt=True,
+            target_timesteps=timesteps,
         )
-        data_to_save, successful_id, total_time = log_result(
+        data_to_save, successful_id, total_time, traj_length = log_result(
             base_info=base_info,
             path_cfg=path_cfg,
             method_name="PRM",
@@ -340,19 +347,20 @@ def eval_mp_with_coll_scene(
         )
         all_trials_data.append(data_to_save)
         prm_opt_success.append(successful_id)
-        prm_opt_total_time.append(prm_time)
+        prm_opt_total_time.append(total_time)
+        prm_opt_traj_length.append(traj_length)
 
         path_cfg, rrt_time = solve_with_rrt(
-            start_state_i,
-            end_state_i,
-            world_geom_list,
-            rrt_traj_solver,
-            traj_opt,
-            traj_options,
-            False,
-            timesteps,
+            start_state=start_state_i,
+            end_state=end_state_i,
+            world_coll=world_geom_list,
+            rrt_traj_solver=rrt_traj_solver,
+            traj_opt=traj_opt,
+            traj_options=traj_options,
+            with_opt=False,
+            target_timesteps=timesteps,
         )
-        data_to_save, successful_id, total_time = log_result(
+        data_to_save, successful_id, total_time, traj_length = log_result(
             base_info=base_info,
             path_cfg=path_cfg,
             method_name="RRT",
@@ -362,18 +370,19 @@ def eval_mp_with_coll_scene(
         all_trials_data.append(data_to_save)
         rrt_success.append(successful_id)
         rrt_total_time.append(total_time)
+        rrt_traj_length.append(traj_length)
 
         path_cfg, rrt_time = solve_with_rrt(
-            start_state_i,
-            end_state_i,
-            world_geom_list,
-            rrt_traj_solver,
-            traj_opt,
-            traj_options,
-            True,
-            timesteps,
+            start_state=start_state_i,
+            end_state=end_state_i,
+            world_coll=world_geom_list,
+            rrt_traj_solver=rrt_traj_solver,
+            traj_opt=traj_opt,
+            traj_options=traj_options,
+            with_opt=True,
+            target_timesteps=timesteps,
         )
-        data_to_save, successful_id, total_time = log_result(
+        data_to_save, successful_id, total_time, traj_length = log_result(
             base_info=base_info,
             path_cfg=path_cfg,
             method_name="RRT",
@@ -383,53 +392,35 @@ def eval_mp_with_coll_scene(
         all_trials_data.append(data_to_save)
         rrt_opt_success.append(successful_id)
         rrt_opt_total_time.append(total_time)
+        rrt_opt_traj_length.append(traj_length)
 
-    trajopt_success_rate = (
-        len([x for x in trajopt_success if x is not None]) / actual_eval_num
+    save_result(
+        save_dir=save_dir,
+        world_config_path=world_config_path,
+        eval_num=eval_num,
+        actual_eval_num=actual_eval_num,
+        num_sections=num_sections,
+        road_map_nodes=road_map_nodes,
+        trajopt_success=trajopt_success,
+        traj_opt_total_time=traj_opt_total_time,
+        traj_opt_traj_length=traj_opt_traj_length,
+        prm_success=prm_success,
+        prm_total_time=prm_total_time,
+        prm_traj_length=prm_traj_length,
+        prm_opt_success=prm_opt_success,
+        prm_opt_total_time=prm_opt_total_time,
+        prm_opt_traj_length=prm_opt_traj_length,
+        rrt_success=rrt_success,
+        rrt_total_time=rrt_total_time,
+        rrt_traj_length=rrt_opt_traj_length,
+        rrt_opt_success=rrt_opt_success,
+        rrt_opt_total_time=rrt_opt_total_time,
+        rrt_opt_traj_length=rrt_opt_traj_length,
     )
-    prm_success_rate = len([x for x in prm_success if x is not None]) / actual_eval_num
-    prm_opt_success_rate = (
-        len([x for x in prm_opt_success if x is not None]) / actual_eval_num
-    )
-    rrt_success_rate = len([x for x in rrt_success if x is not None]) / actual_eval_num
-    rrt_opt_success_rate = (
-        len([x for x in rrt_opt_success if x is not None]) / actual_eval_num
-    )
-    log_data = {
-        "scene_name": os.path.splitext(os.path.basename(world_config_path))[0],
-        "num_sections": num_sections,
-        "eval_num": eval_num,
-        "prm_road_map_nodes": road_map_nodes,
-        "trajopt_success_rate": trajopt_success_rate,
-        "prm_success_rate": prm_success_rate,
-        "prm_opt_success_rate": prm_opt_success_rate,
-        "rrt_success_rate": rrt_success_rate,
-        "rrt_opt_success_rate": rrt_opt_success_rate,
-        "traj_time_avg": float(np.array(traj_opt_total_time).mean()),
-        "prm_time_avg": float(np.array(prm_total_time).mean()),
-        "prm_opt_time_avg": float(np.array(prm_opt_total_time).mean()),
-        "rrt_time_avg": float(np.array(rrt_total_time).mean()),
-        "rrt_opt_time_avg": float(np.array(rrt_opt_total_time).mean()),
-        "traj_opt_success_id": trajopt_success,
-        "prm_success_id": prm_success,
-        "prm_opt_success_id": prm_opt_success,
-        "rrt_success_id": rrt_success,
-        "rrt_opt_success_id": rrt_opt_success,
-    }
-    print(log_data)
-    results_json_path = os.path.join(
-        save_dir, f"sections_{num_sections}_eval_{eval_num}_results.json"
-    )
-    os.makedirs(os.path.dirname(results_json_path), exist_ok=True)
-    with open(results_json_path, "w") as f:
-        json.dump(log_data, f, indent=4)
-    print(f"Saved results to {results_json_path}")
 
-    # Save all successful trial trajectory data
     full_trajectory_data_path = f"{save_dir}/all_trials_trajectories/sections_{num_sections}_all_trials_trajectories.npz"
     os.makedirs(os.path.dirname(full_trajectory_data_path), exist_ok=True)
     successful_data = [d for d in all_trials_data if isinstance(d, dict) and d]
-    # Save as an object array so nested dicts / arbitrary objects are preserved
     np.savez_compressed(
         full_trajectory_data_path,
         all_trials_data=np.array(successful_data, dtype=object),
@@ -437,6 +428,7 @@ def eval_mp_with_coll_scene(
     print(f"Saved {len(successful_data)} trial(s) to {full_trajectory_data_path}")
 
     if remove_failed_trials:
+        rename_suffix = "_prm_success"
         prm_success_filtered = [item for item in prm_success if item is not None]
         problem.save(jnp.array(prm_success_filtered), rename_suffix=rename_suffix)
 
@@ -448,45 +440,34 @@ if __name__ == "__main__":
         "--repeat-num", type=int, default=60, help="how many evaluations to run"
     )
     parser.add_argument(
-        "--start-init",
-        dest="start_from_initialization",
-        action="store_true",
-        help="start from initialization (default: False)",
-    )
-    group = parser.add_mutually_exclusive_group()
-    group.add_argument(
-        "--remove-failed",
-        dest="remove_failed_trials",
-        action="store_true",
-        help="remove failed trials (default: True)",
-    )
-    group.add_argument(
-        "--no-remove-failed",
-        dest="remove_failed_trials",
-        action="store_false",
-        help="do not remove failed trials",
-    )
-    parser.set_defaults(remove_failed_trials=False)
-    parser.add_argument(
         "--world-config",
         dest="world_config_path",
         type=str,
         default="configs/maps/mp_scene/mp_demo.json",
         help="path to world config json",
     )
-
+    parser.add_argument(
+        "--test-name",
+        dest="test_name",
+        type=str,
+        default="mp_test",
+        help="name of the test",
+    )
+    parser.add_argument("--max-iter", type=int, default=3, help="maximum number of iterations")
     args = parser.parse_args()
 
     section_num: int = args.section_num
     repeat_num: int = args.repeat_num
-    start_from_initialization: bool = args.start_from_initialization
-    remove_failed_trials: bool = args.remove_failed_trials
     world_config_path: str = args.world_config_path
+    test_name: str = args.test_name
+    max_iter_num: int = args.max_iter
 
+    start_from_initialization = False
     run_after_filtered = False
+    remove_failed_trials = True
     robot_config_path = "configs/robots/cc_scene_eval_tdcr.json"
     scene_name = os.path.splitext(os.path.basename(world_config_path))[0]
-    result_dir = f"results/mp_test/{scene_name}"
+    result_dir = f"results/{test_name}/{scene_name}"
     print(f"\n{'='*20} Running Evaluation for Scene: {scene_name} {'='*20}")
     eval_mp_with_coll_scene(
         robot_config_path=robot_config_path,
@@ -499,4 +480,7 @@ if __name__ == "__main__":
         remove_failed_trials=remove_failed_trials,
         run_after_filtered=run_after_filtered,
         min_sample_dist_ratio=0.1,
+        max_iter_num=max_iter_num
     )
+    save_log_to_csv(f"results/{test_name}")
+

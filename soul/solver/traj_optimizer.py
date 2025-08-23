@@ -54,6 +54,9 @@ class TrajOptimizerOptions:
     # Time step for time optimization
     dt: float = 0.1
 
+    # Maximum number of iterations for optimization
+    max_iter_num: int = 3
+
     def to_jax_dict(self):
         """Convert options to a dictionary of JAX arrays."""
         return {k: jnp.array(v) for k, v in asdict(self).items()}
@@ -387,7 +390,7 @@ class TrajOptimizer:
             .solve(
                 verbose=False,
                 termination=jaxls.TerminationConfig(
-                    max_iterations=3,
+                    max_iterations=self.options.max_iter_num,
                     early_termination=False,
                 ),
                 initial_vals=jaxls.VarValues.make((traj_vars.with_value(init_traj),)),

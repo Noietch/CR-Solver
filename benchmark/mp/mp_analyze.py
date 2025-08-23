@@ -1,7 +1,76 @@
 import os
-
+import glob
 import numpy as np
 import pandas as pd
+import json
+
+
+def calculate_and_finalize(
+    grouped_data: pd.DataFrame, agg_rules: dict, weighted_avg_cols: list
+) -> pd.DataFrame:
+    agg_result = grouped_data.agg(agg_rules)
+    for col in weighted_avg_cols:
+        weighted_sum_col = f"{col}_weighted"
+        agg_result[col] = agg_result[weighted_sum_col] / agg_result["eval_num"]
+        agg_result = agg_result.drop(columns=[weighted_sum_col])
+    return agg_result.reset_index()
+
+
+def analyze_data(data: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    # remove any column whose name contains "id"
+    cols_to_drop = [col for col in data.columns if "id" in col]
+    data = data.drop(columns=cols_to_drop)
+
+    sum_cols = ["eval_num"]
+    weighted_avg_cols = []
+    for col in data.columns:
+        if "_rate" in col or "_avg" in col or "_length" in col or "prm_road_map_nodes" in col:
+            weighted_avg_cols.append(col)
+
+    numeric_cols = sum_cols + weighted_avg_cols
+    for col in numeric_cols:
+        data[col] = pd.to_numeric(data[col], errors="coerce")
+    for col in weighted_avg_cols:
+        data[f"{col}_weighted"] = data[col] * data["eval_num"]
+
+    agg_rules = {}
+    for col in sum_cols:
+        agg_rules[col] = "sum"
+    for col in weighted_avg_cols:
+        agg_rules[f"{col}_weighted"] = "sum"
+
+    result = calculate_and_finalize(
+        data.groupby(["scene_name", "num_sections"]), agg_rules, weighted_avg_cols
+    )
+    result_scene = calculate_and_finalize(
+        data.groupby("scene_name"), agg_rules, weighted_avg_cols
+    )
+    result_section = calculate_and_finalize(
+        data.groupby("num_sections"), agg_rules, weighted_avg_cols
+    )
+
+    return result, result_scene, result_section
+
+
+def save_log_to_csv(dir_path: str):
+    search_path = os.path.join(dir_path, "*", "*_results.json")
+    result_files = glob.glob(search_path)
+    records = []
+    for json_file in sorted(result_files):
+        with open(json_file, "r") as fh:
+            data = json.load(fh)
+            for k, v in list(data.items()):
+                data[k] = json.dumps(v, ensure_ascii=False)
+            records.append(data)
+
+    combined_df = pd.DataFrame(records)
+    result, result_scene, result_section = analyze_data(combined_df)
+
+    result.to_csv(f"{dir_path}/result.csv", index=False)
+    result_scene.to_csv(f"{dir_path}/result_scene.csv", index=False)
+    result_section.to_csv(f"{dir_path}/result_section.csv", index=False)
+
+    print(f"Aggregated {len(records)} JSON files into {dir_path}")
 
 
 def error_calculate(reference_csv_path: str, planned_csv_path: str) -> dict:
@@ -109,4 +178,13 @@ def error_calculate(reference_csv_path: str, planned_csv_path: str) -> dict:
 
 
 if __name__ == "__main__":
-    pass
+    dir_paths = [
+        "results/mp_test_filtered",
+        "results/mp_test_cpu",
+        "results/mp_test_iter_1",
+        "results/mp_test_iter_5",
+        "results/mp_test_iter_20",
+        "results/mp_test_ori",
+    ]
+    for dir_path in dir_paths:
+        save_log_to_csv(dir_path)

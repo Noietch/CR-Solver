@@ -133,8 +133,6 @@ def eval_mp_with_coll_scene(
     )
     if run_after_filtered:
         rename_suffix = "_prm_success"
-    else:
-        rename_suffix = ""
     sample_data_path = f"{save_dir}/sampled_states/sections_{num_sections}_eval_{eval_num}_start_init_{start_from_initialization}{rename_suffix}.npz"
     problem = Problem(
         sample_data_path=sample_data_path,
@@ -179,10 +177,10 @@ def eval_mp_with_coll_scene(
         )
 
         path_cfg, prm_time, opt_time = solve_with_prm(
-            start_state_i,
-            end_state_i,
-            world_geom_list,
-            prm_traj_solver,
+            start_state=start_state_i,
+            end_state=end_state_i,
+            world_coll=world_geom_list,
+            prm_traj_solver=prm_traj_solver,
         )
         data_to_save, successful_id, total_time = log_result(
             base_info=base_info,
@@ -194,14 +192,14 @@ def eval_mp_with_coll_scene(
         )
         all_trials_data.append(data_to_save)
         prm_success.append(successful_id)
-        prm_total_time.append(prm_time)
+        prm_total_time.append(total_time)
 
     prm_success_rate = len([x for x in prm_success if x is not None]) / actual_eval_num
 
     log_data = {
         "scene_name": os.path.splitext(os.path.basename(world_config_path))[0],
         "num_sections": num_sections,
-        "eval_num": eval_num,
+        "eval_num": actual_eval_num,
         "prm_road_map_nodes": road_map_nodes,
         "prm_success_rate": prm_success_rate,
         "traj_time_avg": None,
@@ -228,7 +226,7 @@ def eval_mp_with_coll_scene(
     full_trajectory_data_path = f"{save_dir}/all_trials_trajectories/sections_{num_sections}_all_trials_trajectories.npz"
     os.makedirs(os.path.dirname(full_trajectory_data_path), exist_ok=True)
     successful_data = [d for d in all_trials_data if isinstance(d, dict) and d]
-    # Save as an object array so nested dicts / arbitrary objects are preserved
+
     np.savez_compressed(
         full_trajectory_data_path,
         all_trials_data=np.array(successful_data, dtype=object),
@@ -246,26 +244,6 @@ if __name__ == "__main__":
         "--repeat-num", type=int, default=60, help="how many evaluations to run"
     )
     parser.add_argument(
-        "--start-init",
-        dest="start_from_initialization",
-        action="store_true",
-        help="start from initialization (default: False)",
-    )
-    group = parser.add_mutually_exclusive_group()
-    group.add_argument(
-        "--remove-failed",
-        dest="remove_failed_trials",
-        action="store_true",
-        help="remove failed trials (default: True)",
-    )
-    group.add_argument(
-        "--no-remove-failed",
-        dest="remove_failed_trials",
-        action="store_false",
-        help="do not remove failed trials",
-    )
-    parser.set_defaults(remove_failed_trials=False)
-    parser.add_argument(
         "--world-config",
         dest="world_config_path",
         type=str,
@@ -277,11 +255,8 @@ if __name__ == "__main__":
 
     section_num: int = args.section_num
     repeat_num: int = args.repeat_num
-    start_from_initialization: bool = args.start_from_initialization
-    remove_failed_trials: bool = args.remove_failed_trials
     world_config_path: str = args.world_config_path
 
-    run_after_filtered = True
     robot_config_path = "configs/robots/cc_scene_eval_tdcr.json"
     scene_name = os.path.splitext(os.path.basename(world_config_path))[0]
     result_dir = f"results/mp_test_cpu/{scene_name}"
@@ -293,8 +268,8 @@ if __name__ == "__main__":
         num_sections=section_num,
         road_map_nodes=1000,
         eval_num=repeat_num,
-        start_from_initialization=start_from_initialization,
-        remove_failed_trials=remove_failed_trials,
-        run_after_filtered=run_after_filtered,
+        start_from_initialization=False,
+        remove_failed_trials=False,
+        run_after_filtered=True,
         min_sample_dist_ratio=0.1,
     )
