@@ -24,7 +24,12 @@ def analyze_data(data: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame, pd.Dat
     sum_cols = ["eval_num"]
     weighted_avg_cols = []
     for col in data.columns:
-        if "_rate" in col or "_avg" in col or "_length" in col or "prm_road_map_nodes" in col:
+        if (
+            "_rate" in col
+            or "_avg" in col
+            or "_length" in col
+            or "prm_road_map_nodes" in col
+        ):
             weighted_avg_cols.append(col)
 
     numeric_cols = sum_cols + weighted_avg_cols

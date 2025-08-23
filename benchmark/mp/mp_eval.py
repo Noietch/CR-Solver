@@ -60,7 +60,7 @@ def init_solver(
     num_sections: int,
     road_map_nodes: int,
     timesteps: int = 100,
-    max_iter_num: int = 3
+    max_iter_num: int = 3,
 ):
     traj_options = TrajOptimizerOptions(max_iter_num=max_iter_num)
     traj_solver = TrajOptimizer(robot, robot_coll, timesteps, options=traj_options)
@@ -197,7 +197,7 @@ def eval_mp_with_coll_scene(
     remove_failed_trials: bool,
     run_after_filtered: bool,
     min_sample_dist_ratio: float,
-    max_iter_num: int
+    max_iter_num: int,
 ):
     robot = TDCRRobot.from_config(robot_config_path)
     robot_coll = RobotCollision.from_config(robot_config_path)
@@ -214,7 +214,7 @@ def eval_mp_with_coll_scene(
         num_sections=num_sections,
         road_map_nodes=road_map_nodes,
         timesteps=timesteps,
-        max_iter_num=max_iter_num
+        max_iter_num=max_iter_num,
     )
 
     batched_fk = jax.jit(jax.vmap(robot._forward_kinematics))
@@ -453,7 +453,9 @@ if __name__ == "__main__":
         default="mp_test",
         help="name of the test",
     )
-    parser.add_argument("--max-iter", type=int, default=3, help="maximum number of iterations")
+    parser.add_argument(
+        "--max-iter", type=int, default=3, help="maximum number of iterations"
+    )
     args = parser.parse_args()
 
     section_num: int = args.section_num
@@ -480,7 +482,6 @@ if __name__ == "__main__":
         remove_failed_trials=remove_failed_trials,
         run_after_filtered=run_after_filtered,
         min_sample_dist_ratio=0.1,
-        max_iter_num=max_iter_num
+        max_iter_num=max_iter_num,
     )
     save_log_to_csv(f"results/{test_name}")
-

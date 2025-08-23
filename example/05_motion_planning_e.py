@@ -15,11 +15,14 @@ from soul.visualization.visualizer_viser import (
     ViserRenderer,
 )
 
+
 def viser_main(robot_type: str = "cc", default_method: str = "trajopt"):
     # Setup Robot Environment
     robot = CCRobot.from_config("configs/robots/cc.json")
     robot_coll = RobotCollision.from_config("configs/robots/cc.json")
-    world_coll = WorldCollision.from_config("configs/maps/ik_maps/obstacles_lattice.json")
+    world_coll = WorldCollision.from_config(
+        "configs/maps/ik_maps/obstacles_lattice.json"
+    )
 
     # Setup Visualization
     server = viser.ViserServer()
@@ -33,12 +36,12 @@ def viser_main(robot_type: str = "cc", default_method: str = "trajopt"):
         np.array([0.0, 0.0, 0.0]), np.array([0.2])
     )
     sphere_handle = server.scene.add_transform_controls(
-        "/obstacle", scale=0.1, position=(-0.11366828 ,0.67437919 ,1.04626801)
+        "/obstacle", scale=0.1, position=(-0.11366828, 0.67437919, 1.04626801)
     )
     server.scene.add_mesh_trimesh("/obstacle/mesh", mesh=sphere_coll.to_trimesh())
     plan_button = server.gui.add_button("Plan", disabled=False)
     replay_button = server.gui.add_button("Replay", disabled=False)
-    
+
     start_handle = server.scene.add_transform_controls(
         "/start",
         scale=0.3,
