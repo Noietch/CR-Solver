@@ -36,6 +36,7 @@ from benchmark.mp.problems import Problem
 from benchmark.mp.utils import (
     log_result,
 )
+from benchmark.mp.mp_analyze import save_log_to_csv
 
 jax.config.update("jax_default_matmul_precision", "highest")
 
@@ -146,10 +147,33 @@ def eval_mp_with_coll_scene(
     )
     start_states, end_states = problem.load(sample_data_path)
 
+    # Warm up
+    for i in range(3):
+        print(f"Start warm up for {i+1}/3")
+        start_state = jax.tree_util.tree_map(lambda x: x[i : i + 1], start_states)
+        end_state = jax.tree_util.tree_map(lambda x: x[i : i + 1], end_states)
+        # Squeeze the batch dimension from start and end states
+        start_state_i = jax.tree_util.tree_map(
+            lambda x: jnp.squeeze(x, axis=0), start_state
+        )
+        end_state_i = jax.tree_util.tree_map(
+            lambda x: jnp.squeeze(x, axis=0), end_state
+        )
+
+        solve_with_prm(
+            start_state_i,
+            end_state_i,
+            world_geom_list,
+            prm_traj_solver,
+        )
+
+    print(f"Finished warm up....")
+
     actual_eval_num = start_states.theta.shape[0]
     all_trials_data = []
     prm_success = []
     prm_total_time = []
+    prm_traj_length = []
 
     for i in range(actual_eval_num):
         print(
@@ -182,7 +206,7 @@ def eval_mp_with_coll_scene(
             world_coll=world_geom_list,
             prm_traj_solver=prm_traj_solver,
         )
-        data_to_save, successful_id, total_time = log_result(
+        data_to_save, successful_id, total_time, traj_length = log_result(
             base_info=base_info,
             path_cfg=path_cfg,
             method_name="PRM",
@@ -193,8 +217,11 @@ def eval_mp_with_coll_scene(
         all_trials_data.append(data_to_save)
         prm_success.append(successful_id)
         prm_total_time.append(total_time)
+        prm_traj_length.append(traj_length)
 
     prm_success_rate = len([x for x in prm_success if x is not None]) / actual_eval_num
+    prm_total_time = [x for x in prm_total_time if x is not None]
+    prm_traj_length = [x for x in prm_traj_length if x is not None]
 
     log_data = {
         "scene_name": os.path.splitext(os.path.basename(world_config_path))[0],
@@ -207,6 +234,7 @@ def eval_mp_with_coll_scene(
         "prm_opt_time_avg": None,
         "rrt_time_avg": None,
         "rrt_opt_time_avg": None,
+        "prm_traj_length": float(np.array(prm_traj_length).mean()),
         "traj_opt_success_id": [],
         "prm_success_id": prm_success,
         "prm_opt_success_id": [],
@@ -233,8 +261,11 @@ def eval_mp_with_coll_scene(
     )
     print(f"Saved {len(successful_data)} trial(s) to {full_trajectory_data_path}")
     if remove_failed_trials:
+        rename_suffix = "_prm_success"
+        if run_after_filtered:
+            rename_suffix = ""
         prm_success_filtered = [item for item in prm_success if item is not None]
-        problem.save(jnp.array(prm_success_filtered), rename_suffix="_prm_success")
+        problem.save(jnp.array(prm_success_filtered), rename_suffix=rename_suffix)
 
 
 if __name__ == "__main__":
@@ -257,19 +288,21 @@ if __name__ == "__main__":
     repeat_num: int = args.repeat_num
     world_config_path: str = args.world_config_path
 
+    test_name = "mp_eval_max_iter_3_cpu"
     robot_config_path = "configs/robots/cc_scene_eval_tdcr.json"
     scene_name = os.path.splitext(os.path.basename(world_config_path))[0]
-    result_dir = f"results/mp_test_cpu/{scene_name}"
+    result_dir = f"results/{test_name}/{scene_name}"
     print(f"\n{'='*20} Running Evaluation for Scene: {scene_name} {'='*20}")
     eval_mp_with_coll_scene(
         robot_config_path=robot_config_path,
         world_config_path=world_config_path,
         save_dir=result_dir,
         num_sections=section_num,
-        road_map_nodes=1000,
+        road_map_nodes=1500,
         eval_num=repeat_num,
         start_from_initialization=False,
         remove_failed_trials=False,
         run_after_filtered=True,
         min_sample_dist_ratio=0.1,
     )
+    save_log_to_csv(f"results/{test_name}")

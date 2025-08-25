@@ -1,6 +1,6 @@
 #!/bin/bash
 
-export CUDA_VISIBLE_DEVICES=3
+export CUDA_VISIBLE_DEVICES=1
 export JAX_PLATFORMS=cuda
 export PYTHONPATH=/home/yhq/workspace/yi_DiffSoft
 
@@ -10,8 +10,8 @@ SCRIPT_PATH=/home/yhq/workspace/yi_DiffSoft/benchmark/mp/mp_eval.py
 REPEAT_NUM=70
 
 WORLD_CONFIGS=(
-    "configs/maps/mp_scene/obstacles_13.pick_from_shelf.json"
-    "configs/maps/mp_scene/mp_demo.json"
+    "configs/maps/mp_scene/obstacles_14.pick_from_bookshelf.json"
+    "configs/maps/mp_scene/obstacles_15.grab_from_box.json"
 )
 
 for iter in 1 3 5 20; do
@@ -21,3 +21,4 @@ for iter in 1 3 5 20; do
         done
     done
 done
+

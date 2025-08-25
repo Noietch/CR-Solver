@@ -9,15 +9,19 @@ jax.config.update("jax_persistent_cache_min_compile_time_secs", 0)
 jax.config.update(
     "jax_persistent_cache_enable_xla_caches", "xla_gpu_per_fusion_autotune_cache_dir"
 )
+from jax.experimental.compilation_cache import compilation_cache as cc
+
+cc.set_cache_dir("/tmp/jax_cache")
 import jax.numpy as jnp
 import jaxlie
 import time
 import numpy as np
 import csv
 import matplotlib.pyplot as plt
-from soul.robots.cc_robot import CCRobot
+from typing import Sequence
+from soul.robots.cc_robot import CCRobot, ConstantCurvatureState
 from soul.robots.cc_robot_extend import CCRobot as CCRobotExtend
-from soul.geom import RobotCollision, WorldCollision
+from soul.geom import RobotCollision, WorldCollision, CollGeom
 from soul.solver.traj_optimizer import TrajOptimizer
 from benchmark.mp.mp_plot import (
     visualize_constrain_motion_planning,
@@ -34,12 +38,52 @@ if DISABLE_JIT:
     jax.config.update("jax_disable_jit", True)
 
 
-from jax.experimental.compilation_cache import compilation_cache as cc
-
-cc.set_cache_dir("/tmp/jax_cache")
-
 LETTER_HEIGHT = 2.5
 LETTER_WIDTH = 1.5
+
+
+@jax.jit
+def is_trajectory_in_collision(
+    trajectory: ConstantCurvatureState,
+    robot: CCRobot,
+    robot_coll: RobotCollision,
+    world_geom: Sequence[CollGeom],
+) -> bool:
+    """Checks if any state in a trajectory is in collision."""
+    trajectory = jax.tree_util.tree_map(
+        lambda x: jnp.expand_dims(x, axis=0), trajectory
+    )
+    if trajectory is None or trajectory.theta.shape[0] == 0:
+        return True  # No path found is a collision/failure
+
+    # Vmap the single-state check over the trajectory timesteps
+    in_collision_mask = jax.vmap(is_state_in_collision, in_axes=(0, None, None, None))(
+        trajectory, robot, robot_coll, world_geom
+    )
+    return jnp.any(in_collision_mask)
+
+
+@jax.jit
+def is_state_in_collision(
+    state: ConstantCurvatureState,
+    robot: CCRobot,
+    robot_coll: RobotCollision,
+    world_geom: Sequence[CollGeom],
+) -> bool:
+    """
+    Check if the robot is in collision with obstacles or itself.
+
+    A collision is defined as any distance less than 0 (i.e., penetration)
+    between the robot and any world geometry, or between parts of the robot itself.
+    """
+
+    def check_single_geom(geom: CollGeom) -> bool:
+        world_dist = robot_coll.compute_world_collision_distance(robot, state, geom)
+        return jnp.any(world_dist < 0.0)
+
+    collision_results = jnp.array([check_single_geom(g) for g in world_geom])
+
+    return jnp.any(collision_results)
 
 
 def create_I():
@@ -371,6 +415,11 @@ def run_case(
 ):
     # Setup world collision per case
     world_coll = WorldCollision.from_config(world_coll_config_path)
+    world_geom_list = world_coll.collision_geoms_no_ground
+
+    vmapped_is_trajectory_in_collision = jax.vmap(
+        is_trajectory_in_collision, in_axes=(0, None, None, None)
+    )
 
     # Select reference trajectory
     if traj_type == "linear":
@@ -423,13 +472,21 @@ def run_case(
     # Plan trajectory
     print("Start planning....")
     # Warmup: run once to trigger JIT compilation before timing
-    _ = traj_follow_jit(ref_traj, [world_coll.obstacles])
-    jax.block_until_ready(_)
+    cfg = traj_follow_jit(ref_traj, [world_coll.obstacles])
+    is_in_collision = vmapped_is_trajectory_in_collision(
+        cfg, robot, robot_coll, world_geom_list
+    )
+    jax.block_until_ready(is_in_collision)
 
     start_time = time.time()
     cfg = traj_follow_jit(ref_traj, [world_coll.obstacles])
-    jax.block_until_ready(cfg)
+    is_in_collision = vmapped_is_trajectory_in_collision(
+        cfg, robot, robot_coll, world_geom_list
+    )
+    jax.block_until_ready(is_in_collision)
     end_time = time.time()
+    if is_in_collision.any():
+        raise Exception("Planned trajectory is in collision!")
     planning_time = end_time - start_time
     print(f"Planning finished in {planning_time:.4f} seconds.")
 
@@ -555,14 +612,24 @@ if __name__ == "__main__":
             "end_wxyz": (1.0, 0, 0, 0),
             "letters": "",
         },
+        # {
+        #     "name": "sine",
+        #     "traj": "sine",
+        #     "obstacle": "configs/maps/constrain_motion_planning/obstacles_con_sine.json",
+        #     "start_pos": (0.5, -2.11, 0.89),
+        #     "start_wxyz": (1.0, 0.0, 0.0, 0.0),
+        #     "end_pos": (0.51, -2.01, 1.49),
+        #     "end_wxyz": (1.0, 0.0, 0.0, 0.0),
+        #     "letters": "",
+        # },
         {
             "name": "sine",
             "traj": "sine",
             "obstacle": "configs/maps/constrain_motion_planning/obstacles_con_sine.json",
-            "start_pos": (0.5, -2.17, 0.89),
-            "start_wxyz": (1.0, 0.0, 0.0, 0.0),
-            "end_pos": (0.51, -2.17, 1.49),
-            "end_wxyz": (1.0, 0.0, 0.0, 0.0),
+            "start_pos": (0.48, 1.35, 1.54),
+            "start_wxyz": (0.71, 0.71, 0.0, 0.0),
+            "end_pos": (0.37, 0.86, 2.02),
+            "end_wxyz": (0.71, 0.71, 0.0, 0.0),
             "letters": "",
         },
         {

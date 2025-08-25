@@ -184,12 +184,13 @@ def error_calculate(reference_csv_path: str, planned_csv_path: str) -> dict:
 
 if __name__ == "__main__":
     dir_paths = [
-        "results/mp_test_filtered",
-        "results/mp_test_cpu",
-        "results/mp_test_iter_1",
-        "results/mp_test_iter_5",
-        "results/mp_test_iter_20",
-        "results/mp_test_ori",
+        "results/mp_eval_max_iter_3_cpu"
+        # "results/mp_test_filtered",
+        # "results/mp_test_cpu",
+        # "results/mp_test_iter_1",
+        # "results/mp_test_iter_5",
+        # "results/mp_test_iter_20",
+        # "results/mp_test_ori",
     ]
     for dir_path in dir_paths:
         save_log_to_csv(dir_path)

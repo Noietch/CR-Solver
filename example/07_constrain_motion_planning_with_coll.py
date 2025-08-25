@@ -8,20 +8,21 @@ jax.config.update("jax_persistent_cache_min_compile_time_secs", 0)
 jax.config.update(
     "jax_persistent_cache_enable_xla_caches", "xla_gpu_per_fusion_autotune_cache_dir"
 )
+from jax.experimental.compilation_cache import compilation_cache as cc
 
+cc.set_cache_dir("/tmp/jax_cache")
+
+import jax.numpy as jnp
 import jaxlie
 import time
 import viser
 import numpy as np
-from soul.robots.cc_robot import CCRobot
-from soul.geom import RobotCollision, WorldCollision
+from typing import Sequence
+from soul.robots.cc_robot import CCRobot, ConstantCurvatureState
+from soul.geom import RobotCollision, WorldCollision, CollGeom
 from soul.solver.traj_optimizer import TrajOptimizer
 from soul.visualization.visualizer_viser import ViserSoftRobot, ViserWorld
 
-
-from jax.experimental.compilation_cache import compilation_cache as cc
-
-cc.set_cache_dir("/tmp/jax_cache")
 
 DISABLE_JIT = False
 
@@ -35,6 +36,50 @@ if DISABLE_JIT:
 
 LETTER_HEIGHT = 2.5
 LETTER_WIDTH = 1.5
+
+
+@jax.jit
+def is_trajectory_in_collision(
+    trajectory: ConstantCurvatureState,
+    robot: CCRobot,
+    robot_coll: RobotCollision,
+    world_geom: Sequence[CollGeom],
+) -> bool:
+    """Checks if any state in a trajectory is in collision."""
+    trajectory = jax.tree_util.tree_map(
+        lambda x: jnp.expand_dims(x, axis=0), trajectory
+    )
+    if trajectory is None or trajectory.theta.shape[0] == 0:
+        return True  # No path found is a collision/failure
+
+    # Vmap the single-state check over the trajectory timesteps
+    in_collision_mask = jax.vmap(is_state_in_collision, in_axes=(0, None, None, None))(
+        trajectory, robot, robot_coll, world_geom
+    )
+    return jnp.any(in_collision_mask)
+
+
+@jax.jit
+def is_state_in_collision(
+    state: ConstantCurvatureState,
+    robot: CCRobot,
+    robot_coll: RobotCollision,
+    world_geom: Sequence[CollGeom],
+) -> bool:
+    """
+    Check if the robot is in collision with obstacles or itself.
+
+    A collision is defined as any distance less than 0 (i.e., penetration)
+    between the robot and any world geometry, or between parts of the robot itself.
+    """
+
+    def check_single_geom(geom: CollGeom) -> bool:
+        world_dist = robot_coll.compute_world_collision_distance(robot, state, geom)
+        return jnp.any(world_dist < 0.0)
+
+    collision_results = jnp.array([check_single_geom(g) for g in world_geom])
+
+    return jnp.any(collision_results)
 
 
 def create_I():
@@ -94,7 +139,7 @@ def get_icra_traj(
     The height is controlled by the y-difference between handles.
     """
     # word_funcs = {'I': create_I, 'C': create_C, 'R': create_R, 'A': create_A}
-    word_funcs = {"R": create_R}
+    word_funcs = {"A": create_A}
     word_str = "ICRA"
     letter_spacing = LETTER_WIDTH * 1.8
 
@@ -283,12 +328,16 @@ def get_sine_traj(
 
 def viser_main():
     world_coll_config_path = (
-        "configs/maps/constrain_motion_planning/obstacles_con_R.json"
+        "configs/maps/constrain_motion_planning/obstacles_con_A.json"
     )
     # Setup Environment
     robot = CCRobot.from_config("configs/robots/cc_con_eval.json")
     robot_coll = RobotCollision.from_config("configs/robots/cc_con_eval.json")
     world_coll = WorldCollision.from_config(world_coll_config_path)
+
+    vmapped_is_trajectory_in_collision = jax.vmap(
+        is_trajectory_in_collision, in_axes=(0, None, None, None)
+    )
 
     # Setup Visualization
     server = viser.ViserServer()
@@ -306,9 +355,9 @@ def viser_main():
     end_handle_wxyz = (1.0, 0, 0, 0)
 
     for sine
-    start_handle_position = (0.5, -2.17, 0.89)
-    start_handle_wxyz = (1, 0, 0, 0)
-    end_handle_position = (0.51, -2.17, 1.49)
+    start_handle_position = (-0.01, -2.51, 0.76)
+    start_handle_wxyz = (0.82, 0.47, 0.25, 0.2)
+    end_handle_position = (1.23, -1.25, 2.75)
     end_handle_wxyz = (1.0, 0, 0, 0)
     
     Handle settings for words
@@ -337,9 +386,9 @@ def viser_main():
     end_handle_wxyz = (1.0, 0, 0, 0)
     """
 
-    start_handle_position = (-0.11, -2.36, 0.87)
-    start_handle_wxyz = (0.85, 0.49, 0.15, 0.14)
-    end_handle_position = (0.79, -1.26, 2.75)
+    start_handle_position = (-0.01, -2.51, 0.76)
+    start_handle_wxyz = (0.82, 0.47, 0.25, 0.2)
+    end_handle_position = (1.23, -1.25, 2.75)
     end_handle_wxyz = (1.0, 0, 0, 0)
     radius = robot.config.length * robot.config.num_sections
 
@@ -414,8 +463,13 @@ def viser_main():
         # Update obstacle information from the visualizer
         start_time = time.time()
         cfg = traj_follow_jit(reference_traj, [obstacles_vis.world_coll.obstacles])
-        jax.block_until_ready(cfg)
+        is_in_collision = vmapped_is_trajectory_in_collision(
+            cfg, robot, robot_coll, [obstacles_vis.world_coll.obstacles]
+        )
+        jax.block_until_ready(is_in_collision)
         end_time = time.time()
+        if is_in_collision.any():
+            print("Trajectory is in collision!")
         planning_time = end_time - start_time
         print(f"Planning finished in {planning_time:.5f} seconds.")
 
@@ -427,7 +481,7 @@ def viser_main():
         )
 
         for i in range(timesteps):
-            time.sleep(0.02)
+            time.sleep(0.01)
             robot_vis.update_pose(global_traj[i])
 
         replay_button.disabled = False

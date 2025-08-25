@@ -23,7 +23,7 @@ class PRMOptions:
     max_edge_distance: float = 2.0
     edge_interpolation_steps: int = 2
     max_num_blocked_edges_before_discard: int = 3
-    max_planning_attempts: int = 5
+    max_planning_attempts: int = 3
     batch_size: int = 1000
     parallel_edge_checks: int = 100  # Number of edges to check in parallel
 

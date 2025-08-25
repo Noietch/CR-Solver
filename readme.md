@@ -93,9 +93,9 @@
 ### Constraint Motion Planning-micsolver
 | Letter         | Position Error (mean, mm) | Position Error (std, mm) | Rotation Error (mean, deg) | Rotation Error (std, deg) | Time of micsolver (ms) |
 |----------------|---------------------------|--------------------------|----------------------------|---------------------------|------------------------|
-| Square         | 54.1991                   | 33.8234                  | 0.4119                     | 0.0943                    | 460.2426               |
-| Sinusoidal     | 168.0112                  | 96.8850                  | 0.0297                     | 0.2003                    | 587.8574               |
-| ICRA-Shaped    | 60.7206                   | 33.5663                  | 0.3420                     | 0.1215                    | 367.2863               |
+| Square         | 54.1991                   | 33.8234                  | 0.4119                     | 0.0943                    | 440.3740               |
+| Sinusoidal     | 168.0112                  | 96.8850                  | 0.0297                     | 0.2003                    | 559.0190               |
+| ICRA-Shaped    | 60.7206                   | 33.5663                  | 0.3420                     | 0.1215                    | 444.6243               |
 
 ### ICRA-Shaped Path details-ours 
 | Letter         | Position Error (mean, mm) | Position Error (std, mm) | Rotation Error (mean, deg) | Rotation Error (std, deg) | Time of ours (ms)  |
@@ -108,9 +108,9 @@
 ### ICRA-Shaped Path details-micsolver
 | Letter         |Position Error (mean, mm) | Position Error (std, mm) | Rotation Error (mean, deg) | Rotation Error (std, deg) | Time of micsolver (ms) |
 |----------------|--------------------------|--------------------------|----------------------------|---------------------------|------------------------|
-| I              |35.8807                   | 26.2712                  | 0.3818                     | 0.0632                    | 345.8093               |
-| C              |57.7731                   | 29.2497                  | 0.3893                     | 0.1064                    | 365.1401               |
-| R              |75.3152                   | 37.0807                  | 0.2515                     | 0.1485                    | 444.7767               |
-| A              |73.9135                   | 41.6637                  | 0.3453                     | 0.1680                    | 313.4191               |
+| I              |35.8807                   | 26.2712                  | 0.3818                     | 0.0632                    | 435.4040               |
+| C              |57.7731                   | 29.2497                  | 0.3893                     | 0.1064                    | 435.0460               |
+| R              |75.3152                   | 37.0807                  | 0.2515                     | 0.1485                    | 457.7900               |
+| A              |73.9135                   | 41.6637                  | 0.3453                     | 0.1680                    | 450.2570               |
 
 ### 读论文，改prm的并行处理, 给mp加self collision

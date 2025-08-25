@@ -8,7 +8,7 @@ SCRIPT_PATH=/home/yhq/workspace/yi_DiffSoft/benchmark/mp/mp_eval_cpu.py
 
 REPEAT_NUM=70
 
-for sec in 3 4 5; do
+for sec in 3 4 5 6; do
     $PYTHON_BIN $SCRIPT_PATH --section-num $sec --repeat-num $REPEAT_NUM --world-config configs/maps/mp_scene/obstacles_random_section_${sec}.json
 done
 
@@ -20,7 +20,7 @@ WORLD_CONFIGS=(
 )
 
 for config in "${WORLD_CONFIGS[@]}"; do
-    for sec in 3 4 5; do
+    for sec in 3 4 5 6; do
         $PYTHON_BIN $SCRIPT_PATH --section-num $sec --repeat-num $REPEAT_NUM --world-config $config
     done
 done

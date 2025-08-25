@@ -240,6 +240,48 @@ def eval_mp_with_coll_scene(
     )
     start_states, end_states = problem.load(sample_data_path)
 
+    # Warm up
+    for i in range(3):
+        print(f"Start warm up for {i+1}/3")
+        start_state = jax.tree_util.tree_map(lambda x: x[i : i + 1], start_states)
+        end_state = jax.tree_util.tree_map(lambda x: x[i : i + 1], end_states)
+        # Squeeze the batch dimension from start and end states
+        start_state_i = jax.tree_util.tree_map(
+            lambda x: jnp.squeeze(x, axis=0), start_state
+        )
+        end_state_i = jax.tree_util.tree_map(
+            lambda x: jnp.squeeze(x, axis=0), end_state
+        )
+        solve_with_trajopt(
+            start_state_i,
+            end_state_i,
+            world_geom_list,
+            traj_solver,
+            traj_opt,
+            traj_options,
+        )
+        solve_with_prm(
+            start_state_i,
+            end_state_i,
+            world_geom_list,
+            prm_traj_solver,
+            traj_opt,
+            traj_options,
+            True,
+            timesteps,
+        )
+        solve_with_rrt(
+            start_state_i,
+            end_state_i,
+            world_geom_list,
+            rrt_traj_solver,
+            traj_opt,
+            traj_options,
+            True,
+            timesteps,
+        )
+    print(f"Finished warm up....")
+
     actual_eval_num = start_states.theta.shape[0]
     trajopt_success = []
     traj_opt_total_time = []
@@ -429,6 +471,8 @@ def eval_mp_with_coll_scene(
 
     if remove_failed_trials:
         rename_suffix = "_prm_success"
+        if run_after_filtered:
+            rename_suffix = ""
         prm_success_filtered = [item for item in prm_success if item is not None]
         problem.save(jnp.array(prm_success_filtered), rename_suffix=rename_suffix)
 
@@ -465,7 +509,7 @@ if __name__ == "__main__":
     max_iter_num: int = args.max_iter
 
     start_from_initialization = False
-    run_after_filtered = False
+    run_after_filtered = True
     remove_failed_trials = True
     robot_config_path = "configs/robots/cc_scene_eval_tdcr.json"
     scene_name = os.path.splitext(os.path.basename(world_config_path))[0]
@@ -476,7 +520,7 @@ if __name__ == "__main__":
         world_config_path=world_config_path,
         save_dir=result_dir,
         num_sections=section_num,
-        road_map_nodes=1000,
+        road_map_nodes=1500,
         eval_num=repeat_num,
         start_from_initialization=start_from_initialization,
         remove_failed_trials=remove_failed_trials,
