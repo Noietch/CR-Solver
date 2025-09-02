@@ -363,7 +363,8 @@ def visualize_tendon_lengths_grid(
     # If total tendons not divisible, last section may get fewer/more; we slice safely below
     num_tendons_per_section = max(1, total_tendons // num_sections)
 
-    color_cycle = plt.get_cmap("tab10")
+    # color_cycle = plt.get_cmap("tab10")
+    color_cycle = ["#7ea6e0", "#97d077", "#ea6b66", "#d62728", "#9467bd", "#8c564b", "#e377c2", "#7f7f7f", "#bcbd22", "#17becf"]
 
     # Draw three sections (truncate/clip if fewer available)
     sections_to_plot = 3
@@ -377,12 +378,12 @@ def visualize_tendon_lengths_grid(
         ax.cla()
         # Plot each cable in this section
         for tendon_i, col_idx in enumerate(range(start, end)):
-            color = color_cycle(tendon_i % 10)
+            color = color_cycle[tendon_i % 10]
             ax.plot(
                 time,
                 lengths[:, col_idx],
                 color=color,
-                linewidth=1.5,
+                linewidth=2.8,
                 label=f"Cable {tendon_i + 1}",
             )
         # Titles and cosmetics
@@ -544,75 +545,18 @@ def visualize_error(save_path: str, ax: plt.Axes, set_precision: int = None):
         ax.axis("off")
         return
 
-    # Prefer directly saved per-timestep errors if available
-    if "position_errors" in data and "rotation_errors" in data:
-        position_errors = np.asarray(data["position_errors"])  # (T,)
-        rotation_errors = np.asarray(data["rotation_errors"])  # (T,)
-        T = min(position_errors.shape[0], rotation_errors.shape[0])
-        if T == 0:
-            ax.text(
-                0.5, 0.5, "Empty data", ha="center", va="center", transform=ax.transAxes
-            )
-            ax.axis("off")
-            return
-        position_errors = position_errors[:T]
-        rotation_errors = rotation_errors[:T]
-    else:
-        # Fallback: compute from reference and planned poses
-        if (
-            "target_position" not in data
-            or "target_wxyz" not in data
-            or "planned_tip_traj" not in data
-        ):
-            print(f"Warning: required keys missing in {save_path}")
-            ax.text(
-                0.5,
-                0.5,
-                "Invalid data",
-                ha="center",
-                va="center",
-                transform=ax.transAxes,
-            )
-            ax.axis("off")
-            return
-        ref_positions = np.asarray(data["target_position"])  # (T, 3)
-        ref_quats_wxyz = np.asarray(data["target_wxyz"])  # (T, 4)
-        tip_traj_mats = np.asarray(data["planned_tip_traj"])  # (T, 4, 4)
-        T = min(ref_positions.shape[0], ref_quats_wxyz.shape[0], tip_traj_mats.shape[0])
-        if T == 0:
-            ax.text(
-                0.5, 0.5, "Empty data", ha="center", va="center", transform=ax.transAxes
-            )
-            ax.axis("off")
-            return
-        ref_positions = ref_positions[:T]
-        ref_quats_wxyz = ref_quats_wxyz[:T]
-        tip_traj_mats = tip_traj_mats[:T]
-        plan_positions = tip_traj_mats[:, :3, 3]
-        plan_rot_mats = tip_traj_mats[:, :3, :3]
-        position_errors = np.linalg.norm(plan_positions - ref_positions, axis=-1)
 
-        def quat_wxyz_to_rotmat(q: np.ndarray) -> np.ndarray:
-            w, x, y, z = q
-            norm = np.sqrt(w * w + x * x + y * y + z * z)
-            if norm > 0:
-                w, x, y, z = w / norm, x / norm, y / norm, z / norm
-            return np.array(
-                [
-                    [1 - 2 * (y * y + z * z), 2 * (x * y - z * w), 2 * (x * z + y * w)],
-                    [2 * (x * y + z * w), 1 - 2 * (x * x + z * z), 2 * (y * z - x * w)],
-                    [2 * (x * z - y * w), 2 * (y * z + x * w), 1 - 2 * (x * x + y * y)],
-                ]
-            )
-
-        ref_rot_mats = np.stack(
-            [quat_wxyz_to_rotmat(q) for q in ref_quats_wxyz], axis=0
+    position_errors = np.asarray(data["position_errors"])  # (T,)
+    rotation_errors = np.asarray(data["rotation_errors"])  # (T,)
+    T = min(position_errors.shape[0], rotation_errors.shape[0])
+    if T == 0:
+        ax.text(
+            0.5, 0.5, "Empty data", ha="center", va="center", transform=ax.transAxes
         )
-        R_rel = np.einsum(
-            "tij,tjk->tik", np.transpose(ref_rot_mats, (0, 2, 1)), plan_rot_mats
-        )
-        traces = np.clip((np.trace(R_rel, axis1=1, axis2=2) - 1.0) / 2.0, -1.0, 1.0)
-        rotation_errors = np.arccos(traces)
+        ax.axis("off")
+        return
+    position_errors = position_errors[:T]
+    rotation_errors = rotation_errors[:T]
     # Convert rotation error from radians to degrees for plotting
     rotation_errors = np.rad2deg(rotation_errors)
 
@@ -622,18 +566,21 @@ def visualize_error(save_path: str, ax: plt.Axes, set_precision: int = None):
     position_errors = position_errors * 1000.0
 
     ax.cla()
-    color_pos = "#1f77b4"  # blue
-    color_rot = "#ff7f0e"  # orange
+    color_pos = "#a680b8"  # blue
+    color_rot = "#ffb570"  # orange
 
     ax.plot(
         timesteps,
         position_errors,
         color=color_pos,
-        linewidth=1.8,
+        linewidth=2.8,
         label="Position Error",
     )
-    ax.grid(False)
+
     set_2d_tick_labelsize(ax)
+    ax.grid(False)
+    # ax.set_ylim(-0.3, 32.0)
+    # ax.yaxis.set_major_locator(MultipleLocator(10.0))
     # ax.legend(fontsize=14, frameon=False, loc="upper right", markerscale=20)
 
     ax_right = ax.twinx()
@@ -641,11 +588,14 @@ def visualize_error(save_path: str, ax: plt.Axes, set_precision: int = None):
         timesteps,
         rotation_errors,
         color=color_rot,
-        linewidth=1.8,
+        linewidth=2.8,
         label="Rotation Error",
     )
     set_2d_tick_labelsize(ax_right)
     ax_right.grid(False)
+    # ax_right.set_ylim(-0.04, 4.3)
+    # ax_right.yaxis.set_major_locator(MultipleLocator(1.0))
+
     # ax_right.legend(fontsize=14, frameon=False, loc="center right", markerscale=20)
 
     # Ensure consistent decimal places on both y-axes in the same figure
@@ -678,6 +628,8 @@ def plot_error() -> None:
     position and rotation errors.
     """
     letters = ["I", "C", "R", "A"]
+    # letters = ["C"]
+
     fig, axes = plt.subplots(4, 1, figsize=(6, 16), sharex=True)
 
     for idx, letter in enumerate(letters):
@@ -725,6 +677,6 @@ if __name__ == "__main__":
     #             print(f"Error in plot_mp_with_coll_scene: {e}, {save_path}")
     # print("--------------ERROR PATH LIST--------------")
     # print(error_path_list)
-    plot_constrain_motion_planning()
-    plot_tendon_length()
+    # plot_constrain_motion_planning()
+    # plot_tendon_length()
     plot_error()

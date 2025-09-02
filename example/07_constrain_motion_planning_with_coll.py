@@ -120,9 +120,6 @@ def create_A():
         (0, 0),
         (LETTER_WIDTH / 2, LETTER_HEIGHT),
         (LETTER_WIDTH, 0),
-        None,
-        (LETTER_WIDTH * 0.3, LETTER_HEIGHT / 3),
-        (LETTER_WIDTH * 0.8, LETTER_HEIGHT / 3),
     ]
 
 

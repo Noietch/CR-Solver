@@ -32,7 +32,7 @@ class TrajOptimizerOptions:
     trajectory_length_weight: float = 15.0
 
     # Collision weight
-    collision_weight: float = 300.0
+    collision_weight: float = 80.0 # mp:300,constrain-mp:40
 
     # Constraint weights
     start_pose_weight: float = 100.0
@@ -45,8 +45,8 @@ class TrajOptimizerOptions:
     # time_collision_weight: float = 40.0
 
     # Trajectory following weights
-    pose_position_weight: float = 100.0
-    pose_orientation_weight: float = 50.0
+    pose_position_weight: float = 200.0
+    pose_orientation_weight: float = 60.0
     # follow_limit_weight: float = 100.0
     # follow_smoothness_weight: float = 40.0
     # follow_collision_weight: float = 50.0

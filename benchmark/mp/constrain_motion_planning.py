@@ -602,16 +602,16 @@ if __name__ == "__main__":
     traj_follow_jit = jax.jit(traj_solver.optimize_tip_traj_follow)
 
     cases = [
-        {
-            "name": "square",
-            "traj": "square",
-            "obstacle": "configs/maps/constrain_motion_planning/obstacles_con_square.json",
-            "start_pos": (-0.05, -2.3, 0.96),
-            "start_wxyz": (0.83, 0.54, 0.06, 0.1),
-            "end_pos": (0.7, -1.45, 2.75),
-            "end_wxyz": (1.0, 0, 0, 0),
-            "letters": "",
-        },
+        # {
+        #     "name": "square",
+        #     "traj": "square",
+        #     "obstacle": "configs/maps/constrain_motion_planning/obstacles_con_square.json",
+        #     "start_pos": (-0.05, -2.3, 0.96),
+        #     "start_wxyz": (0.83, 0.54, 0.06, 0.1),
+        #     "end_pos": (0.7, -1.45, 2.75),
+        #     "end_wxyz": (1.0, 0, 0, 0),
+        #     "letters": "",
+        # },
         # {
         #     "name": "sine",
         #     "traj": "sine",
