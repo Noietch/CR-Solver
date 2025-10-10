@@ -364,7 +364,18 @@ def visualize_tendon_lengths_grid(
     num_tendons_per_section = max(1, total_tendons // num_sections)
 
     # color_cycle = plt.get_cmap("tab10")
-    color_cycle = ["#7ea6e0", "#97d077", "#ea6b66", "#d62728", "#9467bd", "#8c564b", "#e377c2", "#7f7f7f", "#bcbd22", "#17becf"]
+    color_cycle = [
+        "#7ea6e0",
+        "#97d077",
+        "#ea6b66",
+        "#d62728",
+        "#9467bd",
+        "#8c564b",
+        "#e377c2",
+        "#7f7f7f",
+        "#bcbd22",
+        "#17becf",
+    ]
 
     # Draw three sections (truncate/clip if fewer available)
     sections_to_plot = 3
@@ -544,7 +555,6 @@ def visualize_error(save_path: str, ax: plt.Axes, set_precision: int = None):
         )
         ax.axis("off")
         return
-
 
     position_errors = np.asarray(data["position_errors"])  # (T,)
     rotation_errors = np.asarray(data["rotation_errors"])  # (T,)

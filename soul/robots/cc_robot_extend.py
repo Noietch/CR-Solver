@@ -13,6 +13,7 @@ from jaxtyping import Float
 class CCModelConfig:
     """Configuration for the CCModel."""
 
+    radius: jdc.Static[float]
     num_sections: jdc.Static[int]
     num_points_per_section: jdc.Static[int]
 
@@ -40,6 +41,7 @@ class CCModelConfig:
         )
 
         return cls(
+            radius=config_dict["radius"],
             num_sections=config_dict["num_sections"],
             num_points_per_section=config_dict["num_points_per_section"],
             lower_limits_length=jnp.array(config_dict["lower_limits_length"]),

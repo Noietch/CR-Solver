@@ -126,6 +126,116 @@ class IKSolver:
             )
         ]
 
+    def solve_ik_with_initial_states(
+        self,
+        target_wxyz: Array,
+        target_position: Array,
+        initial_states: Array,
+    ) -> Array:
+        robot_var = self.robot.var_cls(0)
+        factors = [
+            pose_cost(
+                self.robot,
+                robot_var,
+                jaxlie.SE3.from_rotation_and_translation(
+                    jaxlie.SO3(target_wxyz), target_position
+                ),
+                pos_weight=500.0,
+                ori_weight=100.0,
+            ),
+            (
+                limit_cost(
+                    self.robot,
+                    robot_var,
+                    weight=100.0,
+                )
+                if isinstance(self.robot, CCRobot)
+                else limit_cost_extend(
+                    self.robot,
+                    robot_var,
+                    weight=100.0,
+                )
+            ),
+        ]
+        sol, summary = (
+            jaxls.LeastSquaresProblem(factors, [robot_var])
+            .analyze()
+            .solve(
+                initial_vals=jaxls.VarValues.make(
+                    [robot_var.with_value(initial_states)]
+                ),
+                verbose=False,
+                linear_solver="dense_cholesky",
+                termination=jaxls.TerminationConfig(
+                    max_iterations=self.total_steps,
+                    early_termination=False,
+                ),
+                trust_region=jaxls.TrustRegionConfig(lambda_initial=10.0),
+                return_summary=True,
+            )
+        )
+        return sol[robot_var]
+
+    def solve_ik_with_initial_states_with_coll(
+        self,
+        target_wxyz: Array,
+        target_position: Array,
+        initial_states: Array,
+        world_coll_list: Sequence[CollGeom],
+    ) -> Array:
+        robot_var = self.robot.var_cls(0)
+        factors = [
+            pose_cost(
+                self.robot,
+                robot_var,
+                jaxlie.SE3.from_rotation_and_translation(
+                    jaxlie.SO3(target_wxyz), target_position
+                ),
+                pos_weight=50.0,
+                ori_weight=10.0,
+            ),
+            (
+                limit_cost(
+                    self.robot,
+                    robot_var,
+                    weight=1000.0,
+                )
+                if isinstance(self.robot, CCRobot)
+                else limit_cost_extend(
+                    self.robot,
+                    robot_var,
+                    weight=1000.0,
+                )
+            ),
+            # self_collision_cost(self.robot, self.coll, robot_var, 0.05, 10.0),
+        ]
+        factors.extend(
+            [
+                world_collision_cost(
+                    self.robot, self.coll, robot_var, world_coll, 0.05, 50.0
+                )
+                for world_coll in world_coll_list
+            ]
+        )
+        sol, _ = (
+            jaxls.LeastSquaresProblem(factors, [robot_var])
+            .analyze()
+            .solve(
+                initial_vals=jaxls.VarValues.make(
+                    [robot_var.with_value(initial_states)]
+                ),
+                verbose=False,
+                linear_solver="dense_cholesky",
+                termination=jaxls.TerminationConfig(
+                    max_iterations=self.total_steps,
+                    early_termination=False,
+                ),
+                trust_region=jaxls.TrustRegionConfig(lambda_initial=10.0),
+                return_summary=True,
+            )
+        )
+        return sol[robot_var]
+
     def solve_ik_with_coll(
         self,
         target_wxyz: Array,

@@ -15,6 +15,8 @@ from ..geom.collision_cc_robot import RobotCollision
 from ..geom.collision_world import WorldCollision
 from ..geom.geometry import Sphere, BoundingBox
 from ..robots.cc_robot import ConstantCurvatureState, CCRobot
+from ..robots.cc_robot_extend import ConstantCurvatureState as ConstantCurvatureStateExtend
+from ..robots.cc_robot_extend import CCRobot as CCRobotExtend
 
 
 class ViserSoftRobot:
@@ -39,11 +41,19 @@ class ViserSoftRobot:
         self.robot_color = robot_color
 
     def reset_pose(self):
-        default_state = ConstantCurvatureState(
-            base_position=jnp.array([0.0, 0.0, 0.0]),
-            theta=jnp.zeros(self.robot_config.num_sections) + 1e-6,
-            phi=jnp.zeros(self.robot_config.num_sections) + 1e-6,
-        )
+        if isinstance(self.robot, CCRobotExtend):
+            default_state = ConstantCurvatureStateExtend(
+                base_position=jnp.array([0.0, 0.0, 0.0]),
+                theta=jnp.zeros(self.robot_config.num_sections) + 1e-6,
+                phi=jnp.zeros(self.robot_config.num_sections) + 1e-6,
+                length=jnp.zeros(self.robot_config.num_sections) + 1e-6,
+            )
+        else:
+            default_state = ConstantCurvatureState(
+                base_position=jnp.array([0.0, 0.0, 0.0]),
+                theta=jnp.zeros(self.robot_config.num_sections) + 1e-6,
+                phi=jnp.zeros(self.robot_config.num_sections) + 1e-6,
+            )
         poses = self.robot.forward_kinematics(default_state)
         return poses
 
