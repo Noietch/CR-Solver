@@ -1,14 +1,16 @@
-import jax
-from jaxtyping import Array
-import jax.numpy as jnp
-import jaxlie
-import time
 import json
 import os
+import time
 from typing import Callable
+
+import jax
+import jax.numpy as jnp
+import jaxlie
+from jaxtyping import Array
+
 from soul.robots.cc_robot import CCRobot, ConstantCurvatureState
+from soul.robots.cc_robot_extend import CCRobot as CCRobotExtend
 from soul.robots.cc_robot_extend import (
-    CCRobot as CCRobotExtend,
     ConstantCurvatureState as ConstantCurvatureStateExtend,
 )
 from soul.solver import IKSolver
@@ -31,9 +33,9 @@ def ik_metric(
     target_transform = jaxlie.SE3.from_rotation_and_translation(
         jaxlie.SO3(target_orientation), target_position
     )
-    error = jnp.linalg.norm(
-        (target_transform.inverse() @ result_transform).log(), axis=-1
-    )
+    error = jnp.linalg.norm((target_transform.inverse()
+                             @ result_transform).log(),
+                            axis=-1)
 
     # Individual failure masks
     acc_mask = error < 0.01
@@ -72,7 +74,9 @@ def ik_metric(
     num_phi_fail = jnp.sum(phi_fail_mask)
 
     # Combined failure categories
-    num_accuracy_fail = jnp.sum(~acc_mask)  # Failed due to position OR rotation
+    num_accuracy_fail = jnp.sum(
+        ~acc_mask
+    )  # Failed due to position OR rotation
     num_limit_fail = jnp.sum(
         ~(theta_mask & phi_mask)
     )  # Failed due to theta OR phi limits
@@ -105,8 +109,12 @@ def ik_metric(
         "phi_fail_rate": float(num_phi_fail / total_samples * 100),
         "accuracy_fail_rate": float(num_accuracy_fail / total_samples * 100),
         "limit_fail_rate": float(num_limit_fail / total_samples * 100),
-        "accuracy_only_fail_rate": float(num_accuracy_only_fail / total_samples * 100),
-        "limit_only_fail_rate": float(num_limit_only_fail / total_samples * 100),
+        "accuracy_only_fail_rate": float(
+            num_accuracy_only_fail / total_samples * 100
+        ),
+        "limit_only_fail_rate": float(
+            num_limit_only_fail / total_samples * 100
+        ),
         "both_fail_rate": float(num_both_fail / total_samples * 100),
     }
 
@@ -117,7 +125,9 @@ def ik_metric(
     )
 
 
-def sample_states_test(robot: CCRobot, num_states: int) -> ConstantCurvatureState:
+def sample_states_test(
+    robot: CCRobot, num_states: int
+) -> ConstantCurvatureState:
     random_key = jax.random.PRNGKey(42)
     random_key, subkey = jax.random.split(random_key)
     theta = jax.random.uniform(
@@ -204,7 +214,9 @@ def eval_ik_with_no_coll(
     """Main function for basic IK."""
     num_sections = robot.config.num_sections
 
-    print(f"start solve ik of num sections {num_sections}, num eval {eval_num}")
+    print(
+        f"start solve ik of num sections {num_sections}, num eval {eval_num}"
+    )
 
     # sample target transforms
     initial_states = sample_states_test(robot, eval_num)
@@ -217,7 +229,7 @@ def eval_ik_with_no_coll(
     save_targets_to_csv(target_wxyz, target_position, num_sections, eval_num)
 
     # warmup
-    print(f"finish forward, start warmup")
+    print("finish forward, start warmup")
     jax.block_until_ready(batched_ik_solve(target_wxyz, target_position))
 
     # solve ik
@@ -232,8 +244,13 @@ def eval_ik_with_no_coll(
     tip_transforms = jaxlie.SE3.from_matrix(fk_result[:, -1, ...])
 
     # compute metric
-    metric = ik_metric(robot, solution, tip_transforms, target_position, target_wxyz)
-    print(f"finish solve ik of num sections {num_sections}, total time: {total_time}s")
+    metric = ik_metric(
+        robot, solution, tip_transforms, target_position, target_wxyz
+    )
+    print(
+        f"finish solve ik of num sections {num_sections}, "
+        f"total time: {total_time}s"
+    )
     print(f"success rate: {metric[0]:.2f}%")
     print(f"error: {metric[1]}")
 
@@ -242,10 +259,12 @@ def eval_ik_with_no_coll(
     print("\n--- Detailed Failure Analysis ---")
     print(f"Total samples: {failure_stats['total_samples']}")
     print(
-        f"Successful: {failure_stats['num_success']} ({failure_stats['success_rate']:.2f}%)"
+        f"Successful: {failure_stats['num_success']} "
+        f"({failure_stats['success_rate']:.2f}%)"
     )
     print(
-        f"Failed: {failure_stats['num_fail']} ({100 - failure_stats['success_rate']:.2f}%)"
+        f"Failed: {failure_stats['num_fail']} "
+        f"({100 - failure_stats['success_rate']:.2f}%)"
     )
 
     error = metric[1]
@@ -262,7 +281,8 @@ def eval_ik_with_no_coll(
 
 
 def eval_ik_all_sections(
-    robot_config_path: str, section_list: list, eval_num_list: list, eval_type: str
+    robot_config_path: str, section_list: list, eval_num_list: list,
+    eval_type: str
 ):
     all_results_summary = []
     for num_sections in section_list:
@@ -276,16 +296,25 @@ def eval_ik_all_sections(
             raise ValueError(f"Invalid eval type: {eval_type}")
         batched_fk = jax.vmap(robot._forward_kinematics)
         solver = IKSolver(
-            robot, num_seeds_init=4, num_seeds_final=2, total_steps=200, init_steps=10
+            robot,
+            num_seeds_init=4,
+            num_seeds_final=2,
+            total_steps=200,
+            init_steps=10
         )
         batched_ik_solve = jax.vmap(jax.jit(solver.solve_ik_best))
         for eval_num in eval_num_list:
             all_results_summary.append(
-                eval_ik_with_no_coll(robot, eval_num, batched_ik_solve, batched_fk)
+                eval_ik_with_no_coll(
+                    robot, eval_num, batched_ik_solve, batched_fk
+                )
             )
 
     print("\n\n--- IK test resume ---")
-    header = f"{'num sections':<10} | {'eval num':<15} | {'error':<15} | {'success rate (%)':<15} | {'total time (s)':<18} "
+    header = (
+        f"{'num sections':<10} | {'eval num':<15} | {'error':<15} | "
+        f"{'success rate (%)':<15} | {'total time (s)':<18} "
+    )
     print(header)
     print("-" * len(header))
     for res_item in all_results_summary:
@@ -294,7 +323,8 @@ def eval_ik_all_sections(
         sr_str = f"{res_item['success rate']:.2f}"
         time_str = f"{res_item['total time']:.3f}"
         print(
-            f"{res_item['num sections']:<10} | {eval_num_str:<15} | {error_str:<15} | {sr_str:<15} | {time_str:<18}"
+            f"{res_item['num sections']:<10} | {eval_num_str:<15} | "
+            f"{error_str:<15} | {sr_str:<15} | {time_str:<18}"
         )
 
 
@@ -303,4 +333,6 @@ if __name__ == "__main__":
     eval_num_list = [1000]
     robot_config_path = "configs/robots/cc_eval.json"
     eval_type = "cc"
-    eval_ik_all_sections(robot_config_path, section_list, eval_num_list, eval_type)
+    eval_ik_all_sections(
+        robot_config_path, section_list, eval_num_list, eval_type
+    )

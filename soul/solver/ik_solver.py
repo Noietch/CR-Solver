@@ -1,24 +1,26 @@
-import jax
-import jaxls
-import jaxlie
-import jax.numpy as jnp
-from jaxtyping import Array
 from typing import Sequence
 
-from ..robots.cc_robot import CCRobot
-from ..solver.utils import sample_states, newton_raphson
+import jax
+import jax.numpy as jnp
+import jaxlie
+import jaxls
+from jaxtyping import Array
+
 from ..costs import (
-    pose_cost,
     limit_cost,
-    self_collision_cost,
-    world_collision_cost,
-    smoothness_cost,
     limit_cost_extend,
+    pose_cost,
+    self_collision_cost,
+    smoothness_cost,
+    world_collision_cost,
 )
-from ..geom import RobotCollision, CollGeom
+from ..geom import CollGeom, RobotCollision
+from ..robots.cc_robot import CCRobot
+from ..solver.utils import newton_raphson, sample_states
 
 
 class IKSolver:
+
     def __init__(
         self,
         robot: CCRobot,
@@ -30,7 +32,7 @@ class IKSolver:
     ):
         self.robot = robot
         self.sample_root = newton_raphson(
-            lambda x: x ** (robot.config.num_sections + 1) - x - 1, 1.0, 10_000
+            lambda x: x**(robot.config.num_sections + 1) - x - 1, 1.0, 10_000
         )
         self.num_seeds_init = num_seeds_init
         self.num_seeds_final = num_seeds_final
@@ -41,7 +43,8 @@ class IKSolver:
     def solve_ik(self, target_wxyz: Array, target_position: Array) -> Array:
 
         def solve_one(
-            initial_states: Array, lambda_initial: float | Array, max_iters: int
+            initial_states: Array, lambda_initial: float | Array,
+            max_iters: int
         ) -> tuple[Array, jaxls.SolveSummary]:
             """Solve IK problem with a single initial condition. We'll vmap
             over initial_states to solve problems in parallel."""
@@ -62,8 +65,7 @@ class IKSolver:
                         robot_var,
                         weight=100.0,
                     )
-                    if isinstance(self.robot, CCRobot)
-                    else limit_cost_extend(
+                    if isinstance(self.robot, CCRobot) else limit_cost_extend(
                         self.robot,
                         robot_var,
                         weight=100.0,
@@ -71,19 +73,21 @@ class IKSolver:
                 ),
             ]
             sol, summary = (
-                jaxls.LeastSquaresProblem(factors, [robot_var])
-                .analyze()
-                .solve(
-                    initial_vals=jaxls.VarValues.make(
-                        [robot_var.with_value(initial_states)]
-                    ),
+                jaxls.LeastSquaresProblem(factors, [
+                    robot_var
+                ]).analyze().solve(
+                    initial_vals=jaxls.VarValues.make([
+                        robot_var.with_value(initial_states)
+                    ]),
                     verbose=False,
                     linear_solver="dense_cholesky",
                     termination=jaxls.TerminationConfig(
                         max_iterations=max_iters,
                         early_termination=False,
                     ),
-                    trust_region=jaxls.TrustRegionConfig(lambda_initial=lambda_initial),
+                    trust_region=jaxls.TrustRegionConfig(
+                        lambda_initial=lambda_initial
+                    ),
                     return_summary=True,
                 )
             )
@@ -98,33 +102,32 @@ class IKSolver:
 
         # Optimize the initial seeds.
         initial_sols, summary = vmapped_solve(
-            initial_states, jnp.full(self.num_seeds_init, 10.0), self.init_steps
+            initial_states, jnp.full(self.num_seeds_init, 10.0),
+            self.init_steps
         )
 
         # Get the best initial solutions.
         best_initial_sols = jnp.argsort(
             summary.cost_history[jnp.arange(self.num_seeds_init), -1]
-        )[: self.num_seeds_final]
+        )[:self.num_seeds_final]
 
         # Optimize more for the best initial solutions.
         best_sols, summary = vmapped_solve(
             initial_sols[best_initial_sols],
-            summary.lambda_history[jnp.arange(self.num_seeds_init), -1][
-                best_initial_sols
-            ],
+            summary.lambda_history[jnp.arange(self.num_seeds_init),
+                                   -1][best_initial_sols],
             self.total_steps - self.init_steps,
         )
         return best_sols, summary
 
-    def solve_ik_best(self, target_wxyz: Array, target_position: Array) -> Array:
+    def solve_ik_best(
+        self, target_wxyz: Array, target_position: Array
+    ) -> Array:
         best_sols, summary = self.solve_ik(target_wxyz, target_position)
-        return best_sols[
-            jnp.argmin(
-                summary.cost_history[
-                    jnp.arange(self.num_seeds_final), summary.iterations
-                ]
-            )
-        ]
+        return best_sols[jnp.argmin(
+            summary.cost_history[jnp.arange(self.num_seeds_final),
+                                 summary.iterations]
+        )]
 
     def solve_ik_with_initial_states(
         self,
@@ -148,9 +151,7 @@ class IKSolver:
                     self.robot,
                     robot_var,
                     weight=100.0,
-                )
-                if isinstance(self.robot, CCRobot)
-                else limit_cost_extend(
+                ) if isinstance(self.robot, CCRobot) else limit_cost_extend(
                     self.robot,
                     robot_var,
                     weight=100.0,
@@ -158,12 +159,10 @@ class IKSolver:
             ),
         ]
         sol, summary = (
-            jaxls.LeastSquaresProblem(factors, [robot_var])
-            .analyze()
-            .solve(
-                initial_vals=jaxls.VarValues.make(
-                    [robot_var.with_value(initial_states)]
-                ),
+            jaxls.LeastSquaresProblem(factors, [robot_var]).analyze().solve(
+                initial_vals=jaxls.VarValues.make([
+                    robot_var.with_value(initial_states)
+                ]),
                 verbose=False,
                 linear_solver="dense_cholesky",
                 termination=jaxls.TerminationConfig(
@@ -199,31 +198,25 @@ class IKSolver:
                     self.robot,
                     robot_var,
                     weight=1000.0,
-                )
-                if isinstance(self.robot, CCRobot)
-                else limit_cost_extend(
+                ) if isinstance(self.robot, CCRobot) else limit_cost_extend(
                     self.robot,
                     robot_var,
                     weight=1000.0,
                 )
             ),
-            # self_collision_cost(self.robot, self.coll, robot_var, 0.05, 10.0),
+            # self_collision_cost(
+            #     self.robot, self.coll, robot_var, 0.05, 10.0),
         ]
-        factors.extend(
-            [
-                world_collision_cost(
-                    self.robot, self.coll, robot_var, world_coll, 0.05, 50.0
-                )
-                for world_coll in world_coll_list
-            ]
-        )
+        factors.extend([
+            world_collision_cost(
+                self.robot, self.coll, robot_var, world_coll, 0.05, 50.0
+            ) for world_coll in world_coll_list
+        ])
         sol, _ = (
-            jaxls.LeastSquaresProblem(factors, [robot_var])
-            .analyze()
-            .solve(
-                initial_vals=jaxls.VarValues.make(
-                    [robot_var.with_value(initial_states)]
-                ),
+            jaxls.LeastSquaresProblem(factors, [robot_var]).analyze().solve(
+                initial_vals=jaxls.VarValues.make([
+                    robot_var.with_value(initial_states)
+                ]),
                 verbose=False,
                 linear_solver="dense_cholesky",
                 termination=jaxls.TerminationConfig(
@@ -242,8 +235,10 @@ class IKSolver:
         target_position: Array,
         world_coll_list: Sequence[CollGeom],
     ) -> Array:
+
         def solve_one(
-            initial_states: Array, lambda_initial: float | Array, max_iters: int
+            initial_states: Array, lambda_initial: float | Array,
+            max_iters: int
         ) -> tuple[Array, jaxls.SolveSummary]:
             """Solve IK problem with a single initial condition. We'll vmap
             over initial_states to solve problems in parallel."""
@@ -264,37 +259,37 @@ class IKSolver:
                         robot_var,
                         weight=1000.0,
                     )
-                    if isinstance(self.robot, CCRobot)
-                    else limit_cost_extend(
+                    if isinstance(self.robot, CCRobot) else limit_cost_extend(
                         self.robot,
                         robot_var,
                         weight=1000.0,
                     )
                 ),
-                self_collision_cost(self.robot, self.coll, robot_var, 0.05, 10.0),
+                self_collision_cost(
+                    self.robot, self.coll, robot_var, 0.05, 10.0
+                ),
             ]
-            factors.extend(
-                [
-                    world_collision_cost(
-                        self.robot, self.coll, robot_var, world_coll, 0.05, 20.0
-                    )
-                    for world_coll in world_coll_list
-                ]
-            )
+            factors.extend([
+                world_collision_cost(
+                    self.robot, self.coll, robot_var, world_coll, 0.05, 20.0
+                ) for world_coll in world_coll_list
+            ])
             sol, summary = (
-                jaxls.LeastSquaresProblem(factors, [robot_var])
-                .analyze()
-                .solve(
-                    initial_vals=jaxls.VarValues.make(
-                        [robot_var.with_value(initial_states)]
-                    ),
+                jaxls.LeastSquaresProblem(factors, [
+                    robot_var
+                ]).analyze().solve(
+                    initial_vals=jaxls.VarValues.make([
+                        robot_var.with_value(initial_states)
+                    ]),
                     verbose=False,
                     linear_solver="dense_cholesky",
                     termination=jaxls.TerminationConfig(
                         max_iterations=max_iters,
                         early_termination=False,
                     ),
-                    trust_region=jaxls.TrustRegionConfig(lambda_initial=lambda_initial),
+                    trust_region=jaxls.TrustRegionConfig(
+                        lambda_initial=lambda_initial
+                    ),
                     return_summary=True,
                 )
             )
@@ -309,20 +304,20 @@ class IKSolver:
 
         # Optimize the initial seeds.
         initial_sols, summary = vmapped_solve(
-            initial_states, jnp.full(self.num_seeds_init, 10.0), self.init_steps
+            initial_states, jnp.full(self.num_seeds_init, 10.0),
+            self.init_steps
         )
 
         # Get the best initial solutions.
         best_initial_sols = jnp.argsort(
             summary.cost_history[jnp.arange(self.num_seeds_init), -1]
-        )[: self.num_seeds_final]
+        )[:self.num_seeds_final]
 
         # Optimize more for the best initial solutions.
         best_sols, summary = vmapped_solve(
             initial_sols[best_initial_sols],
-            summary.lambda_history[jnp.arange(self.num_seeds_init), -1][
-                best_initial_sols
-            ],
+            summary.lambda_history[jnp.arange(self.num_seeds_init),
+                                   -1][best_initial_sols],
             self.total_steps - self.init_steps,
         )
         return best_sols, summary
@@ -336,13 +331,10 @@ class IKSolver:
         best_sols, summary = self.solve_ik_with_coll(
             target_wxyz, target_position, world_coll_list
         )
-        return best_sols[
-            jnp.argmin(
-                summary.cost_history[
-                    jnp.arange(self.num_seeds_final), summary.iterations
-                ]
-            )
-        ]
+        return best_sols[jnp.argmin(
+            summary.cost_history[jnp.arange(self.num_seeds_final),
+                                 summary.iterations]
+        )]
 
     def solve_ik_with_coll_start_end(
         self,
@@ -352,8 +344,10 @@ class IKSolver:
         end_position: Array,
         world_coll_list: Sequence[CollGeom],
     ) -> Array:
+
         def solve_one(
-            initial_states: Array, lambda_initial: float | Array, max_iters: int
+            initial_states: Array, lambda_initial: float | Array,
+            max_iters: int
         ) -> tuple[Array, jaxls.SolveSummary]:
             """Solve IK problem with a single initial condition. We'll vmap
             over initial_states to solve problems in parallel."""
@@ -388,22 +382,21 @@ class IKSolver:
                     joint_vars,
                     jnp.array(100.0)[None],
                 ),
-                self_collision_cost(batch_robot, batch_coll, joint_vars, 0.05, 10.0),
+                self_collision_cost(
+                    batch_robot, batch_coll, joint_vars, 0.05, 10.0
+                ),
             ]
 
-            factors.extend(
-                [
-                    world_collision_cost(
-                        batch_robot,
-                        batch_coll,
-                        joint_vars,
-                        jax.tree.map(lambda x: x[None], world_coll),
-                        0.05,
-                        10.0,
-                    )
-                    for world_coll in world_coll_list
-                ]
-            )
+            factors.extend([
+                world_collision_cost(
+                    batch_robot,
+                    batch_coll,
+                    joint_vars,
+                    jax.tree.map(lambda x: x[None], world_coll),
+                    0.05,
+                    10.0,
+                ) for world_coll in world_coll_list
+            ])
             factors.append(
                 smoothness_cost(
                     joint_var_0,
@@ -413,19 +406,21 @@ class IKSolver:
             )
 
             sol, summary = (
-                jaxls.LeastSquaresProblem(factors, [joint_vars])
-                .analyze()
-                .solve(
-                    initial_vals=jaxls.VarValues.make(
-                        [joint_vars.with_value(initial_states)]
-                    ),
+                jaxls.LeastSquaresProblem(factors, [
+                    joint_vars
+                ]).analyze().solve(
+                    initial_vals=jaxls.VarValues.make([
+                        joint_vars.with_value(initial_states)
+                    ]),
                     verbose=False,
                     linear_solver="dense_cholesky",
                     termination=jaxls.TerminationConfig(
                         max_iterations=max_iters,
                         early_termination=False,
                     ),
-                    trust_region=jaxls.TrustRegionConfig(lambda_initial=lambda_initial),
+                    trust_region=jaxls.TrustRegionConfig(
+                        lambda_initial=lambda_initial
+                    ),
                     return_summary=True,
                 )
             )
@@ -450,14 +445,13 @@ class IKSolver:
         # Get the best initial solutions.
         best_initial_sols = jnp.argsort(
             summary.cost_history[jnp.arange(self.num_seeds_init), -1]
-        )[: self.num_seeds_final]
+        )[:self.num_seeds_final]
 
         # Optimize more for the best initial solutions.
         best_sols, summary = vmapped_solve(
             initial_sols[best_initial_sols],
-            summary.lambda_history[jnp.arange(self.num_seeds_init), -1][
-                best_initial_sols
-            ],
+            summary.lambda_history[jnp.arange(self.num_seeds_init),
+                                   -1][best_initial_sols],
             self.total_steps - self.init_steps,
         )
         return best_sols, summary
@@ -473,10 +467,7 @@ class IKSolver:
         best_sols, summary = self.solve_ik_with_coll_start_end(
             start_wxyz, start_position, end_wxyz, end_position, world_coll_list
         )
-        return best_sols[
-            jnp.argmin(
-                summary.cost_history[
-                    jnp.arange(self.num_seeds_final), summary.iterations
-                ]
-            )
-        ]
+        return best_sols[jnp.argmin(
+            summary.cost_history[jnp.arange(self.num_seeds_final),
+                                 summary.iterations]
+        )]

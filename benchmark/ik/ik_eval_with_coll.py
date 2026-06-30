@@ -1,33 +1,27 @@
-import jax
-from jaxtyping import Array
-import numpy as np
-import jax.numpy as jnp
-import jaxlie
-import time
 import json
 import os
+import time
 from typing import Callable, Sequence
+
+import jax
+import jax.numpy as jnp
+import jaxlie
+import numpy as np
+from jaxtyping import Array
+
+from soul.geom import CollGeom, RobotCollision, WorldCollision
 from soul.robots.cc_robot import CCRobot, ConstantCurvatureState
+from soul.robots.cc_robot_extend import CCRobot as CCRobotExtend
 from soul.robots.cc_robot_extend import (
-    CCRobot as CCRobotExtend,
     ConstantCurvatureState as ConstantCurvatureStateExtend,
 )
 from soul.solver import IKSolver
-from soul.geom import (
-    RobotCollision,
-    WorldCollision,
-    CollGeom,
-    colldist_from_sdf,
-)
 
 jax.config.update("jax_default_matmul_precision", "highest")
 
 DISABLE_JIT = False
 
 if DISABLE_JIT:
-    import os
-    import jax
-
     os.environ["JAX_DISABLE_JIT"] = "True"
     jax.config.update("jax_disable_jit", True)
 
@@ -41,28 +35,32 @@ def ik_metric_with_coll(
     solution_collision_mask: Array,
 ) -> tuple[float, float, dict]:
     """
-    Calculates IK success metrics considering accuracy, joint limits, and collision avoidance.
+    Calculates IK success metrics considering accuracy, joint limits, and
+    collision avoidance.
 
     Args:
         robot: The CC robot model
         solution: The solution states from the IK solver
-        result_transform: The resulting end-effector transforms from the IK solver.
+        result_transform: The resulting end-effector transforms from the IK
+            solver.
         target_position: The target positions.
         target_orientation: The target orientations (as wxyz quaternions).
-        solution_collision_mask: A boolean array where True indicates a collision.
+        solution_collision_mask: A boolean array where True indicates a
+            collision.
 
     Returns:
         A tuple containing:
-        - final_success_rate: The percentage of solutions that are accurate, within limits, and collision-free.
+        - final_success_rate: The percentage of solutions that are accurate,
+          within limits, and collision-free.
         - final_error: The mean error for successful solutions.
         - failure_stats: Detailed failure statistics dictionary.
     """
     target_transform = jaxlie.SE3.from_rotation_and_translation(
         jaxlie.SO3(target_orientation), target_position
     )
-    error = jnp.linalg.norm(
-        (target_transform.inverse() @ result_transform).log(), axis=-1
-    )
+    error = jnp.linalg.norm((target_transform.inverse()
+                             @ result_transform).log(),
+                            axis=-1)
 
     # Individual failure masks for accuracy
     acc_mask = error < 0.01
@@ -121,8 +119,12 @@ def ik_metric_with_coll(
     num_collision_fail = jnp.sum(solution_collision_mask)
 
     # Combined failure categories
-    num_accuracy_fail = jnp.sum(~acc_mask)  # Failed due to position OR rotation
-    num_limit_fail = jnp.sum(~joint_limits_mask)  # Failed due to any joint limits
+    num_accuracy_fail = jnp.sum(
+        ~acc_mask
+    )  # Failed due to position OR rotation
+    num_limit_fail = jnp.sum(
+        ~joint_limits_mask
+    )  # Failed due to any joint limits
 
     failure_stats = {
         "total_samples": int(total_samples),
@@ -133,9 +135,8 @@ def ik_metric_with_coll(
         "theta_fail_rate": float(num_theta_fail / total_samples * 100),
         "phi_fail_rate": float(num_phi_fail / total_samples * 100),
         "length_fail_rate": (
-            float(num_length_fail / total_samples * 100)
-            if isinstance(robot, CCRobotExtend)
-            else 0
+            float(num_length_fail / total_samples
+                  * 100) if isinstance(robot, CCRobotExtend) else 0
         ),
         "collision_fail_rate": float(num_collision_fail / total_samples * 100),
         "accuracy_fail_rate": float(num_accuracy_fail / total_samples * 100),
@@ -149,7 +150,9 @@ def ik_metric_with_coll(
     return final_success_rate, final_error, failure_stats
 
 
-def sample_states_test(robot: CCRobot, num_states: int) -> ConstantCurvatureState:
+def sample_states_test(
+    robot: CCRobot, num_states: int
+) -> ConstantCurvatureState:
     random_key = jax.random.PRNGKey(42)
     random_key, subkey = jax.random.split(random_key)
     theta = jax.random.uniform(
@@ -196,9 +199,12 @@ def is_state_in_collision(
     robot_coll: RobotCollision,
     world_geom: CollGeom,
 ) -> bool:
-    """Check if the robot is in collision with obstacles or itself using low-level functions."""
-    world_dist = robot_coll.compute_world_collision_distance(robot, state, world_geom)
-    return jnp.any(jnp.any(world_dist < 0) == True)
+    """Check if the robot is in collision with obstacles or itself using
+    low-level functions."""
+    world_dist = robot_coll.compute_world_collision_distance(
+        robot, state, world_geom
+    )
+    return jnp.any(jnp.any(world_dist < 0))
 
 
 def save_targets_to_csv(target_wxyz, target_position, num_sections, eval_num):
@@ -251,7 +257,8 @@ def eval_ik_with_coll(
     """Main function for basic IK with collision avoidance."""
     num_sections = robot.config.num_sections
     print(
-        f"start solve ik WITH COLLISION of num sections {num_sections}, num eval {eval_num}"
+        f"start solve ik WITH COLLISION of num sections {num_sections}, "
+        f"num eval {eval_num}"
     )
 
     # Sample collision-free target points
@@ -280,7 +287,10 @@ def eval_ik_with_coll(
     initial_states = jax.tree_util.tree_map(
         lambda *x: jnp.concatenate(x), *collision_free_states
     )
-    print(f"Finish sampling. Total nums of free states checked: {num_free_states}")
+    print(
+        f"Finish sampling. Total nums of free states checked: "
+        f"{num_free_states}"
+    )
 
     # Generate target poses, visualization, warmup similar to before
     target_transforms = batched_fk(initial_states[:eval_num])
@@ -289,13 +299,17 @@ def eval_ik_with_coll(
     target_position = tip_transform.translation()
     save_targets_to_csv(target_wxyz, target_position, num_sections, eval_num)
     # warmup
-    print(f"finish forward, start warmup")
-    jax.block_until_ready(batched_ik_solve(target_wxyz, target_position, [world_geom]))
+    print("finish forward, start warmup")
+    jax.block_until_ready(
+        batched_ik_solve(target_wxyz, target_position, [world_geom])
+    )
 
     # solve ik
     start = time.time()
     print("start solve ik")
-    solution_states = batched_ik_solve(target_wxyz, target_position, [world_geom])
+    solution_states = batched_ik_solve(
+        target_wxyz, target_position, [world_geom]
+    )
     jax.block_until_ready(solution_states)
     total_time = time.time() - start
 
@@ -348,20 +362,26 @@ def eval_ik_with_coll(
         solution_collision_mask,
     )
 
-    print(f"--- With Collision Results ---")
+    print("--- With Collision Results ---")
     print(
-        f"Final Success Rate (accurate, within limits, AND collision-free): {final_success_rate:.2f}%"
+        f"Final Success Rate (accurate, within limits, AND collision-free): "
+        f"{final_success_rate:.2f}%"
     )
-    print(f"finish solve ik of num sections {num_sections}, total time: {total_time}s")
+    print(
+        f"finish solve ik of num sections {num_sections}, "
+        f"total time: {total_time}s"
+    )
 
     # Print detailed failure analysis
     print("\n--- Detailed Failure Analysis ---")
     print(f"Total samples: {failure_stats['total_samples']}")
     print(
-        f"Successful: {failure_stats['num_success']} ({failure_stats['success_rate']:.2f}%)"
+        f"Successful: {failure_stats['num_success']} "
+        f"({failure_stats['success_rate']:.2f}%)"
     )
     print(
-        f"Failed: {failure_stats['num_fail']} ({100 - failure_stats['success_rate']:.2f}%)"
+        f"Failed: {failure_stats['num_fail']} "
+        f"({100 - failure_stats['success_rate']:.2f}%)"
     )
     print(failure_stats)
 
@@ -416,7 +436,8 @@ def eval_ik_all_sections(
             if not os.path.exists(save_dir):
                 os.makedirs(save_dir, exist_ok=True)
             save_path = (
-                f"{save_dir}/ik_with_coll_sections_{num_sections}_eval_{eval_num}.npz"
+                f"{save_dir}/ik_with_coll_sections_{num_sections}"
+                f"_eval_{eval_num}.npz"
             )
             all_results_summary.append(
                 eval_ik_with_coll(
@@ -431,7 +452,10 @@ def eval_ik_all_sections(
             )
 
     print("\n\n--- IK test resume ---")
-    header = f"{'num sections':<10} | {'eval num':<15} | {'error':<15} | {'success rate (%)':<15} | {'total time (s)':<18} "
+    header = (
+        f"{'num sections':<10} | {'eval num':<15} | {'error':<15} | "
+        f"{'success rate (%)':<15} | {'total time (s)':<18} "
+    )
     print(header)
     print("-" * len(header))
     for res_item in all_results_summary:
@@ -440,7 +464,8 @@ def eval_ik_all_sections(
         sr_str = f"{res_item['success rate']:.2f}"
         time_str = f"{res_item['total time']:.3f}"
         print(
-            f"{res_item['num sections']:<10} | {eval_num_str:<15} | {error_str:<15} | {sr_str:<15} | {time_str:<18}"
+            f"{res_item['num sections']:<10} | {eval_num_str:<15} | "
+            f"{error_str:<15} | {sr_str:<15} | {time_str:<18}"
         )
 
 

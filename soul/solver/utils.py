@@ -21,8 +21,9 @@ def newton_raphson(f, x, iters):
 
 
 def roberts_sequence(num_points, dim, root):
-    # From https://gist.github.com/carlosgmartin/1fd4e60bed526ec8ae076137ded6ebab.
-    basis = 1 - (1 / root ** (1 + jnp.arange(dim)))
+    # From
+    # https://gist.github.com/carlosgmartin/1fd4e60bed526ec8ae076137ded6ebab.
+    basis = 1 - (1 / root**(1 + jnp.arange(dim)))
 
     n = jnp.arange(num_points)
     x = n[:, None] * basis[None, :]
@@ -45,13 +46,16 @@ def sample_states(
     if isinstance(robot, CCRobotExtend):
         length = robot.config.lower_limits_length + roberts_sequence(
             num_states, robot.config.num_sections, sample_root
-        ) * (robot.config.upper_limits_length - robot.config.lower_limits_length)
+        ) * (
+            robot.config.upper_limits_length - robot.config.lower_limits_length
+        )
 
         states = ConstantCurvatureStateExtend(
             base_position=jnp.zeros((num_states, 3)),
             theta=theta * robot.config.opt_mask[3],
             phi=phi * robot.config.opt_mask[3 + robot.config.num_sections],
-            length=length * robot.config.opt_mask[3 + robot.config.num_sections * 2],
+            length=length
+            * robot.config.opt_mask[3 + robot.config.num_sections * 2],
         )
     else:
         states = ConstantCurvatureState(

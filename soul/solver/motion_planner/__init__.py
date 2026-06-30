@@ -5,8 +5,8 @@ Motion Planner Test Module
 from .prm import ParallelPRM, PRMOptions
 from .rrt import OptimizedRRT, RRTOptions
 from .utils import (
-    HPolyhedronSampler,
     HPolyhedron,
+    HPolyhedronSampler,
     resample_trajectory,
     resample_trajectory_smooth,
 )

@@ -1,10 +1,9 @@
 import jax.numpy as jnp
-import jaxlie
 from jax import Array
 from jaxls import Cost, Var, VarValues
 
-from ..robots.tdcr_robot import TDCRRobot
 from ..robots.cc_robot import ConstantCurvatureState
+from ..robots.tdcr_robot import TDCRRobot
 
 
 # additional costs for tdcr
@@ -19,7 +18,8 @@ def tendon_length_velocity_limit_cost(
     weight: Array | float,
 ) -> Array:
     """
-    Computes the residual penalizing tendon velocities that exceed maximum limits.
+    Computes the residual penalizing tendon velocities that exceed maximum
+    limits.
     This ensures tendon velocities stay within safe operating ranges.
 
     Args:
@@ -143,13 +143,15 @@ def tendon_length_jerk_cost(
     weight: Array | float,
 ) -> Array:
     """
-    Computes the residual penalizing tendon length jerk (rate of change of acceleration).
+    Computes the residual penalizing tendon length jerk (rate of change of
+    acceleration).
     This ensures very smooth tendon movements with minimal jerky motion.
 
     Args:
         vals: Variable values
         robot: TDCR robot instance
-        robot_vars: List of 4 consecutive robot state variables [t-1, t, t+1, t+2]
+        robot_vars: List of 4 consecutive robot state variables
+            [t-1, t, t+1, t+2]
         dt: Time step between states
         weight: Weight for the cost
 
@@ -162,17 +164,15 @@ def tendon_length_jerk_cost(
     states = [vals[var] for var in robot_vars]
 
     # Calculate tendon lengths for all states
-    tendon_lengths = [robot.calculate_tendon_lengths(state) for state in states]
+    tendon_lengths = [
+        robot.calculate_tendon_lengths(state) for state in states
+    ]
 
     # Calculate accelerations at t and t+1
-    acc_t = (
-        (tendon_lengths[2] - tendon_lengths[1])
-        - (tendon_lengths[1] - tendon_lengths[0])
-    ) / (dt * dt)
-    acc_t1 = (
-        (tendon_lengths[3] - tendon_lengths[2])
-        - (tendon_lengths[2] - tendon_lengths[1])
-    ) / (dt * dt)
+    acc_t = ((tendon_lengths[2] - tendon_lengths[1]) -
+             (tendon_lengths[1] - tendon_lengths[0])) / (dt * dt)
+    acc_t1 = ((tendon_lengths[3] - tendon_lengths[2]) -
+              (tendon_lengths[2] - tendon_lengths[1])) / (dt * dt)
 
     # Calculate jerk (change in acceleration / dt)
     tendon_jerk = (acc_t1 - acc_t) / dt

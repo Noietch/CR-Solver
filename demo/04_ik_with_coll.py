@@ -1,18 +1,16 @@
 import jax
-import time
-import viser
 import numpy as np
+import viser
+
+from soul.geom import HalfSpace, RobotCollision, Sphere
 from soul.robots.cc_robot import CCRobot
 from soul.solver import IKSolver
-from soul.geom import HalfSpace, RobotCollision, Sphere
 from soul.visualization.visualizer_viser import ViserSoftRobot
-
 
 DISABLE_JIT = False
 
 if DISABLE_JIT:
     import os
-    import jax
 
     os.environ["JAX_DISABLE_JIT"] = "True"
     jax.config.update("jax_disable_jit", True)
@@ -42,9 +40,13 @@ def main():
         coll=robot_coll,
     )
     ik_solver_best = jax.jit(solver.solve_ik_best_with_coll)
-    ik_solver_with_initial_states = jax.jit(solver.solve_ik_with_initial_states_with_coll)
+    ik_solver_with_initial_states = jax.jit(
+        solver.solve_ik_with_initial_states_with_coll
+    )
 
-    robot_vis = ViserSoftRobot(server, robot, robot_coll, root_node_name="/robot")
+    robot_vis = ViserSoftRobot(
+        server, robot, robot_coll, root_node_name="/robot"
+    )
     robot_vis.create_robot_visualizations()
     ik_target_handle = server.scene.add_transform_controls(
         "/ik_target",
@@ -55,13 +57,17 @@ def main():
     sphere_handle = server.scene.add_transform_controls(
         "/obstacle", scale=0.5, position=(0.8, 0.03, 1.126)
     )
-    server.scene.add_mesh_trimesh("/obstacle/mesh", mesh=sphere_coll.to_trimesh())
+    server.scene.add_mesh_trimesh(
+        "/obstacle/mesh", mesh=sphere_coll.to_trimesh()
+    )
     sphere_handle2 = server.scene.add_transform_controls(
         "/obstacle2", scale=0.5, position=(-0.4, -0.3, 0.9)
     )
-    server.scene.add_mesh_trimesh("/obstacle2/mesh", mesh=sphere_coll2.to_trimesh())
+    server.scene.add_mesh_trimesh(
+        "/obstacle2/mesh", mesh=sphere_coll2.to_trimesh()
+    )
     server.scene.add_grid("/ground", width=6, height=6)
-    timing_handle = server.gui.add_number("Elapsed (ms)", 0.001, disabled=True)
+    server.gui.add_number("Elapsed (ms)", 0.001, disabled=True)
     target_handle = server.gui.add_vector3(
         "Target", ik_target_handle.position, disabled=True
     )
@@ -75,14 +81,18 @@ def main():
             position=np.array(sphere_handle2.position),
             wxyz=np.array(sphere_handle2.wxyz),
         )
-        world_coll_list = [plane_coll, sphere_coll_world_current, sphere_coll2_world_current]
+        world_coll_list = [
+            plane_coll, sphere_coll_world_current, sphere_coll2_world_current
+        ]
         if flag:
             cfg = ik_solver_best(
-                ik_target_handle.wxyz, ik_target_handle.position, world_coll_list
+                ik_target_handle.wxyz, ik_target_handle.position,
+                world_coll_list
             )
             flag = False
         cfg = ik_solver_with_initial_states(
-            ik_target_handle.wxyz, ik_target_handle.position, cfg, world_coll_list
+            ik_target_handle.wxyz, ik_target_handle.position, cfg,
+            world_coll_list
         )
         pose = robot.forward_kinematics(cfg)
         robot_vis.update_pose(pose)

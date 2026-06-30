@@ -1,13 +1,46 @@
 [project]
 name = 'soul'
 version = '0.0.1'
-description = 'Text Physics-Informed Neural Network'
+description = 'GPU-accelerated kinematics solver for tendon-driven continuum robots'
 readme = 'README.md'
 requires-python = '>=3.11'
 classifiers = [
     'Programming Language :: Python :: 3',
     'Operating System :: OS Independent',
 ]
+dependencies = [
+    'coacd',
+    'imageio',
+    'jax',
+    'jax_dataclasses',
+    'jaxlie',
+    'jaxls',
+    'jaxtyping',
+    'loguru',
+    'matplotlib',
+    'networkx',
+    'numpy',
+    'optax',
+    'pandas',
+    'trimesh',
+    'tqdm',
+    'viser',
+]
+
+[project.optional-dependencies]
+# CUDA 12 GPU backend (Linux + NVIDIA only); on macOS the CPU jax above is used.
+cuda = ["jax[cuda12]; sys_platform == 'linux'"]
+
+[dependency-groups]
+dev = [
+    'flake8',
+    'isort',
+    'pre-commit',
+    'yapf',
+]
+
+[tool.uv.sources]
+jaxls = { git = 'https://github.com/brentyi/jaxls.git' }
 
 [[project.authors]]
 name = 'Heqing Yang'
@@ -15,6 +48,13 @@ email = 'yangheqing@buaa.edu.cn'
 
 [project.urls]
 Homepage = 'https://github.com/Noietch/DiffSoft.git'
+
+[build-system]
+requires = ['setuptools>=61']
+build-backend = 'setuptools.build_meta'
+
+[tool.setuptools.packages.find]
+include = ['soul*']
 
 [tool.autoflake]
 in-place = true

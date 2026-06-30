@@ -1,11 +1,12 @@
-import jax
-from jaxtyping import Array
-import numpy as np
-import jax.numpy as jnp
-import time
-import os
 import argparse
+import os
+import time
 from typing import Callable, Sequence
+
+import jax
+import jax.numpy as jnp
+import numpy as np
+from jaxtyping import Array
 
 # Initialize JAX persistent compilation cache
 os.environ["JAX_COMPILATION_CACHE_DIR"] = "/tmp/jax_cache"
@@ -13,32 +14,29 @@ jax.config.update("jax_compilation_cache_dir", "/tmp/jax_cache")
 jax.config.update("jax_persistent_cache_min_entry_size_bytes", -1)
 jax.config.update("jax_persistent_cache_min_compile_time_secs", 0)
 jax.config.update(
-    "jax_persistent_cache_enable_xla_caches", "xla_gpu_per_fusion_autotune_cache_dir"
+    "jax_persistent_cache_enable_xla_caches",
+    "xla_gpu_per_fusion_autotune_cache_dir"
 )
 from jax.experimental.compilation_cache import compilation_cache as cc
 
 cc.set_cache_dir("/tmp/jax_cache")
 
+from benchmark.mp.mp_analyze import save_log_to_csv
+from benchmark.mp.problems import Problem
+from benchmark.mp.utils import log_result, save_result
+
+from soul.geom import CollGeom, RobotCollision, WorldCollision
 from soul.robots.cc_robot import ConstantCurvatureState
 from soul.robots.tdcr_robot import TDCRRobot
 from soul.solver import (
-    TrajOptimizer,
-    TrajOptimizerOptions,
+    OptimizedRRT,
     ParallelPRM,
     PRMOptions,
-    OptimizedRRT,
     RRTOptions,
+    TrajOptimizer,
+    TrajOptimizerOptions,
 )
 from soul.solver.motion_planner import resample_trajectory
-from soul.geom import (
-    RobotCollision,
-    WorldCollision,
-    CollGeom,
-)
-
-from benchmark.mp.problems import Problem
-from benchmark.mp.utils import log_result, save_result
-from benchmark.mp.mp_analyze import save_log_to_csv
 
 jax.config.update("jax_default_matmul_precision", "highest")
 
@@ -46,6 +44,7 @@ DISABLE_JIT = False
 
 if DISABLE_JIT:
     import os
+
     import jax
 
     os.environ["JAX_DISABLE_JIT"] = "True"
@@ -63,7 +62,9 @@ def init_solver(
     max_iter_num: int = 3,
 ):
     traj_options = TrajOptimizerOptions(max_iter_num=max_iter_num)
-    traj_solver = TrajOptimizer(robot, robot_coll, timesteps, options=traj_options)
+    traj_solver = TrajOptimizer(
+        robot, robot_coll, timesteps, options=traj_options
+    )
     traj_opt = jax.jit(traj_solver.optimize_tdcr)
 
     # Initialize RRT solver
@@ -92,7 +93,13 @@ def init_solver(
         prm_traj_solver.save_roadmap(roadmap_path)
     print("Init done")
 
-    return traj_options, traj_solver, traj_opt, rrt_traj_solver, prm_traj_solver
+    return (
+        traj_options,
+        traj_solver,
+        traj_opt,
+        rrt_traj_solver,
+        prm_traj_solver,
+    )
 
 
 def _traj_optimize(
@@ -206,7 +213,13 @@ def eval_mp_with_coll_scene(
     robot_total_length = robot.config.length * robot.config.num_sections
 
     timesteps = 100
-    traj_options, traj_solver, traj_opt, rrt_traj_solver, prm_traj_solver = init_solver(
+    (
+        traj_options,
+        traj_solver,
+        traj_opt,
+        rrt_traj_solver,
+        prm_traj_solver,
+    ) = init_solver(
         robot=robot,
         robot_coll=robot_coll,
         world_geom_list=world_geom_list,
@@ -221,13 +234,18 @@ def eval_mp_with_coll_scene(
 
     # Load problems
     print(
-        f"\n--- Sampling {eval_num} pairs with {num_sections} sections and start initialization {start_from_initialization} ---"
+        f"\n--- Sampling {eval_num} pairs with {num_sections} sections "
+        f"and start initialization {start_from_initialization} ---"
     )
     if run_after_filtered:
         rename_suffix = "_prm_success"
     else:
         rename_suffix = ""
-    sample_data_path = f"{save_dir}/sampled_states/sections_{num_sections}_eval_{eval_num}_start_init_{start_from_initialization}{rename_suffix}.npz"
+    sample_data_path = (
+        f"{save_dir}/sampled_states/sections_{num_sections}_eval_"
+        f"{eval_num}_start_init_{start_from_initialization}"
+        f"{rename_suffix}.npz"
+    )
     problem = Problem(
         sample_data_path=sample_data_path,
         eval_num=eval_num,
@@ -243,8 +261,10 @@ def eval_mp_with_coll_scene(
     # Warm up
     for i in range(3):
         print(f"Start warm up for {i+1}/3")
-        start_state = jax.tree_util.tree_map(lambda x: x[i : i + 1], start_states)
-        end_state = jax.tree_util.tree_map(lambda x: x[i : i + 1], end_states)
+        start_state = jax.tree_util.tree_map(
+            lambda x: x[i:i + 1], start_states
+        )
+        end_state = jax.tree_util.tree_map(lambda x: x[i:i + 1], end_states)
         # Squeeze the batch dimension from start and end states
         start_state_i = jax.tree_util.tree_map(
             lambda x: jnp.squeeze(x, axis=0), start_state
@@ -280,7 +300,7 @@ def eval_mp_with_coll_scene(
             True,
             timesteps,
         )
-    print(f"Finished warm up....")
+    print("Finished warm up....")
 
     actual_eval_num = start_states.theta.shape[0]
     trajopt_success = []
@@ -304,12 +324,15 @@ def eval_mp_with_coll_scene(
 
     for i in range(actual_eval_num):
         print(
-            f"\n--- Evaluating Pair {i+1}/{actual_eval_num} with {num_sections} sections [{save_dir}]---"
+            f"\n--- Evaluating Pair {i+1}/{actual_eval_num} with "
+            f"{num_sections} sections [{save_dir}]---"
         )
 
         # Select the i-th start and end state from the sampled pairs
-        start_state = jax.tree_util.tree_map(lambda x: x[i : i + 1], start_states)
-        end_state = jax.tree_util.tree_map(lambda x: x[i : i + 1], end_states)
+        start_state = jax.tree_util.tree_map(
+            lambda x: x[i:i + 1], start_states
+        )
+        end_state = jax.tree_util.tree_map(lambda x: x[i:i + 1], end_states)
         # Squeeze the batch dimension from start and end states
         start_state_i = jax.tree_util.tree_map(
             lambda x: jnp.squeeze(x, axis=0), start_state
@@ -460,28 +483,42 @@ def eval_mp_with_coll_scene(
         rrt_opt_traj_length=rrt_opt_traj_length,
     )
 
-    full_trajectory_data_path = f"{save_dir}/all_trials_trajectories/sections_{num_sections}_all_trials_trajectories.npz"
+    full_trajectory_data_path = (
+        f"{save_dir}/all_trials_trajectories/sections_{num_sections}"
+        f"_all_trials_trajectories.npz"
+    )
     os.makedirs(os.path.dirname(full_trajectory_data_path), exist_ok=True)
     successful_data = [d for d in all_trials_data if isinstance(d, dict) and d]
     np.savez_compressed(
         full_trajectory_data_path,
         all_trials_data=np.array(successful_data, dtype=object),
     )
-    print(f"Saved {len(successful_data)} trial(s) to {full_trajectory_data_path}")
+    print(
+        f"Saved {len(successful_data)} trial(s) to {full_trajectory_data_path}"
+    )
 
     if remove_failed_trials:
         rename_suffix = "_prm_success"
         if run_after_filtered:
             rename_suffix = ""
-        prm_success_filtered = [item for item in prm_success if item is not None]
-        problem.save(jnp.array(prm_success_filtered), rename_suffix=rename_suffix)
+        prm_success_filtered = [
+            item for item in prm_success if item is not None
+        ]
+        problem.save(
+            jnp.array(prm_success_filtered), rename_suffix=rename_suffix
+        )
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="MP evaluation args")
-    parser.add_argument("--section-num", type=int, default=4, help="number of sections")
     parser.add_argument(
-        "--repeat-num", type=int, default=60, help="how many evaluations to run"
+        "--section-num", type=int, default=4, help="number of sections"
+    )
+    parser.add_argument(
+        "--repeat-num",
+        type=int,
+        default=60,
+        help="how many evaluations to run"
     )
     parser.add_argument(
         "--world-config",

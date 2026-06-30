@@ -1,16 +1,15 @@
 import jax
-import time
 import viser
+
+from soul.geom import RobotCollision
 from soul.robots.cc_robot import CCRobot
 from soul.solver import IKSolver
-from soul.geom import RobotCollision
 from soul.visualization.visualizer_viser import ViserSoftRobot
 
 DISABLE_JIT = False
 
 if DISABLE_JIT:
     import os
-    import jax
 
     os.environ["JAX_DISABLE_JIT"] = "True"
     jax.config.update("jax_disable_jit", True)
@@ -23,7 +22,9 @@ def viser_main():
 
     # Setup Visualization
     server = viser.ViserServer()
-    robot_vis = ViserSoftRobot(server, robot, robot_coll, root_node_name="/robot")
+    robot_vis = ViserSoftRobot(
+        server, robot, robot_coll, root_node_name="/robot"
+    )
     robot_vis.create_robot_visualizations()
 
     # Setup GUI
@@ -41,7 +42,11 @@ def viser_main():
 
     # Setup IK Solver
     solver = IKSolver(
-        robot, num_seeds_init=10, num_seeds_final=1, total_steps=64, init_steps=6
+        robot,
+        num_seeds_init=10,
+        num_seeds_final=1,
+        total_steps=64,
+        init_steps=6
     )
     ik_solver = jax.jit(solver.solve_ik_best)
 

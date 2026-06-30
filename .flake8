@@ -1,0 +1,27 @@
+[flake8]
+max-line-length = 79
+extend-ignore =
+    # whitespace before ':' (conflicts with yapf slicing)
+    E203,
+    # line break before binary operator (yapf style)
+    W503,
+    # jaxtyping shape strings, e.g. Float[Array, "batch 3"]
+    F722,
+    # forward-ref / shape-dim names in jaxtyping annotations
+    F821,
+exclude =
+    .git,
+    .venv,
+    __pycache__,
+    build,
+    dist,
+per-file-ignores =
+    # Package __init__ files intentionally re-export submodule symbols.
+    __init__.py:F401,F403
+    # JAX runtime config must run before importing soul/jax submodules,
+    # so these imports are deliberately placed after the config block.
+    benchmark/mp/constrain_motion_planning.py:E402
+    benchmark/mp/mp_eval.py:E402
+    benchmark/mp/mp_eval_cpu.py:E402
+    example/05_motion_planning.py:E402
+    example/07_constrain_motion_planning_with_coll.py:E402

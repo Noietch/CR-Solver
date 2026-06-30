@@ -3,15 +3,16 @@ Optimized Rapidly-exploring Random Tree (RRT) Motion Planner for CC Robot
 Enhanced JAX-based implementation with parallel operations
 """
 
-from typing import Optional, Sequence, Dict, List
+from dataclasses import dataclass
+from typing import Dict, List, Optional, Sequence
+
 import jax
 import jax.numpy as jnp
 import jax.tree_util
 import networkx as nx
-from dataclasses import dataclass
 
+from ...geom import CollGeom, RobotCollision
 from ...robots.cc_robot import CCRobot, ConstantCurvatureState
-from ...geom import RobotCollision, CollGeom
 from .utils import sample_around
 
 
@@ -62,7 +63,9 @@ class OptimizedRRT:
         self._simple_distance = jax.jit(self._simple_distance_fn)
         self._check_single_collision = jax.jit(self._check_single_collision_fn)
         self._steer = jax.jit(self._steer_fn)
-        self._interpolate_path = jax.jit(self._interpolate_path_fn, static_argnums=(2,))
+        self._interpolate_path = jax.jit(
+            self._interpolate_path_fn, static_argnums=(2, )
+        )
 
         # Random key
         self.key = jax.random.PRNGKey(42)
@@ -74,7 +77,9 @@ class OptimizedRRT:
         self.parent.clear()
 
     def add_node(
-        self, state: ConstantCurvatureState, parent_idx: Optional[int] = None
+        self,
+        state: ConstantCurvatureState,
+        parent_idx: Optional[int] = None
     ) -> int:
         """Add a node to the tree"""
         idx = len(self.nodes)
@@ -108,24 +113,22 @@ class OptimizedRRT:
         """Vectorized collision checking for multiple states"""
 
         # Check for NaN values
-        nan_mask = jnp.any(jnp.isnan(states.theta), axis=1) | jnp.any(
-            jnp.isnan(states.phi), axis=1
-        )
+        nan_mask = jnp.any(jnp.isnan(states.theta),
+                           axis=1) | jnp.any(jnp.isnan(states.phi), axis=1)
 
         # Vectorized collision check for all world objects
         def check_single_object(world_obj):
             dist_matrix = jax.vmap(
-                lambda s: self.robot_coll.compute_world_collision_distance(
-                    self.robot, s, world_obj, 1
-                )
+                lambda s: self.robot_coll.
+                compute_world_collision_distance(self.robot, s, world_obj, 1)
             )(states)
             return jnp.any(dist_matrix < 0.0, axis=(1, 2))
 
         # Stack collision results
         if world_coll:
-            collision_masks = jnp.stack(
-                [check_single_object(obj) for obj in world_coll]
-            )
+            collision_masks = jnp.stack([
+                check_single_object(obj) for obj in world_coll
+            ])
             world_collision = jnp.any(collision_masks, axis=0)
         else:
             world_collision = jnp.zeros(states.theta.shape[0], dtype=bool)
@@ -136,9 +139,9 @@ class OptimizedRRT:
         self, state1: ConstantCurvatureState, state2: ConstantCurvatureState
     ) -> jnp.ndarray:
         """Simple L2 distance computation between two states"""
-        theta_dist = jnp.sum((state2.theta - state1.theta) ** 2)
-        phi_dist = jnp.sum((state2.phi - state1.phi) ** 2)
-        base_dist = jnp.sum((state2.base_position - state1.base_position) ** 2)
+        theta_dist = jnp.sum((state2.theta - state1.theta)**2)
+        phi_dist = jnp.sum((state2.phi - state1.phi)**2)
+        base_dist = jnp.sum((state2.base_position - state1.base_position)**2)
 
         return jnp.sqrt(theta_dist + phi_dist + base_dist)
 
@@ -146,22 +149,26 @@ class OptimizedRRT:
         self, state1: ConstantCurvatureState, states2: ConstantCurvatureState
     ) -> jnp.ndarray:
         """Vectorized distance computation"""
-        theta_dist = jnp.sum((states2.theta - state1.theta[None, :]) ** 2, axis=1)
-        phi_dist = jnp.sum((states2.phi - state1.phi[None, :]) ** 2, axis=1)
+        theta_dist = jnp.sum((states2.theta - state1.theta[None, :])**2,
+                             axis=1)
+        phi_dist = jnp.sum((states2.phi - state1.phi[None, :])**2, axis=1)
         base_dist = jnp.sum(
-            (states2.base_position - state1.base_position[None, :]) ** 2, axis=1
+            (states2.base_position - state1.base_position[None, :])**2, axis=1
         )
 
         return jnp.sqrt(theta_dist + phi_dist + base_dist)
 
     def _steer_fn(
-        self, from_state: ConstantCurvatureState, to_state: ConstantCurvatureState
+        self, from_state: ConstantCurvatureState,
+        to_state: ConstantCurvatureState
     ) -> ConstantCurvatureState:
         """Steer from one state towards another with step size limit"""
         # Compute distance
-        theta_dist = jnp.sum((to_state.theta - from_state.theta) ** 2)
-        phi_dist = jnp.sum((to_state.phi - from_state.phi) ** 2)
-        base_dist = jnp.sum((to_state.base_position - from_state.base_position) ** 2)
+        theta_dist = jnp.sum((to_state.theta - from_state.theta)**2)
+        phi_dist = jnp.sum((to_state.phi - from_state.phi)**2)
+        base_dist = jnp.sum(
+            (to_state.base_position - from_state.base_position)**2
+        )
         total_dist = jnp.sqrt(theta_dist + phi_dist + base_dist)
 
         # Compute interpolation factor
@@ -179,19 +186,21 @@ class OptimizedRRT:
         )
 
     def _batch_steer_fn(
-        self, from_states: ConstantCurvatureState, to_states: ConstantCurvatureState
+        self, from_states: ConstantCurvatureState,
+        to_states: ConstantCurvatureState
     ) -> ConstantCurvatureState:
         """Vectorized steering for multiple state pairs"""
         # Compute distances
-        theta_dist = jnp.sum((to_states.theta - from_states.theta) ** 2, axis=1)
-        phi_dist = jnp.sum((to_states.phi - from_states.phi) ** 2, axis=1)
+        theta_dist = jnp.sum((to_states.theta - from_states.theta)**2, axis=1)
+        phi_dist = jnp.sum((to_states.phi - from_states.phi)**2, axis=1)
         base_dist = jnp.sum(
-            (to_states.base_position - from_states.base_position) ** 2, axis=1
+            (to_states.base_position - from_states.base_position)**2, axis=1
         )
         total_dist = jnp.sqrt(theta_dist + phi_dist + base_dist)
 
         # Compute interpolation factors
-        alpha = jnp.minimum(self.options.step_size / (total_dist + 1e-6), 1.0)[:, None]
+        alpha = jnp.minimum(self.options.step_size / (total_dist + 1e-6),
+                            1.0)[:, None]
 
         # Vectorized interpolation
         new_base = (
@@ -214,25 +223,29 @@ class OptimizedRRT:
         alphas = jnp.linspace(0, 1, num_steps + 2)[1:-1]
 
         # Vectorized interpolation
-        base_positions = jnp.outer(1 - alphas, state1.base_position) + jnp.outer(
-            alphas, state2.base_position
-        )
-        thetas = jnp.outer(1 - alphas, state1.theta) + jnp.outer(alphas, state2.theta)
-        phis = jnp.outer(1 - alphas, state1.phi) + jnp.outer(alphas, state2.phi)
+        base_positions = jnp.outer(1 - alphas, state1.base_position
+                                   ) + jnp.outer(alphas, state2.base_position)
+        thetas = jnp.outer(1 - alphas,
+                           state1.theta) + jnp.outer(alphas, state2.theta)
+        phis = jnp.outer(1 - alphas,
+                         state1.phi) + jnp.outer(alphas, state2.phi)
 
         return ConstantCurvatureState(
             base_position=base_positions, theta=thetas, phi=phis
         )
 
     def sample_goal_biased(
-        self, goal: ConstantCurvatureState, num_samples: int = 1
+        self,
+        goal: ConstantCurvatureState,
+        num_samples: int = 1
     ) -> ConstantCurvatureState:
         """Sample with goal bias"""
         self.key, subkey1, subkey2 = jax.random.split(self.key, 3)
 
         # Determine which samples should be the goal
         goal_mask = (
-            jax.random.uniform(subkey1, (num_samples,)) < self.options.goal_sample_rate
+            jax.random.uniform(subkey1, (num_samples, ))
+            < self.options.goal_sample_rate
         )
 
         # Sample around goal for non-goal samples
@@ -265,9 +278,9 @@ class OptimizedRRT:
             return -1
 
         # Use simple distance for faster computation
-        distances = jnp.array(
-            [self._simple_distance(query, node) for node in self.nodes]
-        )
+        distances = jnp.array([
+            self._simple_distance(query, node) for node in self.nodes
+        ])
         return int(jnp.argmin(distances))
 
     def check_edge_collision(
@@ -318,7 +331,9 @@ class OptimizedRRT:
 
         return base_close and theta_close and phi_close
 
-    def reconstruct_path(self, start_idx: int, goal_idx: int) -> ConstantCurvatureState:
+    def reconstruct_path(
+        self, start_idx: int, goal_idx: int
+    ) -> ConstantCurvatureState:
         """Reconstruct path from start to goal"""
         # Build path indices
         path_indices = []
@@ -416,7 +431,10 @@ class OptimizedRRT:
 
             # Progress report
             if (iteration + 1) % 100 == 0:
-                print(f"RRT iteration {iteration + 1}/{self.options.max_iterations}")
+                print(
+                    f"RRT iteration {iteration + 1}/"
+                    f"{self.options.max_iterations}"
+                )
 
         # If no exact path found, find nearest node to goal
         print("Max iterations reached, finding approximate path...")
@@ -448,19 +466,24 @@ class OptimizedRRT:
 
             # Concatenate path and final segment
             full_path = jax.tree_util.tree_map(
-                lambda p, s: jnp.concatenate([p, s], axis=0), path, final_segment
+                lambda p, s: jnp.concatenate([p, s], axis=0), path,
+                final_segment
             )
 
             # Add goal at the end
-            goal_expanded = jax.tree_util.tree_map(lambda x: x[None, ...], goal)
+            goal_expanded = jax.tree_util.tree_map(
+                lambda x: x[None, ...], goal
+            )
             full_path = jax.tree_util.tree_map(
-                lambda p, g: jnp.concatenate([p, g], axis=0), full_path, goal_expanded
+                lambda p, g: jnp.concatenate([p, g], axis=0), full_path,
+                goal_expanded
             )
 
             print(
-                f"Approximate path found (distance to goal: {self._simple_distance(nearest, goal):.4f})"
+                "Approximate path found (distance to goal: "
+                f"{self._simple_distance(nearest, goal):.4f})"
             )
             return full_path
         else:
-            print(f"Cannot connect to goal, returning path to nearest point")
+            print("Cannot connect to goal, returning path to nearest point")
             return path

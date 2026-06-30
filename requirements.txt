@@ -1,10 +1,16 @@
 jax[cuda12]
 optax
+numpy
 matplotlib
+pandas
 tqdm
+loguru
+imageio
 viser
+trimesh
+networkx
+coacd
 jax_dataclasses
 jaxlie
 jaxtyping
-coacd
 git+https://github.com/brentyi/jaxls.git

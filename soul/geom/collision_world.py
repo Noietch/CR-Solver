@@ -1,15 +1,15 @@
 from __future__ import annotations
 
 import json
-import trimesh
+
+import jax.numpy as jnp
 import jax_dataclasses as jdc
 import jaxlie
-import jax.numpy as jnp
-from jaxtyping import Float, Array
+import trimesh
+from jaxtyping import Array, Float
 
-from .geometry import BoundingBox, cat_geoms, HalfSpace, CollGeom, Sphere
+from .geometry import BoundingBox, CollGeom, HalfSpace, Sphere, cat_geoms
 from .utils import load_mesh
-import jaxlie
 
 
 @jdc.pytree_dataclass
@@ -74,12 +74,17 @@ class WorldCollision:
         return [self.obstacles]
 
     def transform(
-        self, position: Float[Array, "*batch 3"], wxyz: Float[Array, "*batch 4"]
+        self, position: Float[Array, "*batch 3"], wxyz: Float[Array,
+                                                              "*batch 4"]
     ) -> WorldCollision:
         transform = jaxlie.SE3.from_rotation_and_translation(
-            rotation=jaxlie.SO3(wxyz=jnp.array(wxyz)), translation=jnp.array(position)
+            rotation=jaxlie.SO3(wxyz=jnp.array(wxyz)),
+            translation=jnp.array(position)
         )
         return WorldCollision(
             obstacles=self.obstacles.transform(transform),
-            mesh=[m.copy().apply_transform(transform.as_matrix()) for m in self.mesh],
+            mesh=[
+                m.copy().apply_transform(transform.as_matrix())
+                for m in self.mesh
+            ],
         )

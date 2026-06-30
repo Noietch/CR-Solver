@@ -3,15 +3,14 @@ import jax.numpy as jnp
 
 from soul.robots.cc_robot import CCRobot, ConstantCurvatureState
 from soul.visualization.visualizer_plot import (
-    visualize_cc_model_3d,
     visualize_cc_model_2d,
+    visualize_cc_model_3d,
 )
 
 DISABLE_JIT = False
 
 if DISABLE_JIT:
     import os
-    import jax
 
     os.environ["JAX_DISABLE_JIT"] = "True"
     jax.config.update("jax_disable_jit", True)

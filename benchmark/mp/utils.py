@@ -1,24 +1,22 @@
+import json
+import os
+from typing import Any, List, Sequence, Tuple, Union
+
 import jax
-from jaxtyping import Array
-import numpy as np
 import jax.numpy as jnp
 import jaxlie
-import os
-from typing import Sequence, Any, Tuple, Union, List
-import json
+import numpy as np
+from jaxtyping import Array
+
+from soul.geom import CollGeom, RobotCollision
 from soul.robots.cc_robot import CCRobot, ConstantCurvatureState
 from soul.robots.tdcr_robot import TDCRRobot
-from soul.geom import (
-    RobotCollision,
-    CollGeom,
-)
 
 jax.config.update("jax_default_matmul_precision", "highest")
 
 DISABLE_JIT = False
 
 if DISABLE_JIT:
-    import os
     import jax
 
     os.environ["JAX_DISABLE_JIT"] = "True"
@@ -41,10 +39,13 @@ def mp_metric_with_coll(
     position_threshold: float = 0.08
     rotation_threshold: float = 1.0
 
-    position_error = jnp.linalg.norm(result_position - target_position, axis=-1)
+    position_error = jnp.linalg.norm(
+        result_position - target_position, axis=-1
+    )
     orientation_error = jnp.linalg.norm(
         jnp.array(
-            (jaxlie.SO3(target_orientation).inverse() @ result_orientation).log()
+            (jaxlie.SO3(target_orientation).inverse()
+             @ result_orientation).log()
         ),
         axis=-1,
     )
@@ -104,8 +105,12 @@ def mp_metric_with_coll(
     num_collision_fail = jnp.sum(solution_collision_mask)
 
     # Combined failure categories
-    num_accuracy_fail = jnp.sum(~acc_mask)  # Failed due to position OR rotation
-    num_limit_fail = jnp.sum(~joint_limits_mask)  # Failed due to any joint limits
+    num_accuracy_fail = jnp.sum(
+        ~acc_mask
+    )  # Failed due to position OR rotation
+    num_limit_fail = jnp.sum(
+        ~joint_limits_mask
+    )  # Failed due to any joint limits
 
     failure_stats = {
         "total_samples": int(total_samples),
@@ -125,8 +130,12 @@ def mp_metric_with_coll(
 
     final_success_rate = jnp.mean(final_success_mask) * 100.0
     # Use jnp.nanmean to avoid errors if no solutions are successful
-    final_pos_error = jnp.nan_to_num(jnp.mean(position_error[final_success_mask]))
-    final_rot_error = jnp.nan_to_num(jnp.mean(orientation_error[final_success_mask]))
+    final_pos_error = jnp.nan_to_num(
+        jnp.mean(position_error[final_success_mask])
+    )
+    final_rot_error = jnp.nan_to_num(
+        jnp.mean(orientation_error[final_success_mask])
+    )
 
     return (
         final_success_rate,
@@ -149,9 +158,9 @@ def is_trajectory_in_collision(
         return True  # No path found is a collision/failure
 
     # Vmap the single-state check over the trajectory timesteps
-    in_collision_mask = jax.vmap(is_state_in_collision, in_axes=(0, None, None, None))(
-        trajectory, robot, robot_coll, world_geom
-    )
+    in_collision_mask = jax.vmap(
+        is_state_in_collision, in_axes=(0, None, None, None)
+    )(trajectory, robot, robot_coll, world_geom)
     return jnp.any(in_collision_mask)
 
 
@@ -164,7 +173,9 @@ def is_state_in_self_collision(
     """
     Check if the robot is in self-collision.
     """
-    self_collision_distances = robot_coll.compute_self_collision_distance(robot, state)
+    self_collision_distances = robot_coll.compute_self_collision_distance(
+        robot, state
+    )
     return jnp.any(self_collision_distances < 0.0)
 
 
@@ -179,11 +190,14 @@ def is_state_in_collision(
     Check if the robot is in collision with obstacles or itself.
 
     A collision is defined as any distance less than 0 (i.e., penetration)
-    between the robot and any world geometry, or between parts of the robot itself.
+    between the robot and any world geometry, or between parts of the robot
+    itself.
     """
 
     def check_single_geom(geom: CollGeom) -> bool:
-        world_dist = robot_coll.compute_world_collision_distance(robot, state, geom)
+        world_dist = robot_coll.compute_world_collision_distance(
+            robot, state, geom
+        )
         return jnp.any(world_dist < 0.0)
 
     collision_results = jnp.array([check_single_geom(g) for g in world_geom])
@@ -211,11 +225,15 @@ def log_result(
     rrt_time: float = 0.0,
     with_opt: bool = None,
 ):
-    start_state, end_state, robot, robot_coll, world_geom, batched_fk, step = base_info
+    (
+        start_state, end_state, robot, robot_coll, world_geom, batched_fk, step
+    ) = base_info
     start_state = jax.tree_util.tree_map(
         lambda x: jnp.expand_dims(x, axis=0), start_state
     )
-    end_state = jax.tree_util.tree_map(lambda x: jnp.expand_dims(x, axis=0), end_state)
+    end_state = jax.tree_util.tree_map(
+        lambda x: jnp.expand_dims(x, axis=0), end_state
+    )
     is_valid = path_cfg is not None and path_cfg.theta.shape[0] > 0
     total_time = trajopt_time + prm_time + opt_time + rrt_time
 
@@ -238,13 +256,19 @@ def log_result(
         traj_length = jnp.sum(traj_segment_lengths)
 
         start_transforms = batched_fk(start_state)
-        start_tip_transform = jaxlie.SE3.from_matrix(start_transforms[0, -1, ...])
+        start_tip_transform = jaxlie.SE3.from_matrix(
+            start_transforms[0, -1, ...]
+        )
         start_wxyz = start_tip_transform.rotation().wxyz
         start_position = start_tip_transform.translation()
-        tip_transforms = jax.tree_util.tree_map(lambda x: x[-1:], planned_tip_traj)
+        tip_transforms = jax.tree_util.tree_map(
+            lambda x: x[-1:], planned_tip_traj
+        )
 
         target_transforms = batched_fk(end_state)
-        target_tip_transform = jaxlie.SE3.from_matrix(target_transforms[0, -1, ...])
+        target_tip_transform = jaxlie.SE3.from_matrix(
+            target_transforms[0, -1, ...]
+        )
         target_wxyz = target_tip_transform.rotation().wxyz
         target_position = target_tip_transform.translation()
 
@@ -307,10 +331,13 @@ def log_result(
         }
         successful_id = step if final_success_rate > 99.0 else None
         print(
-            f"[{step}] [{method_name}({'optimized' if with_opt else 'no opt'})] found a solution in {total_time:.3f}s \n"
+            f"[{step}] [{method_name}"
+            f"({'optimized' if with_opt else 'no opt'})] "
+            f"found a solution in {total_time:.3f}s \n"
             f"[{'Success' if final_success_rate > 99.0 else 'Failure'}], \n"
             f"Kinematic Reachability: {kinematic_reachability_rate:.0f}%, \n"
-            f"Pos Error: {final_pos_error:.3f}m, Rot Error: {final_rot_error:.3f}rad \n"
+            f"Pos Error: {final_pos_error:.3f}m, "
+            f"Rot Error: {final_rot_error:.3f}rad \n"
         )
     else:
         print(f"[Warning] No solution found by {method_name}")
@@ -321,7 +348,9 @@ def log_result(
     return data_to_save, successful_id, total_time, float(traj_length)
 
 
-def remove_none(*seqs: Sequence[Any]) -> Union[List[Any], Tuple[List[Any], ...]]:
+def remove_none(
+    *seqs: Sequence[Any]
+) -> Union[List[Any], Tuple[List[Any], ...]]:
     filtered = [[x for x in seq if x is not None] for seq in seqs]
     if len(filtered) == 1:
         return filtered[0]

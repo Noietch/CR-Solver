@@ -1,9 +1,9 @@
-import os
 import json
-from jaxtyping import Array
-import numpy as np
-import matplotlib
+import os
+
 import matplotlib.pyplot as plt
+import numpy as np
+from jaxtyping import Array
 
 from soul.geom.utils import load_mesh
 
@@ -11,13 +11,11 @@ from soul.geom.utils import load_mesh
 def _quaternion_to_rotation_matrix(wxyz):
     """Convert quaternion (w, x, y, z) to rotation matrix."""
     w, x, y, z = wxyz
-    return np.array(
-        [
-            [1 - 2 * (y**2 + z**2), 2 * (x * y - w * z), 2 * (x * z + w * y)],
-            [2 * (x * y + w * z), 1 - 2 * (x**2 + z**2), 2 * (y * z - w * x)],
-            [2 * (x * z - w * y), 2 * (y * z + w * x), 1 - 2 * (x**2 + y**2)],
-        ]
-    )
+    return np.array([
+        [1 - 2 * (y**2 + z**2), 2 * (x * y - w * z), 2 * (x * z + w * y)],
+        [2 * (x * y + w * z), 1 - 2 * (x**2 + z**2), 2 * (y * z - w * x)],
+        [2 * (x * z - w * y), 2 * (y * z + w * x), 1 - 2 * (x**2 + y**2)],
+    ])
 
 
 def _plot_coordinate_frame(ax, position, rotation_matrix, scale=0.4):
@@ -115,8 +113,8 @@ def visualize_cc_model_2d(
         if num_points is not None:
             for i in range(len(positions) // num_points):
                 plt.plot(
-                    positions[i * num_points : (i + 1) * num_points, 0],
-                    positions[i * num_points : (i + 1) * num_points, 2],
+                    positions[i * num_points:(i + 1) * num_points, 0],
+                    positions[i * num_points:(i + 1) * num_points, 2],
                     c=colors[i % len(colors)],
                     linewidth=2,
                 )
@@ -129,7 +127,9 @@ def visualize_cc_model_2d(
             )
 
     if target_position is not None:
-        plt.scatter(target_position[:, 0], target_position[:, 2], c="red", marker="x")
+        plt.scatter(
+            target_position[:, 0], target_position[:, 2], c="red", marker="x"
+        )
 
         # # draw obstacle spheres
         # if goal.obstacle_sphere is not None:
@@ -252,9 +252,9 @@ def visualize_cc_model_3d(
             if num_points is not None:
                 for i in range(len(positions) // num_points):
                     ax.plot(
-                        positions[i * num_points : (i + 1) * num_points, 0],
-                        positions[i * num_points : (i + 1) * num_points, 1],
-                        positions[i * num_points : (i + 1) * num_points, 2],
+                        positions[i * num_points:(i + 1) * num_points, 0],
+                        positions[i * num_points:(i + 1) * num_points, 1],
+                        positions[i * num_points:(i + 1) * num_points, 2],
                         c=colors[i % len(colors)],
                         linewidth=2,
                     )
@@ -284,7 +284,8 @@ def visualize_cc_model_3d(
             # Calculate appropriate scale based on scene size
             if pose is not None:
                 positions = transform[0, :, :3, 3]  # Get first batch positions
-                scene_range = np.max(positions, axis=0) - np.min(positions, axis=0)
+                scene_range = np.max(positions,
+                                     axis=0) - np.min(positions, axis=0)
                 scale = np.max(scene_range) * 0.1  # 10% of scene range
             else:
                 scale = 0.1  # Default scale
@@ -295,7 +296,9 @@ def visualize_cc_model_3d(
             else:
                 frame_position = np.array([0.0, 0.0, 0.0])  # Place at origin
 
-            _plot_coordinate_frame(ax, frame_position, rotation_matrix, scale=scale)
+            _plot_coordinate_frame(
+                ax, frame_position, rotation_matrix, scale=scale
+            )
 
     # Set new limits with equal scaling
     ax.set_xlim3d(x_limit[0], x_limit[1])
@@ -327,7 +330,8 @@ def visualize_mp_scene(
     ax: plt.Axes = None,
 ):
     """
-    Visualizes CC robot poses for collision scenes, showing initial (green) and final (blue) states.
+    Visualizes CC robot poses for collision scenes, showing initial
+    (green) and final (blue) states.
     """
     if save_path and not os.path.exists(os.path.dirname(save_path)):
         os.makedirs(os.path.dirname(save_path))
@@ -359,9 +363,9 @@ def visualize_mp_scene(
                 num_sections = len(positions) // num_points
                 for j in range(num_sections):
                     ax.plot(
-                        positions[j * num_points : (j + 1) * num_points, 0],
-                        positions[j * num_points : (j + 1) * num_points, 1],
-                        positions[j * num_points : (j + 1) * num_points, 2],
+                        positions[j * num_points:(j + 1) * num_points, 0],
+                        positions[j * num_points:(j + 1) * num_points, 1],
+                        positions[j * num_points:(j + 1) * num_points, 2],
                         c=color,
                         linewidth=2,
                         linestyle=style,
@@ -393,13 +397,16 @@ def visualize_mp_scene(
                 if temp_transform.ndim == 3:
                     temp_transform = temp_transform[None, :, :, :]
                 positions = temp_transform[0, :, :3, 3]
-                scene_range = np.max(positions, axis=0) - np.min(positions, axis=0)
+                scene_range = np.max(positions,
+                                     axis=0) - np.min(positions, axis=0)
                 scale = np.max(scene_range) * 0.1
             if target_position is not None:
                 frame_position = target_position[i]
             else:
                 frame_position = np.array([0.0, 0.0, 0.0])
-            _plot_coordinate_frame(ax, frame_position, rotation_matrix, scale=scale)
+            _plot_coordinate_frame(
+                ax, frame_position, rotation_matrix, scale=scale
+            )
 
     # draw obstacle spheres
     if world_coll_config is not None:

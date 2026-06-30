@@ -1,18 +1,16 @@
-import jax
 import time
-import viser
+
+import jax
 import numpy as np
+import viser
+
+from soul.geom import RobotCollision, Sphere, WorldCollision
 from soul.robots.cc_robot import CCRobot
-from soul.robots.tdcr_robot import TDCRRobot
-from soul.geom import RobotCollision, WorldCollision, Sphere
-from soul.solver import (
-    TrajOptimizer,
-    TrajOptimizerOptions,
-)
+from soul.solver import TrajOptimizer, TrajOptimizerOptions
 from soul.visualization.visualizer_viser import (
+    ViserRenderer,
     ViserSoftRobot,
     ViserWorld,
-    ViserRenderer,
 )
 
 
@@ -26,7 +24,9 @@ def viser_main(robot_type: str = "cc", default_method: str = "trajopt"):
 
     # Setup Visualization
     server = viser.ViserServer()
-    robot_vis = ViserSoftRobot(server, robot, robot_coll, root_node_name="/robot")
+    robot_vis = ViserSoftRobot(
+        server, robot, robot_coll, root_node_name="/robot"
+    )
     robot_vis.create_robot_visualizations()
     obstacles_vis = ViserWorld(server, world_coll, enable_collision=False)
     obstacles_vis.create_mesh_visualizations()
@@ -38,7 +38,9 @@ def viser_main(robot_type: str = "cc", default_method: str = "trajopt"):
     sphere_handle = server.scene.add_transform_controls(
         "/obstacle", scale=0.1, position=(-0.11366828, 0.67437919, 1.04626801)
     )
-    server.scene.add_mesh_trimesh("/obstacle/mesh", mesh=sphere_coll.to_trimesh())
+    server.scene.add_mesh_trimesh(
+        "/obstacle/mesh", mesh=sphere_coll.to_trimesh()
+    )
     plan_button = server.gui.add_button("Plan", disabled=False)
     replay_button = server.gui.add_button("Replay", disabled=False)
 
@@ -101,7 +103,6 @@ def viser_main(robot_type: str = "cc", default_method: str = "trajopt"):
             robot_vis.update_pose(traj[i])
 
     def replay_callback(event):
-        global traj
         if traj is None:
             return
         renderer.render_traj_image(event, traj, skip_frames=15, save_path=None)

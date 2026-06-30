@@ -1,5 +1,6 @@
-import jax
 import os
+
+import jax
 
 # Initialize JAX persistent compilation cache
 os.environ["JAX_COMPILATION_CACHE_DIR"] = "/tmp/jax_cache"
@@ -7,36 +8,37 @@ jax.config.update("jax_compilation_cache_dir", "/tmp/jax_cache")
 jax.config.update("jax_persistent_cache_min_entry_size_bytes", -1)
 jax.config.update("jax_persistent_cache_min_compile_time_secs", 0)
 jax.config.update(
-    "jax_persistent_cache_enable_xla_caches", "xla_gpu_per_fusion_autotune_cache_dir"
+    "jax_persistent_cache_enable_xla_caches",
+    "xla_gpu_per_fusion_autotune_cache_dir"
 )
 from jax.experimental.compilation_cache import compilation_cache as cc
 
 cc.set_cache_dir("/tmp/jax_cache")
+import csv
+import time
+from typing import Sequence
+
 import jax.numpy as jnp
 import jaxlie
-import time
-import numpy as np
-import csv
 import matplotlib.pyplot as plt
-from typing import Sequence
+import numpy as np
+from benchmark.mp.mp_plot import (
+    plot_constrain_motion_planning,
+    plot_error,
+    plot_tendon_length,
+    visualize_constrain_motion_planning,
+)
+
+from soul.geom import CollGeom, RobotCollision, WorldCollision
 from soul.robots.cc_robot import CCRobot, ConstantCurvatureState
 from soul.robots.cc_robot_extend import CCRobot as CCRobotExtend
-from soul.geom import RobotCollision, WorldCollision, CollGeom
-from soul.solver.traj_optimizer import TrajOptimizer
-from benchmark.mp.mp_plot import (
-    visualize_constrain_motion_planning,
-    plot_constrain_motion_planning,
-    plot_tendon_length,
-    plot_error,
-)
 from soul.robots.tdcr_robot import TDCRRobot
-
+from soul.solver.traj_optimizer import TrajOptimizer
 
 DISABLE_JIT = False
 if DISABLE_JIT:
     os.environ["JAX_DISABLE_JIT"] = "True"
     jax.config.update("jax_disable_jit", True)
-
 
 LETTER_HEIGHT = 2.5
 LETTER_WIDTH = 1.5
@@ -57,9 +59,9 @@ def is_trajectory_in_collision(
         return True  # No path found is a collision/failure
 
     # Vmap the single-state check over the trajectory timesteps
-    in_collision_mask = jax.vmap(is_state_in_collision, in_axes=(0, None, None, None))(
-        trajectory, robot, robot_coll, world_geom
-    )
+    in_collision_mask = jax.vmap(
+        is_state_in_collision, in_axes=(0, None, None, None)
+    )(trajectory, robot, robot_coll, world_geom)
     return jnp.any(in_collision_mask)
 
 
@@ -74,11 +76,14 @@ def is_state_in_collision(
     Check if the robot is in collision with obstacles or itself.
 
     A collision is defined as any distance less than 0 (i.e., penetration)
-    between the robot and any world geometry, or between parts of the robot itself.
+    between the robot and any world geometry, or between parts of the robot
+    itself.
     """
 
     def check_single_geom(geom: CollGeom) -> bool:
-        world_dist = robot_coll.compute_world_collision_distance(robot, state, geom)
+        world_dist = robot_coll.compute_world_collision_distance(
+            robot, state, geom
+        )
         return jnp.any(world_dist < 0.0)
 
     collision_results = jnp.array([check_single_geom(g) for g in world_geom])
@@ -93,13 +98,10 @@ def create_I():
 
 def create_C():
     """Generates path points for a curved letter 'C'."""
-    return [
-        (
-            LETTER_WIDTH / 2 + (LETTER_WIDTH / 2) * np.cos(t),
-            LETTER_HEIGHT / 2 + (LETTER_HEIGHT / 2) * np.sin(t),
-        )
-        for t in np.linspace(0.4 * np.pi, 1.6 * np.pi, 20)
-    ]
+    return [(
+        LETTER_WIDTH / 2 + (LETTER_WIDTH / 2) * np.cos(t),
+        LETTER_HEIGHT / 2 + (LETTER_HEIGHT / 2) * np.sin(t),
+    ) for t in np.linspace(0.4 * np.pi, 1.6 * np.pi, 20)]
 
 
 def create_R():
@@ -108,10 +110,10 @@ def create_R():
     curve_center_y = LETTER_HEIGHT * 0.75
     curve_radius_y = LETTER_HEIGHT * 0.25
     curve_radius_x = LETTER_WIDTH
-    curve = [
-        (curve_radius_x * np.cos(t), curve_center_y + curve_radius_y * np.sin(t))
-        for t in np.linspace(np.pi / 2, -np.pi / 3, 15)
-    ]
+    curve = [(
+        curve_radius_x * np.cos(t),
+        curve_center_y + curve_radius_y * np.sin(t)
+    ) for t in np.linspace(np.pi / 2, -np.pi / 3, 15)]
     leg_start_point = (curve[-1][0], curve[-1][1])
     leg_end_point = (LETTER_WIDTH, 0)
     leg = [leg_start_point, leg_end_point]
@@ -206,9 +208,9 @@ def get_icra_traj(
     scaled_path_2d[:, 1] *= scale_y
 
     # 4. Lift to 3D and align the path's start to the local origin
-    local_points_3d = np.hstack(
-        [scaled_path_2d, np.zeros((scaled_path_2d.shape[0], 1))]
-    )
+    local_points_3d = np.hstack([
+        scaled_path_2d, np.zeros((scaled_path_2d.shape[0], 1))
+    ])
 
     # 5. Define the world transformation from the start handle's pose
     start_pose = jaxlie.SE3.from_rotation_and_translation(
@@ -219,7 +221,9 @@ def get_icra_traj(
     world_points = start_pose.apply(local_points_3d)
 
     # 7. Resample the final 3D path for a smooth trajectory
-    distances = np.cumsum(np.linalg.norm(np.diff(world_points, axis=0), axis=1))
+    distances = np.cumsum(
+        np.linalg.norm(np.diff(world_points, axis=0), axis=1)
+    )
     distances = np.insert(distances, 0, 0)
 
     new_distances = np.linspace(0, distances[-1], timesteps)
@@ -261,7 +265,8 @@ def calculate_traj_metrics(
     # Rotation error
     ref_rot = reference_traj.rotation()
     plan_rot = planned_traj.rotation()
-    rotation_errors = jnp.linalg.norm((ref_rot.inverse() @ plan_rot).log(), axis=-1)
+    rotation_errors = jnp.linalg.norm((ref_rot.inverse() @ plan_rot).log(),
+                                      axis=-1)
 
     metrics = {
         "position_errors": position_errors,
@@ -323,24 +328,28 @@ def get_square_traj(
 
     natural_side_length = points_2d[:, 0].max() - points_2d[:, 0].min()
     scale = (
-        target_side_length / natural_side_length if natural_side_length > 1e-6 else 1.0
+        target_side_length
+        / natural_side_length if natural_side_length > 1e-6 else 1.0
     )
     scaled_path_2d = points_2d * scale
 
-    local_points_3d = np.hstack(
-        [scaled_path_2d, np.zeros((scaled_path_2d.shape[0], 1))]
-    )
+    local_points_3d = np.hstack([
+        scaled_path_2d, np.zeros((scaled_path_2d.shape[0], 1))
+    ])
     start_pose = jaxlie.SE3.from_rotation_and_translation(
         jaxlie.SO3(wxyz=start_wxyz), translation=start_position
     )
     world_points = start_pose.apply(local_points_3d)
 
-    distances = np.cumsum(np.linalg.norm(np.diff(world_points, axis=0), axis=1))
+    distances = np.cumsum(
+        np.linalg.norm(np.diff(world_points, axis=0), axis=1)
+    )
     distances = np.insert(distances, 0, 0)
     new_distances = np.linspace(0, distances[-1], timesteps)
 
     interp_coords = [
-        np.interp(new_distances, distances, world_points[:, i]) for i in range(3)
+        np.interp(new_distances, distances, world_points[:, i])
+        for i in range(3)
     ]
     traj_positions = np.column_stack(interp_coords)
     traj_wxyz = np.tile(np.array(start_wxyz), (timesteps, 1))
@@ -451,13 +460,21 @@ def run_case(
         )
     else:  # icra word/letters
         ref_func = get_icra_traj
-        all_letter_funcs = {"I": create_I, "C": create_C, "R": create_R, "A": create_A}
+        all_letter_funcs = {
+            "I": create_I,
+            "C": create_C,
+            "R": create_R,
+            "A": create_A
+        }
         selected_funcs = {
-            ch: all_letter_funcs[ch] for ch in letters if ch in all_letter_funcs
+            ch: all_letter_funcs[ch]
+            for ch in letters
+            if ch in all_letter_funcs
         }
         if not selected_funcs:
             raise ValueError(
-                "No valid letters selected for ICRA trajectory. Choose from I, C, R, A."
+                "No valid letters selected for ICRA trajectory. "
+                "Choose from I, C, R, A."
             )
         ref_traj = ref_func(
             start_handle_position,
@@ -493,7 +510,9 @@ def run_case(
     # Compute TDCR tendon lengths vs time if applicable
     tendon_lengths_series = None
     if isinstance(robot, TDCRRobot):
-        calc_tendon_lengths_batch = jax.jit(jax.vmap(robot.calculate_tendon_lengths))
+        calc_tendon_lengths_batch = jax.jit(
+            jax.vmap(robot.calculate_tendon_lengths)
+        )
         tendon_lengths_series = np.asarray(calc_tendon_lengths_batch(cfg))
 
     # FK and metrics
@@ -523,7 +542,9 @@ def run_case(
     # Save TDCR tendon lengths series to CSV
     if tendon_lengths_series is not None:
         csv_path = os.path.join(save_dir, "tendon_lengths.csv")
-        time_series = np.arange(tendon_lengths_series.shape[0])  # timestep index
+        time_series = np.arange(
+            tendon_lengths_series.shape[0]
+        )  # timestep index
         header = ",".join(
             ["timestep"]
             + [f"tendon_{i+1}" for i in range(tendon_lengths_series.shape[1])]
@@ -549,7 +570,10 @@ def run_case(
             target_wxyz=np.asarray(ref_traj.rotation().wxyz),
             planned_tip_traj=np.asarray(planned_tip_traj.as_matrix()),
             planning_time=planning_time,
-            **{k: np.array(v) for k, v in metrics.items()},
+            **{
+                k: np.array(v)
+                for k, v in metrics.items()
+            },
         )
     else:
         np.savez(
@@ -562,7 +586,10 @@ def run_case(
             target_wxyz=np.asarray(ref_traj.rotation().wxyz),
             planned_tip_traj=np.asarray(planned_tip_traj.as_matrix()),
             planning_time=planning_time,
-            **{k: np.array(v) for k, v in metrics.items()},
+            **{
+                k: np.array(v)
+                for k, v in metrics.items()
+            },
         )
     print(f"Saved trajectory data to {save_path}")
 
@@ -605,7 +632,9 @@ if __name__ == "__main__":
         # {
         #     "name": "square",
         #     "traj": "square",
-        #     "obstacle": "configs/maps/constrain_motion_planning/obstacles_con_square.json",
+        #     "obstacle":
+        #         "configs/maps/constrain_motion_planning/"
+        #         "obstacles_con_square.json",
         #     "start_pos": (-0.05, -2.3, 0.96),
         #     "start_wxyz": (0.83, 0.54, 0.06, 0.1),
         #     "end_pos": (0.7, -1.45, 2.75),
@@ -615,7 +644,9 @@ if __name__ == "__main__":
         # {
         #     "name": "sine",
         #     "traj": "sine",
-        #     "obstacle": "configs/maps/constrain_motion_planning/obstacles_con_sine.json",
+        #     "obstacle":
+        #         "configs/maps/constrain_motion_planning/"
+        #         "obstacles_con_sine.json",
         #     "start_pos": (0.5, -2.11, 0.89),
         #     "start_wxyz": (1.0, 0.0, 0.0, 0.0),
         #     "end_pos": (0.51, -2.01, 1.49),
@@ -625,7 +656,8 @@ if __name__ == "__main__":
         {
             "name": "sine",
             "traj": "sine",
-            "obstacle": "configs/maps/constrain_motion_planning/obstacles_con_sine.json",
+            "obstacle": "configs/maps/constrain_motion_planning/"
+            "obstacles_con_sine.json",
             "start_pos": (0.48, 1.35, 1.54),
             "start_wxyz": (0.71, 0.71, 0.0, 0.0),
             "end_pos": (0.37, 0.86, 2.02),
@@ -635,7 +667,8 @@ if __name__ == "__main__":
         {
             "name": "A",
             "traj": "icra",
-            "obstacle": "configs/maps/constrain_motion_planning/obstacles_con_A.json",
+            "obstacle": "configs/maps/constrain_motion_planning/"
+            "obstacles_con_A.json",
             "start_pos": (-0.01, -2.51, 0.76),
             "start_wxyz": (0.82, 0.47, 0.25, 0.2),
             "end_pos": (1.23, -1.25, 2.75),
@@ -645,7 +678,8 @@ if __name__ == "__main__":
         {
             "name": "R",
             "traj": "icra",
-            "obstacle": "configs/maps/constrain_motion_planning/obstacles_con_R.json",
+            "obstacle": "configs/maps/constrain_motion_planning/"
+            "obstacles_con_R.json",
             "start_pos": (-0.11, -2.36, 0.87),
             "start_wxyz": (0.85, 0.49, 0.15, 0.14),
             "end_pos": (0.79, -1.26, 2.75),
@@ -655,7 +689,8 @@ if __name__ == "__main__":
         {
             "name": "C",
             "traj": "icra",
-            "obstacle": "configs/maps/constrain_motion_planning/obstacles_con_C.json",
+            "obstacle": "configs/maps/constrain_motion_planning/"
+            "obstacles_con_C.json",
             "start_pos": (-0.01, -2.46, 0.9),
             "start_wxyz": (0.83, 0.54, 0.06, 0.1),
             "end_pos": (0.75, -1.31, 2.75),
@@ -665,7 +700,8 @@ if __name__ == "__main__":
         {
             "name": "I",
             "traj": "icra",
-            "obstacle": "configs/maps/constrain_motion_planning/obstacles_con_I.json",
+            "obstacle": "configs/maps/constrain_motion_planning/"
+            "obstacles_con_I.json",
             "start_pos": (-0.01, -2.45, 0.91),
             "start_wxyz": (0.83, 0.54, 0.06, 0.1),
             "end_pos": (0.75, -1.37, 2.75),

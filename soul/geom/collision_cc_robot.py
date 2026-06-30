@@ -1,18 +1,17 @@
 from __future__ import annotations
 
+import json
 from typing import cast
 
 import jax
 import jax.numpy as jnp
 import jax_dataclasses as jdc
 import jaxlie
-import json
 from jaxtyping import Array, Float, Int
-from loguru import logger
 
 from ..robots.cc_robot import CCRobot, ConstantCurvatureState
 from .collision import collide
-from .geometry import Capsule, Sphere, CollGeom
+from .geometry import Capsule, CollGeom, Sphere
 
 
 @jdc.pytree_dataclass
@@ -52,7 +51,9 @@ class RobotCollision:
             for j in range(num_points_per_section):
                 sphere_list.append(
                     Sphere.from_center_and_radius(
-                        jnp.array([0, 0, length_range[i * num_points_per_section + j]]),
+                        jnp.array([
+                            0, 0, length_range[i * num_points_per_section + j]
+                        ]),
                         radius,
                     )
                 )
@@ -83,7 +84,8 @@ class RobotCollision:
         Args:
             num_points_per_section: The number of points per section.
             num_sections: The number of sections.
-            skip_section: The number of sections to skip between checking pairs.
+            skip_section: The number of sections to skip between checking
+                pairs.
         Builds the self-collision pairs for the robot.
         """
         random_key, subkey = jax.random.split(jax.random.PRNGKey(random_key))
@@ -98,7 +100,9 @@ class RobotCollision:
         return jnp.array(active_idx_i), jnp.array(active_idx_j)
 
     @jdc.jit
-    def at_state(self, robot: CCRobot, state: ConstantCurvatureState) -> CollGeom:
+    def at_state(
+        self, robot: CCRobot, state: ConstantCurvatureState
+    ) -> CollGeom:
         all_poses = robot._forward_kinematics(state)
         all_poses_se3 = jaxlie.SE3.from_matrix(all_poses)
         return self.coll.set_transform(all_poses_se3)
@@ -124,7 +128,8 @@ class RobotCollision:
         Computes the signed distances for active self-collision pairs.
 
         Args:
-            robot_coll: The robot's collision model with precomputed active pair indices.
+            robot_coll: The robot's collision model with precomputed active
+                pair indices.
             robot: The robot's kinematic model.
             cfg: The robot configuration (actuated joints).
 
@@ -139,7 +144,8 @@ class RobotCollision:
             jax.vmap(collide, in_axes=(None, 0)), in_axes=(0, None)
         )
         dist_matrix = vmapped_collide(coll, coll)
-        active_distances = dist_matrix[..., self.active_idx_i, self.active_idx_j]
+        active_distances = dist_matrix[..., self.active_idx_i,
+                                       self.active_idx_j]
         return active_distances
 
     def compute_world_collision_distance(
@@ -150,21 +156,25 @@ class RobotCollision:
         ignore_prefix: int = 0,
     ) -> Float[Array, "*batch_combined N M"]:
         """
-        Computes the signed distances between all robot links (N) and all world obstacles (M).
+        Computes the signed distances between all robot links (N) and all
+        world obstacles (M).
 
         Args:
             robot_coll: The robot's collision model.
             robot: The robot's kinematic model.
             cfg: The robot configuration (actuated joints).
-            world_geom: Collision geometry representing world obstacles. If representing a
-                single obstacle, it should have batch shape (). If multiple, the last axis
-                is interpreted as the collection of world objects (M).
-                The batch dimensions (*batch_world) must be broadcast-compatible with cfg's
-                batch axes (*batch_cfg).
+            world_geom: Collision geometry representing world obstacles. If
+                representing a single obstacle, it should have batch shape ().
+                If multiple, the last axis is interpreted as the collection of
+                world objects (M).
+                The batch dimensions (*batch_world) must be broadcast-
+                compatible with cfg's batch axes (*batch_cfg).
 
         Returns:
-            Matrix of signed distances between each robot link and each world object.
-            Shape: (*batch_combined, N, M), where N=num_links, M=num_world_objects.
+            Matrix of signed distances between each robot link and each world
+            object.
+            Shape: (*batch_combined, N, M), where N=num_links,
+            M=num_world_objects.
             Positive distance means separation, negative means penetration.
         """
         # 1. Get robot collision geometry at the current config
@@ -177,7 +187,8 @@ class RobotCollision:
         if ignore_prefix > 0:
             coll_robot_world = jax.tree.map(
                 lambda x: (
-                    x[..., ignore_prefix:, :] if x.ndim >= 2 else x[..., ignore_prefix:]
+                    x[..., ignore_prefix:, :]
+                    if x.ndim >= 2 else x[..., ignore_prefix:]
                 ),
                 coll_robot_world,
             )
@@ -185,7 +196,8 @@ class RobotCollision:
         # 2. Normalize world_geom shape and determine M
         world_axes = world_geom.get_batch_axes()
         if len(world_axes) == 0:  # Single world object
-            # Use the object's broadcast_to method to add the M=1 axis correctly
+            # Use the object's broadcast_to method to add the M=1 axis
+            # correctly
             _world_geom = world_geom.broadcast_to(1)
             M = 1
             batch_world_shape = ()
@@ -194,9 +206,12 @@ class RobotCollision:
             M = world_axes[-1]
             batch_world_shape = world_axes[:-1]
 
-        # 3. Compute distances: Map collide over robot links (axis -2) vs _world_geom (None)
+        # 3. Compute distances: Map collide over robot links (axis -2) vs
+        # _world_geom (None)
         # _world_geom is guaranteed to have the M axis now.
-        _collide_links_vs_world = jax.vmap(collide, in_axes=(-2, None), out_axes=(-2))
+        _collide_links_vs_world = jax.vmap(
+            collide, in_axes=(-2, None), out_axes=(-2)
+        )
         dist_matrix = _collide_links_vs_world(coll_robot_world, _world_geom)
 
         # 4. Result shape check
@@ -209,8 +224,10 @@ class RobotCollision:
 
         # Perform the assertion without try-except or complex logic
         assert dist_matrix.shape == expected_shape, (
-            f"Output shape mismatch. Expected {expected_shape}, Got {dist_matrix.shape}. "
-            f"Robot axes: {coll_robot_world.get_batch_axes()}, Original World axes: {world_geom.get_batch_axes()}"
+            f"Output shape mismatch. Expected {expected_shape}, "
+            f"Got {dist_matrix.shape}. "
+            f"Robot axes: {coll_robot_world.get_batch_axes()}, "
+            f"Original World axes: {world_geom.get_batch_axes()}"
         )
 
         # 5. Return the distance matrix

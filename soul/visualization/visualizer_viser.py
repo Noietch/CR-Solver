@@ -1,25 +1,28 @@
-import jax
 import json
-import viser
-import trimesh
-import numpy as np
-import jax.numpy as jnp
-import jaxlie
-import jax_dataclasses as jdc
 from functools import partial
-import time
+
 import imageio.v3 as iio
+import jax
+import jax.numpy as jnp
+import jax_dataclasses as jdc
+import jaxlie
+import numpy as np
+import trimesh
+import viser
 from tqdm import tqdm
 
 from ..geom.collision_cc_robot import RobotCollision
 from ..geom.collision_world import WorldCollision
-from ..geom.geometry import Sphere, BoundingBox
-from ..robots.cc_robot import ConstantCurvatureState, CCRobot
-from ..robots.cc_robot_extend import ConstantCurvatureState as ConstantCurvatureStateExtend
+from ..geom.geometry import BoundingBox, Sphere
+from ..robots.cc_robot import CCRobot, ConstantCurvatureState
 from ..robots.cc_robot_extend import CCRobot as CCRobotExtend
+from ..robots.cc_robot_extend import (
+    ConstantCurvatureState as ConstantCurvatureStateExtend,
+)
 
 
 class ViserSoftRobot:
+
     def __init__(
         self,
         server: viser.ViserServer | viser.ClientHandle,
@@ -98,9 +101,9 @@ class ViserSoftRobot:
 
         # Apply color with alpha channel using standard RGBA format
         # Trimesh expects RGBA values in range 0-255 as uint8
-        rgba_color = np.array(
-            [int(c * 255) for c in color] + [int(alpha * 255)], dtype=np.uint8
-        )
+        rgba_color = np.array([int(c * 255)
+                               for c in color] + [int(alpha * 255)],
+                              dtype=np.uint8)
 
         # Set both vertex and face colors for maximum compatibility
         # Some renderers use vertex colors, others use face colors
@@ -114,7 +117,9 @@ class ViserSoftRobot:
 
     def _get_section_index(self, point_index: int):
         """Get the section index for a given point index."""
-        current_point_section = point_index // self.robot_config.num_points_per_section
+        current_point_section = (
+            point_index // self.robot_config.num_points_per_section
+        )
         next_point_section = (
             point_index + 1
         ) // self.robot_config.num_points_per_section
@@ -138,13 +143,17 @@ class ViserSoftRobot:
 
         # calculate total number of points
         total_points = (
-            self.robot_config.num_sections * self.robot_config.num_points_per_section
+            self.robot_config.num_sections
+            * self.robot_config.num_points_per_section
         )
         cylinder_radius = self.robot_config.radius * 0.8
-        backbone_radius = self.robot_config.radius * 0.1  # smaller radius for backbone
+        # smaller radius for backbone
+        backbone_radius = self.robot_config.radius * 0.1
 
         # generate colors for each section
-        section_colors = self._generate_section_colors(self.robot_config.num_sections)
+        section_colors = self._generate_section_colors(
+            self.robot_config.num_sections
+        )
         black_color = (0.0, 0.0, 0.0)  # black color for backbone
 
         # create n-1 cylinders connecting n nodes
@@ -176,10 +185,16 @@ class ViserSoftRobot:
         self.update_pose(self.reset_pose())
 
     def _update_cylinder_pose(
-        self, handle, all_poses, i, scale_factor=0.6, cylinder_type="cylinder"
+        self,
+        handle,
+        all_poses,
+        i,
+        scale_factor=0.6,
+        cylinder_type="cylinder"
     ):
         """Update a single cylinder's position, rotation and scale."""
-        # get the positions of the two adjacent nodes - convert to numpy immediately
+        # get the positions of the two adjacent nodes - convert to numpy
+        # immediately
         pos1 = np.array(jaxlie.SE3.from_matrix(all_poses[i]).translation())
         pos2 = np.array(jaxlie.SE3.from_matrix(all_poses[i + 1]).translation())
 
@@ -192,7 +207,9 @@ class ViserSoftRobot:
             # calculate the rotation from the Z-axis to the target direction
             z_axis = np.array([0.0, 0.0, 1.0])
             direction_unit = direction / length
-            rotation = self._compute_rotation_z_to_direction(z_axis, direction_unit)
+            rotation = self._compute_rotation_z_to_direction(
+                z_axis, direction_unit
+            )
 
             # check if the rotation is valid
             if np.any(np.isnan(rotation.wxyz)):
@@ -208,11 +225,14 @@ class ViserSoftRobot:
             handle.scale = (0.0, 0.0, 0.0)
 
     def update_pose(self, all_poses, skip_frames=0):
-        """update the position and direction of the cylinders based on the robot state.
+        """update the position and direction of the cylinders based on the
+        robot state.
 
         Args:
-            all_poses: SE3 pose matrices of all robot nodes, shape (n_points, 4, 4)
-            skip_frames: Skip every N frames for performance (0 = update every frame)
+            all_poses: SE3 pose matrices of all robot nodes, shape
+                (n_points, 4, 4)
+            skip_frames: Skip every N frames for performance (0 = update
+                every frame)
         """
         if not self.robot_cylinder_handles:
             return
@@ -223,19 +243,27 @@ class ViserSoftRobot:
             if self._update_counter % (skip_frames + 1) != 0:
                 return
 
-        # Convert JAX arrays to numpy once at the beginning to avoid repeated conversions
+        # Convert JAX arrays to numpy once at the beginning to avoid
+        # repeated conversions
         if hasattr(all_poses, "device"):  # Check if it's a JAX array
             all_poses = np.array(all_poses)
 
         # update main robot cylinders
         for i, handle in enumerate(self.robot_cylinder_handles):
             self._update_cylinder_pose(
-                handle, all_poses, i, scale_factor=0.6, cylinder_type="cylinder"
+                handle,
+                all_poses,
+                i,
+                scale_factor=0.6,
+                cylinder_type="cylinder"
             )
 
-        # update backbone cylinders with the same poses - only if enabled and exist
+        # update backbone cylinders with the same poses - only if enabled
+        # and exist
         if self.enable_backbone and self.robot_backbone_cylinder_handles:
-            for i, backbone_handle in enumerate(self.robot_backbone_cylinder_handles):
+            for i, backbone_handle in enumerate(
+                self.robot_backbone_cylinder_handles
+            ):
                 self._update_cylinder_pose(
                     backbone_handle,
                     all_poses,
@@ -245,7 +273,8 @@ class ViserSoftRobot:
                 )
 
     def _compute_rotation_z_to_direction(self, z_axis, target_direction):
-        """calculate the rotation quaternion from the Z-axis to the target direction."""
+        """calculate the rotation quaternion from the Z-axis to the target
+        direction."""
         # check if they are parallel
         dot_product = np.dot(z_axis, target_direction)
         if np.abs(dot_product) > 0.999:
@@ -269,7 +298,9 @@ class ViserSoftRobot:
 
         # create rotation using axis-angle representation
         return jaxlie.SO3.from_quaternion_xyzw(
-            np.concatenate([rotation_axis * np.sin(angle / 2), [np.cos(angle / 2)]])
+            np.concatenate([
+                rotation_axis * np.sin(angle / 2), [np.cos(angle / 2)]
+            ])
         )
 
     def create_collision_visualizations(self):
@@ -282,7 +313,8 @@ class ViserSoftRobot:
         self.sphere_handles = []
 
         # assume spheres have a consistent radius across the robot
-        # this is a reasonable assumption based on how RobotCollision is initialized
+        # this is a reasonable assumption based on how RobotCollision is
+        # initialized
         if isinstance(self.robot_coll.coll, Sphere):
             num_spheres = self.robot_coll.coll.radius.shape[0]
             # create a mesh for each sphere in the model
@@ -307,7 +339,9 @@ class ViserSoftRobot:
             position = se3.translation()
             handle.position = np.array(position)
 
-    def visualize_traj_collisions(self, robot: CCRobot, cfg: ConstantCurvatureState):
+    def visualize_traj_collisions(
+        self, robot: CCRobot, cfg: ConstantCurvatureState
+    ):
         """Visualize a capsule."""
         traj_len = cfg.theta.shape[0]
         for i in range(traj_len - 1):
@@ -317,7 +351,10 @@ class ViserSoftRobot:
                 robot, cfg_i, cfg_i_plus_1
             )
             self.server.scene.add_mesh_trimesh(
-                name=f"{self.root_node_name}_traj_collisions/swept_capsule_{i}",
+                name=(
+                    f"{self.root_node_name}_traj_collisions/"
+                    f"swept_capsule_{i}"
+                ),
                 mesh=swept_capsules.to_trimesh(),
             )
 
@@ -344,6 +381,7 @@ class ViserSoftRobot:
 
 
 class ViserWorld:
+
     def __init__(
         self,
         server: viser.ViserServer | viser.ClientHandle,
@@ -395,7 +433,8 @@ class ViserWorld:
 
     def save_obstacle_poses(self, path: str):
         """Saves the current obstacle poses to a JSON file."""
-        # Assuming obstacles are spheres, which is consistent with the config format
+        # Assuming obstacles are spheres, which is consistent with the
+        # config format
         if isinstance(self.world_coll.obstacles, Sphere):
             obstacles_dict = {}
             centers = self.world_coll.obstacles.pose.translation()
@@ -403,7 +442,9 @@ class ViserWorld:
             for i in range(len(centers)):
                 obstacles_dict[f"obstacle_{i+1}"] = {
                     "type": "sphere",
-                    "center": [round(float(center), 4) for center in centers[i]],
+                    "center": [
+                        round(float(center), 4) for center in centers[i]
+                    ],
                     "radius": round(float(radii[i]), 2),
                 }
         elif isinstance(self.world_coll.obstacles, BoundingBox):
@@ -413,8 +454,12 @@ class ViserWorld:
             for i in range(len(centers)):
                 obstacles_dict[f"obstacle_{i+1}"] = {
                     "type": "bbox",
-                    "center": [round(float(center), 4) for center in centers[i]],
-                    "extents": [round(float(extent), 4) for extent in extents[i]],
+                    "center": [
+                        round(float(center), 4) for center in centers[i]
+                    ],
+                    "extents": [
+                        round(float(extent), 4) for extent in extents[i]
+                    ],
                 }
         else:
             raise ValueError(
@@ -432,7 +477,9 @@ class ViserWorld:
         if self.is_handle_able:
             obstacles_coll = self.world_coll.obstacles
             for i in range(len(obstacles_coll.pose.wxyz_xyz)):
-                obstacle_i = jax.tree_util.tree_map(lambda x: x[i], obstacles_coll)
+                obstacle_i = jax.tree_util.tree_map(
+                    lambda x: x[i], obstacles_coll
+                )
 
                 obstacle_pose = obstacles_coll.pose.wxyz_xyz[i]
                 obstacle_handle = self.server.scene.add_transform_controls(
@@ -452,12 +499,14 @@ class ViserWorld:
                 if self.enable_collision:
                     coll_mesh = obstacle_i.to_trimesh()
                     coll_mesh.apply_translation(-obstacle_pose[4:])
-                    collision_handle = self.server.scene.add_mesh_trimesh(
+                    self.server.scene.add_mesh_trimesh(
                         name=f"obstacles/handle_{i}/collision",
                         mesh=coll_mesh,
                     )
 
-                obstacle_handle.on_update(partial(self.update_obstacle_pose, i))
+                obstacle_handle.on_update(
+                    partial(self.update_obstacle_pose, i)
+                )
 
         else:
             for i, mesh in enumerate(self.world_coll.mesh):
@@ -467,7 +516,7 @@ class ViserWorld:
                 )
             if self.enable_collision:
                 self.server.scene.add_mesh_trimesh(
-                    name=f"obstacles/collision",
+                    name="obstacles/collision",
                     mesh=self.world_coll.obstacles.to_trimesh(),
                 )
 
@@ -483,6 +532,7 @@ class ViserWorld:
 
 
 class ViserRenderer:
+
     def __init__(
         self,
         server: viser.ViserServer | viser.ClientHandle,
@@ -506,7 +556,8 @@ class ViserRenderer:
 
         Args:
             traj: Robot trajectory as either SE3 poses or numpy array
-            skip_frames: Number of frames to skip for performance (0 = render every frame)
+            skip_frames: Number of frames to skip for performance
+                (0 = render every frame)
             save_path: Path to save the video file (optional)
         """
         images = []
@@ -537,15 +588,18 @@ class ViserRenderer:
         save_path: str = None,
     ):
         """
-        Render trajectory by creating a robot for each pose and displaying all simultaneously.
+        Render trajectory by creating a robot for each pose and displaying
+        all simultaneously.
 
-        Creates individual robot instances for each trajectory pose with different colors/transparency
-        to visualize the complete trajectory in a single image.
+        Creates individual robot instances for each trajectory pose with
+        different colors/transparency to visualize the complete trajectory
+        in a single image.
 
         Args:
             event: Viser GUI event for rendering
             traj: Robot trajectory as either SE3 poses or numpy array
-            skip_frames: Number of frames to skip for performance (0 = render every frame)
+            skip_frames: Number of frames to skip for performance
+                (0 = render every frame)
             save_path: Path to save the image (optional)
 
         Returns:
@@ -557,7 +611,8 @@ class ViserRenderer:
         try:
             # Create robots for each trajectory pose
             for i in tqdm(
-                range(0, traj_len, skip_frames + 1), desc="Creating trajectory robots"
+                range(0, traj_len, skip_frames + 1),
+                desc="Creating trajectory robots"
             ):
                 # Calculate color based on position in trajectory
                 progress = i / max(1, traj_len - 1)
@@ -565,11 +620,9 @@ class ViserRenderer:
                 # Color transition from blue (start) to red (end)
                 if progress <= 0.5:
                     # Blue to green
-                    color = (0.0, progress * 2, 1.0 - progress * 2)
                     alpha = 0.3 + 0.4 * progress  # More transparent at start
                 else:
                     # Green to red
-                    color = ((progress - 0.5) * 2, 1.0 - (progress - 0.5) * 2, 0.0)
                     alpha = 0.5 + 0.5 * (progress - 0.5)  # More opaque at end
 
                 # Create robot for this pose

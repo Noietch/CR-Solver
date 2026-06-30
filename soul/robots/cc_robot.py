@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+
 import jax
 import jax_dataclasses as jdc
 import jaxls
@@ -147,7 +148,8 @@ class CCRobot:
         def retract_fn(
             cfg: ConstantCurvatureState, delta: Array
         ) -> ConstantCurvatureState:
-            """Same as jaxls.SE3Var.retract_fn, but removing updates on certain axes."""
+            """Same as jaxls.SE3Var.retract_fn, but removing updates on
+            certain axes."""
             delta = delta * config.opt_mask
 
             return jaxls.Var._euclidean_retract(cfg, delta)
@@ -155,8 +157,8 @@ class CCRobot:
         # do the initial guess, but the value is not important
         default_cfg = ConstantCurvatureState(
             base_position=jnp.zeros(3),
-            theta=jnp.ones((config.num_sections,)),
-            phi=jnp.zeros((config.num_sections,)),
+            theta=jnp.ones((config.num_sections, )),
+            phi=jnp.zeros((config.num_sections, )),
         )
 
         class StateVar(
@@ -164,7 +166,8 @@ class CCRobot:
             default_factory=lambda: default_cfg,
             retract_fn=retract_fn,
             tangent_dim=3 + config.num_sections + config.num_sections,
-        ): ...
+        ):
+            ...
 
         robot = CCRobot(
             config=config,
@@ -177,6 +180,7 @@ class CCRobot:
     def _forward_kinematics(
         self, state: ConstantCurvatureState
     ) -> Float[Array, "num_sections 4 4"]:
+
         def build_transform(s, p):
             percentage = p / (self.config.num_points_per_section - 1)
 
@@ -189,61 +193,60 @@ class CCRobot:
             cos_theta = jnp.cos(theta * percentage)
             sin_theta = jnp.sin(theta * percentage)
 
-            Ts_matrix = jnp.array(
+            Ts_matrix = jnp.array([
                 [
-                    [
-                        cos_phi * cos_phi * (cos_theta - 1.0) + 1.0,
-                        sin_phi * cos_phi * (cos_theta - 1.0),
-                        cos_phi * sin_theta,
-                        r * cos_phi * (1.0 - cos_theta),
-                    ],
-                    [
-                        sin_phi * cos_phi * (cos_theta - 1.0),
-                        sin_phi * sin_phi * (cos_theta - 1.0) + 1.0,
-                        sin_phi * sin_theta,
-                        r * sin_phi * (1.0 - cos_theta),
-                    ],
-                    [
-                        -cos_phi * sin_theta,
-                        -sin_phi * sin_theta,
-                        cos_theta,
-                        r * sin_theta,
-                    ],
-                    [0.0, 0.0, 0.0, 1.0],
-                ]
-            )
+                    cos_phi * cos_phi * (cos_theta - 1.0) + 1.0,
+                    sin_phi * cos_phi * (cos_theta - 1.0),
+                    cos_phi * sin_theta,
+                    r * cos_phi * (1.0 - cos_theta),
+                ],
+                [
+                    sin_phi * cos_phi * (cos_theta - 1.0),
+                    sin_phi * sin_phi * (cos_theta - 1.0) + 1.0,
+                    sin_phi * sin_theta,
+                    r * sin_phi * (1.0 - cos_theta),
+                ],
+                [
+                    -cos_phi * sin_theta,
+                    -sin_phi * sin_theta,
+                    cos_theta,
+                    r * sin_theta,
+                ],
+                [0.0, 0.0, 0.0, 1.0],
+            ])
 
             return Ts_matrix
 
         # Create indices for all segment-point pairs
         segment_indices = jnp.repeat(
-            jnp.arange(self.config.num_sections), self.config.num_points_per_section
+            jnp.arange(self.config.num_sections),
+            self.config.num_points_per_section
         )
         point_indices = jnp.tile(
-            jnp.arange(self.config.num_points_per_section), self.config.num_sections
+            jnp.arange(self.config.num_points_per_section),
+            self.config.num_sections
         )
 
         # Vectorize the transform building across all segment-point pairs
-        transform_matrices = jax.vmap(build_transform)(segment_indices, point_indices)
+        transform_matrices = jax.vmap(build_transform
+                                      )(segment_indices, point_indices)
 
         # Process each segment separately using JAX's scan
         final_poses = []
-        base_transform = jnp.array(
-            [
-                [1, 0, 0, state.base_position[0]],
-                [0, 1, 0, state.base_position[1]],
-                [0, 0, 1, state.base_position[2]],
-                [0, 0, 0, 1],
-            ]
+        base_transform = jnp.array([
+            [1, 0, 0, state.base_position[0]],
+            [0, 1, 0, state.base_position[1]],
+            [0, 0, 1, state.base_position[2]],
+            [0, 0, 0, 1],
+        ])
+        prev_pose = jnp.tile(
+            base_transform, (self.config.num_points_per_section, 1, 1)
         )
-        prev_pose = jnp.tile(base_transform, (self.config.num_points_per_section, 1, 1))
 
         for i in range(self.config.num_sections):
             segment_transforms = transform_matrices[
-                i
-                * self.config.num_points_per_section : (i + 1)
-                * self.config.num_points_per_section
-            ]
+                i * self.config.num_points_per_section:(i + 1)
+                * self.config.num_points_per_section]
             segment_poses = jnp.matmul(prev_pose, segment_transforms)
             final_poses.append(segment_poses)
             prev_pose = segment_poses[-1]

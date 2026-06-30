@@ -1,15 +1,16 @@
-import jax
-import jaxlie
-from jaxtyping import Array
-import numpy as np
-import jax.numpy as jnp
 import os
 from typing import Callable
 
+import jax
+import jax.numpy as jnp
+import jaxlie
+import numpy as np
+from benchmark.mp.utils import is_state_in_collision
+from jaxtyping import Array
+
+from soul.geom import CollGeom, RobotCollision
 from soul.robots.cc_robot import ConstantCurvatureState
 from soul.robots.tdcr_robot import TDCRRobot
-from soul.geom import RobotCollision, CollGeom
-from benchmark.mp.utils import is_state_in_collision
 
 
 def sample_states(robot: TDCRRobot, num_states: int) -> ConstantCurvatureState:
@@ -37,6 +38,7 @@ def sample_states(robot: TDCRRobot, num_states: int) -> ConstantCurvatureState:
 
 
 class Problem:
+
     def __init__(
         self,
         sample_data_path: str,
@@ -61,10 +63,11 @@ class Problem:
         is_collision_vmap = jax.vmap(
             is_state_in_collision, in_axes=(0, None, None, None)
         )
-        pool_size = self.eval_num * 10  # Sample more to have options for pairing
+        pool_size = self.eval_num * 10  # Sample more for pairing options
         accepted_states = []
         total_sampled = 0
-        max_pool_sampling_attempts = pool_size * 3  # Safety break for pool sampling
+        # Safety break for pool sampling
+        max_pool_sampling_attempts = pool_size * 3
 
         print(f"Sampling a pool of {pool_size} collision-free states...")
         while (
@@ -83,7 +86,9 @@ class Problem:
 
             num_non_colliding = non_colliding_states.theta.shape[0]
             if num_non_colliding > 0:
-                current_pool_size = sum(s.theta.shape[0] for s in accepted_states)
+                current_pool_size = sum(
+                    s.theta.shape[0] for s in accepted_states
+                )
                 needed = pool_size - current_pool_size
                 if num_non_colliding > needed:
                     non_colliding_states = jax.tree_util.tree_map(
@@ -107,13 +112,16 @@ class Problem:
 
     def gen_problems(self):
         print(
-            f"Sampling {self.eval_num} collision-free start-end pairs with min distance {self.min_distance}..."
+            f"Sampling {self.eval_num} collision-free start-end pairs "
+            f"with min distance {self.min_distance}..."
         )
         # Sample a large pool of collision-free states first.
         state_pool = self.sample_pool()
 
         fk_transforms_pool = self.batched_fk(state_pool)
-        tip_transforms_pool = jaxlie.SE3.from_matrix(fk_transforms_pool[:, -1, ...])
+        tip_transforms_pool = jaxlie.SE3.from_matrix(
+            fk_transforms_pool[:, -1, ...]
+        )
         positions_pool = tip_transforms_pool.translation()
 
         # Pair states from the pool
@@ -126,7 +134,10 @@ class Problem:
         print("Pairing states...")
 
         if self.start_from_initialization:
-            print("Adding initialization states (theta=0, phi=0) as start states...")
+            print(
+                "Adding initialization states (theta=0, phi=0) as "
+                "start states..."
+            )
             # Create single initialization state with theta=0, phi=0
             init_state = self.return_state(
                 theta=jnp.full((1, self.robot.config.num_sections), 1e-7),
@@ -155,7 +166,7 @@ class Problem:
                 if distance >= self.min_distance:
                     start_state = init_state
                     end_state = jax.tree_util.tree_map(
-                        lambda x: x[idx2_int : idx2_int + 1], state_pool
+                        lambda x: x[idx2_int:idx2_int + 1], state_pool
                     )
 
                     final_start_states_list.append(start_state)
@@ -179,10 +190,10 @@ class Problem:
 
                 if distance >= self.min_distance:
                     start_state = jax.tree_util.tree_map(
-                        lambda x: x[idx1 : idx1 + 1], state_pool
+                        lambda x: x[idx1:idx1 + 1], state_pool
                     )
                     end_state = jax.tree_util.tree_map(
-                        lambda x: x[idx2 : idx2 + 1], state_pool
+                        lambda x: x[idx2:idx2 + 1], state_pool
                     )
 
                     final_start_states_list.append(start_state)
@@ -199,7 +210,9 @@ class Problem:
         )
 
         self.save(start_states=start_states, end_states=end_states)
-        print(f"Finished sampling {start_states.theta.shape[0]} start/end pairs.")
+        print(
+            f"Finished sampling {start_states.theta.shape[0]} start/end pairs."
+        )
         return start_states, end_states
 
     def save(
@@ -215,9 +228,12 @@ class Problem:
                 save_load_path=save_load_path, success_indices=success_indices
             )
             print(
-                f"Saving {len(success_indices)} successful trials back to {save_load_path}"
+                f"Saving {len(success_indices)} successful trials back "
+                f"to {save_load_path}"
             )
-            save_load_path = save_load_path.replace(".npz", f"{rename_suffix}.npz")
+            save_load_path = save_load_path.replace(
+                ".npz", f"{rename_suffix}.npz"
+            )
         print(f"Saving sampled states to {save_load_path}...")
         os.makedirs(os.path.dirname(save_load_path), exist_ok=True)
         np.savez(
@@ -270,7 +286,8 @@ class Problem:
                 phi=filtered_end_phi,
             )
             print(
-                f"Successfully removed failed trials. Remaining: {start_states.theta.shape[0]} pairs."
+                "Successfully removed failed trials. Remaining: "
+                f"{start_states.theta.shape[0]} pairs."
             )
 
         else:

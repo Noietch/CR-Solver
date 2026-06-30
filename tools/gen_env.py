@@ -1,5 +1,6 @@
 import json
 import os
+
 import numpy as np
 
 from soul.visualization.visualizer_plot import visualize_cc_model_3d
@@ -27,7 +28,8 @@ def generate_lattice_env(
     # Define the grid range (3x3x3 grid centered at origin)
     x_positions = np.array([-1.0, 0.0, 1.0]) * x_spacing + offset[0]
     y_positions = np.array([-1.0, 0.0, 1.0]) * y_spacing + offset[1]
-    z_positions = np.array([-0.8, -0.8 + z_spacing, -0.8 + 2 * z_spacing]) + offset[2]
+    z_positions = np.array([-0.8, -0.8 + z_spacing, -0.8 + 2 * z_spacing]
+                           ) + offset[2]
 
     obstacles_dict = {}
     obstacle_count = 1
@@ -39,7 +41,8 @@ def generate_lattice_env(
                 obstacle_key = f"obstacle_{obstacle_count}"
                 obstacles_dict[obstacle_key] = {
                     "type": "sphere",
-                    "center": [float(x), float(y), float(z)],
+                    "center": [float(x), float(y),
+                               float(z)],
                     "radius": radius,
                 }
                 obstacle_count += 1
@@ -49,7 +52,8 @@ def generate_lattice_env(
         json.dump(obstacles_dict, f, indent=4)
 
     print(
-        f"Generated lattice environment with {len(obstacles_dict)} obstacles saved to {save_path}"
+        f"Generated lattice environment with {len(obstacles_dict)} "
+        f"obstacles saved to {save_path}"
     )
 
 
@@ -72,23 +76,23 @@ def generate_octahedron_env(
     """
 
     # Octahedron vertices (6 vertices)
-    vertices = np.array(
-        [
-            [1.0, 0.0, 0.0],  # +X
-            [-1.0, 0.0, 0.0],  # -X
-            [0.0, 1.0, 0.0],  # +Y
-            [0.0, -1.0, 0.0],  # -Y
-            [0.0, 0.0, 1.0],  # +Z
-            [0.0, 0.0, -1.0],  # -Z
-        ]
-    ) * scale + np.array(center_pos)
+    vertices = np.array([
+        [1.0, 0.0, 0.0],  # +X
+        [-1.0, 0.0, 0.0],  # -X
+        [0.0, 1.0, 0.0],  # +Y
+        [0.0, -1.0, 0.0],  # -Y
+        [0.0, 0.0, 1.0],  # +Z
+        [0.0, 0.0, -1.0],  # -Z
+    ]) * scale + np.array(center_pos)
 
     obstacles_dict = {}
     for i, vertex in enumerate(vertices):
         obstacle_key = f"obstacle_{i+1}"
         obstacles_dict[obstacle_key] = {
             "type": "sphere",
-            "center": [float(vertex[0]), float(vertex[1]), float(vertex[2])],
+            "center": [float(vertex[0]),
+                       float(vertex[1]),
+                       float(vertex[2])],
             "radius": radius,
         }
 
@@ -97,7 +101,8 @@ def generate_octahedron_env(
         json.dump(obstacles_dict, f, indent=4)
 
     print(
-        f"Generated octahedron environment with {len(obstacles_dict)} obstacles saved to {save_path}"
+        f"Generated octahedron environment with {len(obstacles_dict)} "
+        f"obstacles saved to {save_path}"
     )
 
 
@@ -120,25 +125,25 @@ def generate_cube_env(
     """
 
     # Cube vertices (8 vertices)
-    vertices = np.array(
-        [
-            [1.0, 1.0, 1.0],  # +++
-            [1.0, 1.0, -1.0],  # ++-
-            [1.0, -1.0, 1.0],  # +-+
-            [1.0, -1.0, -1.0],  # +--
-            [-1.0, 1.0, 1.0],  # -++
-            [-1.0, 1.0, -1.0],  # -+-
-            [-1.0, -1.0, 1.0],  # --+
-            [-1.0, -1.0, -1.0],  # ---
-        ]
-    ) * scale + np.array(center_pos)
+    vertices = np.array([
+        [1.0, 1.0, 1.0],  # +++
+        [1.0, 1.0, -1.0],  # ++-
+        [1.0, -1.0, 1.0],  # +-+
+        [1.0, -1.0, -1.0],  # +--
+        [-1.0, 1.0, 1.0],  # -++
+        [-1.0, 1.0, -1.0],  # -+-
+        [-1.0, -1.0, 1.0],  # --+
+        [-1.0, -1.0, -1.0],  # ---
+    ]) * scale + np.array(center_pos)
 
     obstacles_dict = {}
     for i, vertex in enumerate(vertices):
         obstacle_key = f"obstacle_{i+1}"
         obstacles_dict[obstacle_key] = {
             "type": "sphere",
-            "center": [float(vertex[0]), float(vertex[1]), float(vertex[2])],
+            "center": [float(vertex[0]),
+                       float(vertex[1]),
+                       float(vertex[2])],
             "radius": radius,
         }
 
@@ -147,7 +152,8 @@ def generate_cube_env(
         json.dump(obstacles_dict, f, indent=4)
 
     print(
-        f"Generated cube environment with {len(obstacles_dict)} obstacles saved to {save_path}"
+        f"Generated cube environment with {len(obstacles_dict)} "
+        f"obstacles saved to {save_path}"
     )
 
 
@@ -174,35 +180,36 @@ def generate_icosahedron_env(
 
     # Icosahedron vertices (12 vertices)
     # Three orthogonal golden rectangles
-    vertices = np.array(
-        [
-            # Rectangle in XY plane
-            [1.0, phi, 0.0],
-            [-1.0, phi, 0.0],
-            [1.0, -phi, 0.0],
-            [-1.0, -phi, 0.0],
-            # Rectangle in YZ plane
-            [0.0, 1.0, phi],
-            [0.0, -1.0, phi],
-            [0.0, 1.0, -phi],
-            [0.0, -1.0, -phi],
-            # Rectangle in XZ plane
-            [phi, 0.0, 1.0],
-            [-phi, 0.0, 1.0],
-            [phi, 0.0, -1.0],
-            [-phi, 0.0, -1.0],
-        ]
-    )
+    vertices = np.array([
+        # Rectangle in XY plane
+        [1.0, phi, 0.0],
+        [-1.0, phi, 0.0],
+        [1.0, -phi, 0.0],
+        [-1.0, -phi, 0.0],
+        # Rectangle in YZ plane
+        [0.0, 1.0, phi],
+        [0.0, -1.0, phi],
+        [0.0, 1.0, -phi],
+        [0.0, -1.0, -phi],
+        # Rectangle in XZ plane
+        [phi, 0.0, 1.0],
+        [-phi, 0.0, 1.0],
+        [phi, 0.0, -1.0],
+        [-phi, 0.0, -1.0],
+    ])
 
     # Normalize to unit sphere and scale
-    vertices = vertices / np.linalg.norm(vertices[0]) * scale + np.array(center_pos)
+    vertices = vertices / np.linalg.norm(vertices[0]
+                                         ) * scale + np.array(center_pos)
 
     obstacles_dict = {}
     for i, vertex in enumerate(vertices):
         obstacle_key = f"obstacle_{i+1}"
         obstacles_dict[obstacle_key] = {
             "type": "sphere",
-            "center": [float(vertex[0]), float(vertex[1]), float(vertex[2])],
+            "center": [float(vertex[0]),
+                       float(vertex[1]),
+                       float(vertex[2])],
             "radius": radius,
         }
 
@@ -211,7 +218,8 @@ def generate_icosahedron_env(
         json.dump(obstacles_dict, f, indent=4)
 
     print(
-        f"Generated icosahedron environment with {len(obstacles_dict)} obstacles saved to {save_path}"
+        f"Generated icosahedron environment with {len(obstacles_dict)} "
+        f"obstacles saved to {save_path}"
     )
 
 
@@ -280,13 +288,16 @@ def generate_random_env(
         json.dump(obstacles_dict, f, indent=4)
 
     print(
-        f"Generated random environment with {len(obstacles_dict)} obstacles saved to {save_path}"
+        f"Generated random environment with {len(obstacles_dict)} "
+        f"obstacles saved to {save_path}"
     )
 
 
 if __name__ == "__main__":
     # Lattice (27 vertices)
-    generate_lattice_env("configs/maps/ik_maps/obstacles_lattice.json", radius=0.2)
+    generate_lattice_env(
+        "configs/maps/ik_maps/obstacles_lattice.json", radius=0.2
+    )
     visualize_cc_model_3d(
         world_coll_config="configs/maps/ik_maps/obstacles_lattice.json",
         save_path="visualization/lattice_env.png",
@@ -294,7 +305,8 @@ if __name__ == "__main__":
 
     # # Octahedron (6 vertices) - smaller radius
     # generate_octahedron_env(
-    #     "configs/maps/ik_maps/obstacles_octahedron.json", radius=0.4, scale=0.8
+    #     "configs/maps/ik_maps/obstacles_octahedron.json",
+    #     radius=0.4, scale=0.8
     # )
     # visualize_cc_model_3d(
     #     world_coll_config="configs/maps/ik_maps/obstacles_octahedron.json",
@@ -302,7 +314,9 @@ if __name__ == "__main__":
     # )
 
     # # Cube (8 vertices) - medium radius
-    # generate_cube_env("configs/maps/ik_maps/obstacles_cube.json", radius=0.4, scale=0.8)
+    # generate_cube_env(
+    #     "configs/maps/ik_maps/obstacles_cube.json", radius=0.4, scale=0.8
+    # )
     # visualize_cc_model_3d(
     #     world_coll_config="configs/maps/ik_maps/obstacles_cube.json",
     #     save_path="visualization/cube_env.png",
@@ -310,7 +324,8 @@ if __name__ == "__main__":
 
     # # Icosahedron (12 vertices) - larger radius
     # generate_icosahedron_env(
-    #     "configs/maps/ik_maps/obstacles_icosahedron.json", radius=0.4, scale=1.0
+    #     "configs/maps/ik_maps/obstacles_icosahedron.json",
+    #     radius=0.4, scale=1.0
     # )
     # visualize_cc_model_3d(
     #     world_coll_config="configs/maps/ik_maps/obstacles_icosahedron.json",
@@ -325,7 +340,8 @@ if __name__ == "__main__":
     # for section in section_list:
     #     generate_random_env(
     #         f"configs/maps/mp_scene/obstacles_random_start_init_{start_from_initialization}_section_{section}.json",
-    #         num_obstacles=section**3,  # Number of obstacles increases with section size
+    #         # Number of obstacles increases with section size
+    #         num_obstacles=section**3,
     #         center_pos=[0.0, 0.0, 0.0],
     #         scale=section * section_length,
     #         radius_min=0.1,

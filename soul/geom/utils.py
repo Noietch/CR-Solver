@@ -2,12 +2,13 @@ from __future__ import annotations
 
 import os
 import pickle
-import coacd
-import trimesh
-import jaxlie
-import jax.numpy as jnp
 from typing import Tuple
-from jaxtyping import Float, Array
+
+import coacd
+import jax.numpy as jnp
+import jaxlie
+import trimesh
+from jaxtyping import Array, Float
 from trimesh.voxel import creation
 
 _SAFE_EPS = 1e-6
@@ -58,7 +59,9 @@ def load_mesh(
                 parts = pickle.load(f)
         else:
             mesh_coacd = coacd.Mesh(mesh.vertices, mesh.faces)
-            parts = coacd.run_coacd(mesh_coacd, max_convex_hull=max_convex_hull)
+            parts = coacd.run_coacd(
+                mesh_coacd, max_convex_hull=max_convex_hull
+            )
             with open(parts_path, "wb") as f:
                 pickle.dump(parts, f)
         meshes = [trimesh.Trimesh(part[0], part[1]) for part in parts]
@@ -89,7 +92,7 @@ def load_mesh(
 
 
 def make_frame(direction: Array) -> Array:
-    """Make a frame from a direction vector, aligning the z-axis with the direction."""
+    """Make a frame from a direction vector, aligning z-axis with direction."""
     # Based on `mujoco.mjx._src.math.make_frame`.
 
     is_zero = jnp.isclose(direction, 0.0).all(axis=-1, keepdims=True)
@@ -103,11 +106,14 @@ def make_frame(direction: Array) -> Array:
     y = jnp.broadcast_to(jnp.array([0, 1, 0]), (*direction.shape[:-1], 3))
     z = jnp.broadcast_to(jnp.array([0, 0, 1]), (*direction.shape[:-1], 3))
 
-    normal = jnp.where((-0.5 < direction[..., 1:2]) & (direction[..., 1:2] < 0.5), y, z)
-    normal -= direction * jnp.einsum("...i,...i->...", normal, direction)[..., None]
+    normal = jnp.where((-0.5 < direction[..., 1:2]) &
+                       (direction[..., 1:2] < 0.5), y, z)
+    normal -= direction * jnp.einsum("...i,...i->...", normal, direction)[...,
+                                                                          None]
     normal /= jnp.linalg.norm(normal, axis=-1, keepdims=True) + _SAFE_EPS
 
-    return jnp.stack([jnp.cross(normal, direction), normal, direction], axis=-1)
+    return jnp.stack([jnp.cross(normal, direction), normal, direction],
+                     axis=-1)
 
 
 def normalize(x: Float[Array, "*batch N"]) -> Float[Array, "*batch N"]:
@@ -137,9 +143,8 @@ def closest_segment_point(
 ) -> Float[Array, "*batch 3"]:
     """Finds the closest point on the line segment [a, b] to point pt."""
     ab = b - a
-    t = jnp.einsum("...i,...i->...", pt - a, ab) / (
-        jnp.einsum("...i,...i->...", ab, ab) + _SAFE_EPS
-    )
+    t = jnp.einsum("...i,...i->...", pt - a,
+                   ab) / (jnp.einsum("...i,...i->...", ab, ab) + _SAFE_EPS)
     t_clamped = jnp.clip(t, 0.0, 1.0)
     return a + ab * t_clamped[..., None]
 
@@ -150,7 +155,7 @@ def closest_segment_to_segment_points(
     a2: Float[Array, "*batch 3"],
     b2: Float[Array, "*batch 3"],
 ) -> Tuple[Float[Array, "*batch 3"], Float[Array, "*batch 3"]]:
-    """Finds the closest points between two line segments [a1, b1] and [a2, b2]."""
+    """Finds the closest points between segments [a1, b1] and [a2, b2]."""
     d1 = b1 - a1  # Direction vector of segment S1
     d2 = b2 - a2  # Direction vector of segment S2
     r = a1 - a2
@@ -160,7 +165,7 @@ def closest_segment_to_segment_points(
     f = jnp.einsum("...i,...i->...", d2, r)
     c = jnp.einsum("...i,...i->...", d1, r)
     b = jnp.einsum("...i,...i->...", d1, d2)
-    denom = a * e - b * b  # Squared area of the parallelogram defined by d1, d2
+    denom = a * e - b * b  # Squared area of parallelogram defined by d1, d2
 
     s_num = b * f - c * e
     t_num = a * f - b * c
@@ -178,14 +183,16 @@ def closest_segment_to_segment_points(
         "...i,...i->...", d2, (a1 + d1 * s_clamped[..., None]) - a2
     ) / (e + _SAFE_EPS)
     t_final = jnp.where(
-        jnp.abs(s - s_clamped) > _SAFE_EPS, jnp.clip(t_recomp, 0.0, 1.0), t_clamped
+        jnp.abs(s - s_clamped) > _SAFE_EPS, jnp.clip(t_recomp, 0.0, 1.0),
+        t_clamped
     )
 
-    s_recomp = jnp.einsum("...i,...i->...", d1, (a2 + d2 * t_final[..., None]) - a1) / (
-        a + _SAFE_EPS
-    )
+    s_recomp = jnp.einsum(
+        "...i,...i->...", d1, (a2 + d2 * t_final[..., None]) - a1
+    ) / (a + _SAFE_EPS)
     s_final = jnp.where(
-        jnp.abs(t - t_final) > _SAFE_EPS, jnp.clip(s_recomp, 0.0, 1.0), s_clamped
+        jnp.abs(t - t_final) > _SAFE_EPS, jnp.clip(s_recomp, 0.0, 1.0),
+        s_clamped
     )
 
     c1 = a1 + d1 * s_final[..., None]

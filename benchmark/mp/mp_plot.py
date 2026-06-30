@@ -1,9 +1,14 @@
-import numpy as np
 import os
-import matplotlib.pyplot as plt
+
 import matplotlib  # Import matplotlib for rcParams
+import matplotlib.pyplot as plt
+import numpy as np
 from matplotlib.ticker import MultipleLocator
-from soul.visualization.visualizer_plot import visualize_cc_model_3d, visualize_mp_scene
+
+from soul.visualization.visualizer_plot import (
+    visualize_cc_model_3d,
+    visualize_mp_scene,
+)
 
 TICK_LABELSIZE = 25
 TICK_PAD = 12
@@ -22,7 +27,9 @@ def set_3d_tick_labelsize(
 
 
 def set_2d_tick_labelsize(
-    ax: plt.Axes, size: int = TICK_LABELSIZE_2D, pad: int = TICK_PAD_2D
+    ax: plt.Axes,
+    size: int = TICK_LABELSIZE_2D,
+    pad: int = TICK_PAD_2D
 ) -> None:
     ax.xaxis.set_tick_params(labelsize=size, pad=pad, direction="in")
     ax.yaxis.set_tick_params(labelsize=size, pad=pad, direction="in")
@@ -68,7 +75,8 @@ def visualize_motion_planning(
     selected_poses = planned_traj_poses[sample_indices]
 
     ax.plot(
-        planned_tip_traj[:, 0], planned_tip_traj[:, 1], planned_tip_traj[:, 2], "b-"
+        planned_tip_traj[:, 0], planned_tip_traj[:, 1], planned_tip_traj[:, 2],
+        "b-"
     )
 
     save_path = os.path.join(
@@ -159,8 +167,11 @@ def visualize_constrain_motion_planning(
         label="Experiment",
     )
 
-    # ax.plot(ref_traj_pos[:, 0], ref_traj_pos[:, 1], ref_traj_pos[:, 2], c="#7ea6e0", linewidth=4, label="Reference")
-    # ax.plot(planned_tip_pos[:, 0], planned_tip_pos[:, 1], planned_tip_pos[:, 2], c="#ea6b66", linewidth=8, label="Experiment")
+    # ax.plot(ref_traj_pos[:, 0], ref_traj_pos[:, 1], ref_traj_pos[:, 2],
+    #         c="#7ea6e0", linewidth=4, label="Reference")
+    # ax.plot(planned_tip_pos[:, 0], planned_tip_pos[:, 1],
+    #         planned_tip_pos[:, 2], c="#ea6b66", linewidth=8,
+    #         label="Experiment")
 
     ax.patch.set_alpha(0.0)
     ax.xaxis.pane.fill = False
@@ -174,17 +185,21 @@ def visualize_constrain_motion_planning(
     # ax.set_zlabel("Z (m)")
     ax.legend(frameon=False, markerscale=1)
 
-    # ax.plot(ref_traj_pos[:, 0], ref_traj_pos[:, 1], ref_traj_pos[:, 2], "r--", linewidth=5 )
-    # ax.plot(planned_tip_pos[:, 0], planned_tip_pos[:, 1], planned_tip_pos[:, 2], "b-", linewidth=5)
+    # ax.plot(ref_traj_pos[:, 0], ref_traj_pos[:, 1], ref_traj_pos[:, 2],
+    #         "r--", linewidth=5)
+    # ax.plot(planned_tip_pos[:, 0], planned_tip_pos[:, 1],
+    #         planned_tip_pos[:, 2], "b-", linewidth=5)
     save_path = save_path.replace(".npz", "_plot.png")
     plt.savefig(save_path, bbox_inches="tight", dpi=900)
 
-    print(
-        f"--- Trajectory Metrics for Letter {world_config_path.split('configs/maps/obstacles_con_')[-1].split('.')[0]} ---"
-    )
+    letter = world_config_path.split("configs/maps/obstacles_con_"
+                                     )[-1].split(".")[0]
+    print(f"--- Trajectory Metrics for Letter {letter} ---")
     print(f"Position Error (mean): {data['pos_error_mean'] * 1000:.4f}mm")
     print(f"Position Error (std):  {data['pos_error_std'] * 1000:.4f}mm")
-    print(f"Rotation Error (mean): {np.rad2deg(data['rot_error_mean']):.4f}deg")
+    print(
+        f"Rotation Error (mean): {np.rad2deg(data['rot_error_mean']):.4f}deg"
+    )
     print(f"Rotation Error (std):  {np.rad2deg(data['rot_error_std']):.4f}deg")
     print(f"Planning Time: {data['planning_time'] * 1000:.4f}ms")
 
@@ -210,9 +225,6 @@ def visualize_constrain_motion_planning_traj(
         return
 
     # Reconstruct robot states from saved data
-    num_timesteps = data["solution_states_theta"].shape[0]
-    planned_traj_poses = data["fk_result"]
-    ref_traj_pos = data["target_position"]
     planned_tip_traj_mat = data["planned_tip_traj"]
     planned_tip_pos = planned_tip_traj_mat[:, :3, 3]
 
@@ -234,7 +246,8 @@ def visualize_constrain_motion_planning_traj(
     if single_save_path is not None:
         plt.savefig(single_save_path, bbox_inches="tight", dpi=900)
 
-    # ax.scatter(ref_traj_pos[:, 0], ref_traj_pos[:, 1], ref_traj_pos[:, 2], c="#7ea6e0", marker="o",s=8, label="Reference")
+    # ax.scatter(ref_traj_pos[:, 0], ref_traj_pos[:, 1], ref_traj_pos[:, 2],
+    #            c="#7ea6e0", marker="o", s=8, label="Reference")
     ax.scatter(
         planned_tip_pos[:, 0],
         planned_tip_pos[:, 1],
@@ -245,8 +258,11 @@ def visualize_constrain_motion_planning_traj(
         label="Experiment",
     )
 
-    # ax.plot(ref_traj_pos[:, 0], ref_traj_pos[:, 1], ref_traj_pos[:, 2], c="#7ea6e0", linewidth=4, label="Reference")
-    # ax.plot(planned_tip_pos[:, 0], planned_tip_pos[:, 1], planned_tip_pos[:, 2], c="#ea6b66", linewidth=8, label="Experiment")
+    # ax.plot(ref_traj_pos[:, 0], ref_traj_pos[:, 1], ref_traj_pos[:, 2],
+    #         c="#7ea6e0", linewidth=4, label="Reference")
+    # ax.plot(planned_tip_pos[:, 0], planned_tip_pos[:, 1],
+    #         planned_tip_pos[:, 2], c="#ea6b66", linewidth=8,
+    #         label="Experiment")
 
     ax.patch.set_alpha(0.0)
     ax.xaxis.pane.fill = False
@@ -260,13 +276,14 @@ def visualize_constrain_motion_planning_traj(
     # ax.set_zlabel("Z (m)")
     # ax.legend(frameon=False, markerscale=2)
 
-    # ax.plot(ref_traj_pos[:, 0], ref_traj_pos[:, 1], ref_traj_pos[:, 2], "r--", linewidth=5 )
-    # ax.plot(planned_tip_pos[:, 0], planned_tip_pos[:, 1], planned_tip_pos[:, 2], "b-", linewidth=5)
+    # ax.plot(ref_traj_pos[:, 0], ref_traj_pos[:, 1], ref_traj_pos[:, 2],
+    #         "r--", linewidth=5)
+    # ax.plot(planned_tip_pos[:, 0], planned_tip_pos[:, 1],
+    #         planned_tip_pos[:, 2], "b-", linewidth=5)
     save_path = save_path.replace(".npz", "_plot_traj.png")
     plt.savefig(save_path, bbox_inches="tight", dpi=900)
-    print(
-        f"Plotted Letter {save_path.split('configs/maps/obstacles_con_')[-1].split('.')[0]}"
-    )
+    letter = save_path.split("configs/maps/obstacles_con_")[-1].split(".")[0]
+    print(f"Plotted Letter {letter}")
 
 
 def visualize_tendon_lengths_grid(
@@ -278,12 +295,16 @@ def visualize_tendon_lengths_grid(
     Visualize tendon length time series grouped by section in a 1x3 grid.
 
     - Provided axes should be a list/array of three subplots (one per section).
-    - Within each subplot, different cables (tendons) of that section are plotted with distinct colors.
+    - Within each subplot, different cables (tendons) of that section are
+      plotted with distinct colors.
 
     Args:
-        csv_path: Path to the tendon lengths CSV. Expected header: timestep,tendon_1,...
-        axes: List of three matplotlib Axes objects to draw on (columns for sections 1..3).
-        title: Optional title for this 1x3 row (applied to the first subplot's title prefix).
+        csv_path: Path to the tendon lengths CSV. Expected header:
+            timestep,tendon_1,...
+        axes: List of three matplotlib Axes objects to draw on (columns for
+            sections 1..3).
+        title: Optional title for this 1x3 row (applied to the first
+            subplot's title prefix).
     """
     if not os.path.exists(csv_path):
         print(f"Warning: tendon length CSV not found at {csv_path}")
@@ -308,14 +329,20 @@ def visualize_tendon_lengths_grid(
         print(f"Warning: empty tendon length CSV at {csv_path}")
         for ax in axes[:3]:
             ax.text(
-                0.5, 0.5, "Empty CSV", ha="center", va="center", transform=ax.transAxes
+                0.5,
+                0.5,
+                "Empty CSV",
+                ha="center",
+                va="center",
+                transform=ax.transAxes
             )
             ax.axis("off")
         return
 
     names = rec.dtype.names or []
     time_key = (
-        "timestep" if "timestep" in names else ("time" if "time" in names else None)
+        "timestep" if "timestep" in names else
+        ("time" if "time" in names else None)
     )
     tendon_keys = [n for n in names if n != time_key]
     if len(tendon_keys) == 0:
@@ -346,7 +373,9 @@ def visualize_tendon_lengths_grid(
     num_sections = None
     dir_name = os.path.dirname(csv_path)
     try:
-        candidate_npzs = [f for f in os.listdir(dir_name) if f.endswith(".npz")]
+        candidate_npzs = [
+            f for f in os.listdir(dir_name) if f.endswith(".npz")
+        ]
         if len(candidate_npzs) > 0:
             npz_path = os.path.join(dir_name, candidate_npzs[0])
             with np.load(npz_path, allow_pickle=True) as data:
@@ -360,7 +389,8 @@ def visualize_tendon_lengths_grid(
     # Expect exactly 3 sections for the 1x3 grid
     if num_sections is None or num_sections <= 0:
         num_sections = 3
-    # If total tendons not divisible, last section may get fewer/more; we slice safely below
+    # If total tendons not divisible, last section may get fewer/more; we
+    # slice safely below
     num_tendons_per_section = max(1, total_tendons // num_sections)
 
     # color_cycle = plt.get_cmap("tab10")
@@ -406,7 +436,8 @@ def visualize_tendon_lengths_grid(
         # if (end - start) <= 10:
         #     ax.legend(fontsize=14, frameon=False, markerscale=10)
 
-    # Labels (apply to leftmost and bottom row by convention; caller may refine)
+    # Labels (apply to leftmost and bottom row by convention; caller may
+    # refine)
 
 
 def plot_mp_with_coll_scene(
@@ -418,7 +449,9 @@ def plot_mp_with_coll_scene(
     ax1 = fig.add_subplot(111, projection="3d")
     set_3d_tick_labelsize(ax1)
 
-    visualize_motion_planning(save_dir, file_name, world_config_path, ax1, num_pose=80)
+    visualize_motion_planning(
+        save_dir, file_name, world_config_path, ax1, num_pose=80
+    )
 
     plt.tight_layout()
     plt.savefig("results/mp_scene_examples.png", bbox_inches="tight", dpi=900)
@@ -447,25 +480,33 @@ def plot_constrain_motion_planning():
 
     visualize_constrain_motion_planning(
         save_path="results/traj_following/get_icra_traj_I/get_icra_traj.npz",
-        world_config_path="configs/maps/constrain_motion_planning/obstacles_con_I.json",
+        world_config_path=(
+            "configs/maps/constrain_motion_planning/obstacles_con_I.json"
+        ),
         ax=ax1,
         num_pose=15,
     )
     visualize_constrain_motion_planning(
         save_path="results/traj_following/get_icra_traj_C/get_icra_traj.npz",
-        world_config_path="configs/maps/constrain_motion_planning/obstacles_con_C.json",
+        world_config_path=(
+            "configs/maps/constrain_motion_planning/obstacles_con_C.json"
+        ),
         ax=ax2,
         num_pose=15,
     )
     visualize_constrain_motion_planning(
         save_path="results/traj_following/get_icra_traj_R/get_icra_traj.npz",
-        world_config_path="configs/maps/constrain_motion_planning/obstacles_con_R.json",
+        world_config_path=(
+            "configs/maps/constrain_motion_planning/obstacles_con_R.json"
+        ),
         ax=ax3,
         num_pose=15,
     )
     visualize_constrain_motion_planning(
         save_path="results/traj_following/get_icra_traj_A/get_icra_traj.npz",
-        world_config_path="configs/maps/constrain_motion_planning/obstacles_con_A.json",
+        world_config_path=(
+            "configs/maps/constrain_motion_planning/obstacles_con_A.json"
+        ),
         ax=ax4,
         num_pose=15,
     )
@@ -497,7 +538,8 @@ def plot_constrain_motion_planning():
 def plot_tendon_length() -> None:
     """
     Create a 4x3 figure for I, C, R, A letters (rows) and 3 sections (columns).
-    Each row is drawn via visualize_tendon_lengths_grid over the corresponding CSV.
+    Each row is drawn via visualize_tendon_lengths_grid over the corresponding
+    CSV.
     """
     letters = ["I", "C", "R", "A"]
     # Create a 4x3 grid
@@ -512,7 +554,8 @@ def plot_tendon_length() -> None:
             "tendon_lengths.csv",
         )
         row_axes = (
-            list(axes[row_idx, :]) if isinstance(axes, np.ndarray) else axes[row_idx]
+            list(axes[row_idx, :])
+            if isinstance(axes, np.ndarray) else axes[row_idx]
         )
         visualize_tendon_lengths_grid(
             csv_path=csv_path, axes=row_axes, title=f"Letter {letter}"
@@ -532,7 +575,8 @@ def plot_tendon_length() -> None:
 
 def visualize_error(save_path: str, ax: plt.Axes, set_precision: int = None):
     """
-    Plot per-timestep position and rotation errors from a saved trajectory .npz.
+    Plot per-timestep position and rotation errors from a saved trajectory
+    .npz.
 
     - X axis: timestep index
     - Left Y axis: position error (mm)
@@ -541,7 +585,12 @@ def visualize_error(save_path: str, ax: plt.Axes, set_precision: int = None):
     if not os.path.exists(save_path):
         print(f"Warning: npz not found at {save_path}")
         ax.text(
-            0.5, 0.5, "NPZ not found", ha="center", va="center", transform=ax.transAxes
+            0.5,
+            0.5,
+            "NPZ not found",
+            ha="center",
+            va="center",
+            transform=ax.transAxes
         )
         ax.axis("off")
         return
@@ -551,7 +600,12 @@ def visualize_error(save_path: str, ax: plt.Axes, set_precision: int = None):
     except Exception as e:
         print(f"Warning: failed to load {save_path}: {e}")
         ax.text(
-            0.5, 0.5, "Load error", ha="center", va="center", transform=ax.transAxes
+            0.5,
+            0.5,
+            "Load error",
+            ha="center",
+            va="center",
+            transform=ax.transAxes
         )
         ax.axis("off")
         return
@@ -561,7 +615,12 @@ def visualize_error(save_path: str, ax: plt.Axes, set_precision: int = None):
     T = min(position_errors.shape[0], rotation_errors.shape[0])
     if T == 0:
         ax.text(
-            0.5, 0.5, "Empty data", ha="center", va="center", transform=ax.transAxes
+            0.5,
+            0.5,
+            "Empty data",
+            ha="center",
+            va="center",
+            transform=ax.transAxes
         )
         ax.axis("off")
         return
@@ -606,7 +665,8 @@ def visualize_error(save_path: str, ax: plt.Axes, set_precision: int = None):
     # ax_right.set_ylim(-0.04, 4.3)
     # ax_right.yaxis.set_major_locator(MultipleLocator(1.0))
 
-    # ax_right.legend(fontsize=14, frameon=False, loc="center right", markerscale=20)
+    # ax_right.legend(fontsize=14, frameon=False, loc="center right",
+    #                 markerscale=20)
 
     # Ensure consistent decimal places on both y-axes in the same figure
     if set_precision == 2:
@@ -621,12 +681,11 @@ def visualize_error(save_path: str, ax: plt.Axes, set_precision: int = None):
         pass
     # ax_right.set_ylabel("Rotation Error (deg)")
 
-    title_suffix = None
     try:
         parts = os.path.normpath(save_path).split(os.sep)
         for p in parts:
-            if p.startswith("get_icra_traj_") and len(p) >= len("get_icra_traj_X"):
-                title_suffix = p.split("get_icra_traj_")[-1]
+            if p.startswith("get_icra_traj_"
+                            ) and len(p) >= len("get_icra_traj_X"):
                 break
     except Exception:
         pass
@@ -644,7 +703,8 @@ def plot_error() -> None:
 
     for idx, letter in enumerate(letters):
         npz_path = os.path.join(
-            "results", "traj_following", f"get_icra_traj_{letter}", "get_icra_traj.npz"
+            "results", "traj_following", f"get_icra_traj_{letter}",
+            "get_icra_traj.npz"
         )
         current_ax = axes[idx] if isinstance(axes, np.ndarray) else axes
         if letter == "I":
@@ -671,11 +731,13 @@ if __name__ == "__main__":
     # ==========================================
 
     # save_dir = "results/13.pick_from_shelf"
-    # world_config_path = "configs/maps/mp_scene/obstacles_13.pick_from_shelf.json"
+    # world_config_path = \
+    #     "configs/maps/mp_scene/obstacles_13.pick_from_shelf.json"
 
     # error_path_list = []
     # for save_path in os.listdir(save_dir):
-    #     if save_path.endswith(".npz") and "all_trials_results" not in save_path:
+    #     if save_path.endswith(".npz") and \
+    #             "all_trials_results" not in save_path:
     #         try:
     #             plot_mp_with_coll_scene(
     #                 save_dir=save_dir,

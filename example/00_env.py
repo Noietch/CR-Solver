@@ -1,10 +1,12 @@
-from soul.geom import BoundingBox
-import trimesh
-from trimesh.voxel import creation
-import viser
 import time
-import numpy as np
+
 import coacd
+import numpy as np
+import trimesh
+import viser
+from trimesh.voxel import creation
+
+from soul.geom import BoundingBox
 
 
 def test_convex_decomp() -> None:
@@ -16,7 +18,9 @@ def test_convex_decomp() -> None:
     for i, part in enumerate(parts):
         vertices, faces = part
         part_mesh = trimesh.Trimesh(vertices, faces)
-        rot_90_x = trimesh.transformations.rotation_matrix(np.deg2rad(90), [1, 0, 0])
+        rot_90_x = trimesh.transformations.rotation_matrix(
+            np.deg2rad(90), [1, 0, 0]
+        )
         part_mesh.apply_transform(rot_90_x)
         bbox = BoundingBox.from_trimesh(part_mesh)
         server.scene.add_mesh_trimesh(f"/obstacle_{i}/mesh", mesh=part_mesh)

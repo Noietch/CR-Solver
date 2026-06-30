@@ -1,5 +1,5 @@
-import numpy as np
 import matplotlib.pyplot as plt
+import numpy as np
 
 from soul.visualization.visualizer_plot import visualize_cc_model_3d
 
@@ -20,7 +20,9 @@ def visualize_ik_with_coll(
     # Randomly select 3 solutions
     num_solutions = len(fk_result)
     if selected_indices is None:
-        selected_indices = np.random.choice(num_solutions, size=3, replace=False)
+        selected_indices = np.random.choice(
+            num_solutions, size=3, replace=False
+        )
     # Get the selected solutions
     print(f"selected_indices: {selected_indices}")
     fk_result = fk_result[selected_indices]
@@ -54,13 +56,14 @@ def plot_ik_with_coll():
         y_limit=(-0.8, 1.8),
     )
     visualize_ik_with_coll(
-        "results/ik_with_coll_icosahedron/ik_with_coll_sections_6_eval_100.npz",
+        "results/ik_with_coll_icosahedron/"
+        "ik_with_coll_sections_6_eval_100.npz",
         "configs/maps/ik_maps/obstacles_icosahedron.json",
         ax=ax2,
         selected_indices=[83, 32, 90],
     )
     plt.tight_layout()
-    plt.savefig(f"results/ik_examples.png")
+    plt.savefig("results/ik_examples.png")
     plt.close()
 
 

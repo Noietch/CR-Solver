@@ -2,10 +2,11 @@
 HPolyhedron-based sampler for configuration space
 """
 
+from dataclasses import dataclass
+from typing import Optional
+
 import jax
 import jax.numpy as jnp
-from typing import Optional
-from dataclasses import dataclass
 
 from ...robots.cc_robot import CCRobot, ConstantCurvatureState
 
@@ -87,7 +88,7 @@ class HPolyhedronSampler:
 
         # JIT compile sampling functions (mixing_steps is static)
         self._uniform_sample_fn = jax.jit(
-            self._uniform_sample_step, static_argnums=(1,)
+            self._uniform_sample_step, static_argnums=(1, )
         )
 
     def _build_configuration_space_polyhedron(self) -> HPolyhedron:
@@ -103,8 +104,12 @@ class HPolyhedronSampler:
 
         # If single value, repeat for each section
         if theta_lower.shape[0] == 1:
-            theta_lower = jnp.repeat(theta_lower, self.robot.config.num_sections)
-            theta_upper = jnp.repeat(theta_upper, self.robot.config.num_sections)
+            theta_lower = jnp.repeat(
+                theta_lower, self.robot.config.num_sections
+            )
+            theta_upper = jnp.repeat(
+                theta_upper, self.robot.config.num_sections
+            )
         if phi_lower.shape[0] == 1:
             phi_lower = jnp.repeat(phi_lower, self.robot.config.num_sections)
             phi_upper = jnp.repeat(phi_upper, self.robot.config.num_sections)
@@ -124,10 +129,12 @@ class HPolyhedronSampler:
 
         # Split into components (only theta and phi)
         base_position = jnp.zeros(3)  # Fixed at origin
-        theta = center_vec[: self.robot.config.num_sections]
-        phi = center_vec[self.robot.config.num_sections :]
+        theta = center_vec[:self.robot.config.num_sections]
+        phi = center_vec[self.robot.config.num_sections:]
 
-        return ConstantCurvatureState(base_position=base_position, theta=theta, phi=phi)
+        return ConstantCurvatureState(
+            base_position=base_position, theta=theta, phi=phi
+        )
 
     def get_feasible_point(self) -> ConstantCurvatureState:
         """
@@ -157,7 +164,8 @@ class HPolyhedronSampler:
         return self._vector_to_state(new_vec)
 
     def _uniform_sample_step(
-        self, previous_sample: jnp.ndarray, mixing_steps: int, key: jax.random.PRNGKey
+        self, previous_sample: jnp.ndarray, mixing_steps: int,
+        key: jax.random.PRNGKey
     ) -> jnp.ndarray:
         """
         Hit-and-Run sampling algorithm implementation.
@@ -173,7 +181,9 @@ class HPolyhedronSampler:
             # Compute valid range along direction
             # line_b = b - A * current_sample
             # line_A = A * direction
-            line_b = self.polyhedron.b - jnp.dot(self.polyhedron.A, current_sample)
+            line_b = self.polyhedron.b - jnp.dot(
+                self.polyhedron.A, current_sample
+            )
             line_A = jnp.dot(self.polyhedron.A, direction)
 
             # Find theta_min and theta_max
@@ -193,7 +203,9 @@ class HPolyhedronSampler:
 
             # Sample theta uniformly from [theta_min, theta_max]
             key, subkey = jax.random.split(key)
-            theta = jax.random.uniform(subkey, minval=theta_min, maxval=theta_max)
+            theta = jax.random.uniform(
+                subkey, minval=theta_min, maxval=theta_max
+            )
 
             # Update sample
             new_sample = current_sample + theta * direction
@@ -218,14 +230,16 @@ class HPolyhedronSampler:
         Base is always fixed at origin.
         """
         base_position = jnp.zeros(3)  # Fixed at origin
-        theta = vec[: self.robot.config.num_sections]
-        phi = vec[self.robot.config.num_sections :]
+        theta = vec[:self.robot.config.num_sections]
+        phi = vec[self.robot.config.num_sections:]
 
-        return ConstantCurvatureState(base_position=base_position, theta=theta, phi=phi)
+        return ConstantCurvatureState(
+            base_position=base_position, theta=theta, phi=phi
+        )
 
-    def batch_sample(
-        self, num_samples: int, mixing_steps: int = 10
-    ) -> list[ConstantCurvatureState]:
+    def batch_sample(self,
+                     num_samples: int,
+                     mixing_steps: int = 10) -> list[ConstantCurvatureState]:
         """
         Generate multiple samples using Hit-and-Run algorithm.
         """
@@ -249,7 +263,9 @@ def sample_around(
     theta_noise = stddev * jax.random.normal(
         key, shape=(num_samples, state.theta.shape[0])
     )
-    phi_noise = stddev * jax.random.normal(key, shape=(num_samples, state.phi.shape[0]))
+    phi_noise = stddev * jax.random.normal(
+        key, shape=(num_samples, state.phi.shape[0])
+    )
 
     theta = state.theta[None, :] + theta_noise
     phi = state.phi[None, :] + phi_noise
@@ -258,9 +274,13 @@ def sample_around(
     theta = jnp.clip(
         theta, robot.config.lower_limits_theta, robot.config.upper_limits_theta
     )
-    phi = jnp.clip(phi, robot.config.lower_limits_phi, robot.config.upper_limits_phi)
+    phi = jnp.clip(
+        phi, robot.config.lower_limits_phi, robot.config.upper_limits_phi
+    )
 
-    base_position = jnp.tile(state.base_position, (num_samples, 1))  # shape: (N, 3)
+    base_position = jnp.tile(
+        state.base_position, (num_samples, 1)
+    )  # shape: (N, 3)
 
     return ConstantCurvatureState(
         base_position=base_position,
@@ -292,14 +312,20 @@ def sample_states_around_start_goal(
     """
     key_start, key_goal = jax.random.split(key)
 
-    sampled_from_start = sample_around(start, stddev, num_samples, robot, key_start)
-    sampled_from_goal = sample_around(goal, stddev, num_samples, robot, key_goal)
+    sampled_from_start = sample_around(
+        start, stddev, num_samples, robot, key_start
+    )
+    sampled_from_goal = sample_around(
+        goal, stddev, num_samples, robot, key_goal
+    )
 
     return ConstantCurvatureState(
-        base_position=jnp.concatenate(
-            [sampled_from_start.base_position, sampled_from_goal.base_position]
-        ),
-        theta=jnp.concatenate([sampled_from_start.theta, sampled_from_goal.theta]),
+        base_position=jnp.concatenate([
+            sampled_from_start.base_position, sampled_from_goal.base_position
+        ]),
+        theta=jnp.concatenate([
+            sampled_from_start.theta, sampled_from_goal.theta
+        ]),
         phi=jnp.concatenate([sampled_from_start.phi, sampled_from_goal.phi]),
     )
 
@@ -308,11 +334,12 @@ def resample_trajectory(
     trajectory: ConstantCurvatureState, target_timesteps: int
 ) -> ConstantCurvatureState:
     """
-    Resample a trajectory to a target number of timesteps using linear interpolation.
+    Resample a trajectory to a target number of timesteps using linear
+    interpolation.
 
-    This function takes a trajectory of arbitrary length and resamples it to have
-    exactly `target_timesteps` points. It uses linear interpolation to compute
-    the intermediate values.
+    This function takes a trajectory of arbitrary length and resamples it to
+    have exactly `target_timesteps` points. It uses linear interpolation to
+    compute the intermediate values.
 
     Args:
         trajectory: Input trajectory with shape (current_timesteps, ...)
@@ -334,24 +361,31 @@ def resample_trajectory(
 
     # Interpolate each dimension of theta
     num_theta_dims = trajectory.theta.shape[1]
-    new_theta = jnp.stack(
-        [interpolate_1d(trajectory.theta[:, i]) for i in range(num_theta_dims)], axis=1
-    )
+    new_theta = jnp.stack([
+        interpolate_1d(trajectory.theta[:, i]) for i in range(num_theta_dims)
+    ],
+                          axis=1)
 
     # Interpolate each dimension of phi
     num_phi_dims = trajectory.phi.shape[1]
-    new_phi = jnp.stack(
-        [interpolate_1d(trajectory.phi[:, i]) for i in range(num_phi_dims)], axis=1
-    )
+    new_phi = jnp.stack([
+        interpolate_1d(trajectory.phi[:, i]) for i in range(num_phi_dims)
+    ],
+                        axis=1)
 
     # Interpolate each dimension of base_position
     num_base_dims = trajectory.base_position.shape[1]
     new_base = jnp.stack(
-        [interpolate_1d(trajectory.base_position[:, i]) for i in range(num_base_dims)],
+        [
+            interpolate_1d(trajectory.base_position[:, i])
+            for i in range(num_base_dims)
+        ],
         axis=1,
     )
 
-    return ConstantCurvatureState(base_position=new_base, theta=new_theta, phi=new_phi)
+    return ConstantCurvatureState(
+        base_position=new_base, theta=new_theta, phi=new_phi
+    )
 
 
 def resample_trajectory_smooth(
@@ -368,13 +402,14 @@ def resample_trajectory_smooth(
     Args:
         trajectory: Input trajectory
         target_timesteps: Desired number of timesteps
-        smoothing_factor: Amount of smoothing (0 = no smoothing, higher = more smoothing)
+        smoothing_factor: Amount of smoothing (0 = no smoothing, higher =
+            more smoothing)
 
     Returns:
         Resampled and optionally smoothed trajectory
     """
-    from scipy.interpolate import UnivariateSpline
     import numpy as np
+    from scipy.interpolate import UnivariateSpline
 
     current_timesteps = trajectory.theta.shape[0]
 
@@ -417,4 +452,6 @@ def resample_trajectory_smooth(
         axis=1,
     )
 
-    return ConstantCurvatureState(base_position=new_base, theta=new_theta, phi=new_phi)
+    return ConstantCurvatureState(
+        base_position=new_base, theta=new_theta, phi=new_phi
+    )

@@ -1,24 +1,23 @@
-from typing import Sequence, Optional
-from dataclasses import dataclass, asdict
+from dataclasses import asdict, dataclass
+from typing import Optional, Sequence
 
 import jax
 import jax.numpy as jnp
-import jaxls
 import jaxlie
+import jaxls
 import numpy as np
 
-from ..robots.cc_robot import CCRobot, ConstantCurvatureState
-from ..robots.tdcr_robot import TDCRRobot
-from ..geom import RobotCollision, CollGeom
 from ..costs import (
-    pose_cost,
-    limit_cost,
-    smoothness_cost,
     continuous_collision_cost,
-    trajectory_length_cost,
-    tendon_length_velocity_cost,
+    limit_cost,
+    pose_cost,
+    smoothness_cost,
     tendon_length_acceleration_cost,
+    tendon_length_velocity_cost,
+    trajectory_length_cost,
 )
+from ..geom import CollGeom, RobotCollision
+from ..robots.cc_robot import CCRobot, ConstantCurvatureState
 from .ik_solver import IKSolver
 
 
@@ -63,6 +62,7 @@ class TrajOptimizerOptions:
 
 
 class TrajOptimizer:
+
     def __init__(
         self,
         robot: CCRobot,
@@ -82,7 +82,9 @@ class TrajOptimizer:
             init_steps=6,
             coll=coll,
         )
-        self._ik_solver_best = jax.jit(self.ik_solver.solve_ik_best_with_coll_start_end)
+        self._ik_solver_best = jax.jit(
+            self.ik_solver.solve_ik_best_with_coll_start_end
+        )
         self._batched_ik_solver = jax.vmap(self.ik_solver.solve_ik_best)
 
         self._robot_batch = jax.tree.map(lambda x: x[None], self.robot)
@@ -102,9 +104,13 @@ class TrajOptimizer:
         base_position = jnp.linspace(
             results[0].base_position, results[1].base_position, self.timesteps
         )
-        theta = jnp.linspace(results[0].theta, results[1].theta, self.timesteps)
+        theta = jnp.linspace(
+            results[0].theta, results[1].theta, self.timesteps
+        )
         phi = jnp.linspace(results[0].phi, results[1].phi, self.timesteps)
-        return ConstantCurvatureState(base_position=base_position, theta=theta, phi=phi)
+        return ConstantCurvatureState(
+            base_position=base_position, theta=theta, phi=phi
+        )
 
     def find_path(
         self,
@@ -114,9 +120,13 @@ class TrajOptimizer:
         base_position = jnp.linspace(
             start_state.base_position, end_state.base_position, self.timesteps
         )
-        theta = jnp.linspace(start_state.theta, end_state.theta, self.timesteps)
+        theta = jnp.linspace(
+            start_state.theta, end_state.theta, self.timesteps
+        )
         phi = jnp.linspace(start_state.phi, end_state.phi, self.timesteps)
-        return ConstantCurvatureState(base_position=base_position, theta=theta, phi=phi)
+        return ConstantCurvatureState(
+            base_position=base_position, theta=theta, phi=phi
+        )
 
     def optimize(
         self,
@@ -131,32 +141,28 @@ class TrajOptimizer:
     ):
         # Use provided weights or fall back to instance options
         limit_w = (
-            limit_weight if limit_weight is not None else self.options.limit_weight
+            limit_weight
+            if limit_weight is not None else self.options.limit_weight
         )
         smooth_w = (
-            smoothness_weight
-            if smoothness_weight is not None
-            else self.options.smoothness_weight
+            smoothness_weight if smoothness_weight is not None else
+            self.options.smoothness_weight
         )
         traj_len_w = (
-            trajectory_length_weight
-            if trajectory_length_weight is not None
+            trajectory_length_weight if trajectory_length_weight is not None
             else self.options.trajectory_length_weight
         )
         coll_w = (
             collision_weight
-            if collision_weight is not None
-            else self.options.collision_weight
+            if collision_weight is not None else self.options.collision_weight
         )
         start_w = (
-            start_pose_weight
-            if start_pose_weight is not None
-            else self.options.start_pose_weight
+            start_pose_weight if start_pose_weight is not None else
+            self.options.start_pose_weight
         )
         end_w = (
             end_pose_weight
-            if end_pose_weight is not None
-            else self.options.end_pose_weight
+            if end_pose_weight is not None else self.options.end_pose_weight
         )
 
         traj_vars = self.robot.var_cls(jnp.arange(self.timesteps))
@@ -181,30 +187,27 @@ class TrajOptimizer:
             ),
         ]
         # 2. Add start and end pose constraints.
-        factors.extend(
-            [
-                jaxls.Cost(
-                    lambda vals, var, weight=start_w: (
-                        (vals[var] - init_traj[0])
-                    ).flatten()
-                    * weight,
-                    (self.robot.var_cls(jnp.arange(0, 2)),),
-                    name="start_pose_constraint",
-                ),
-                jaxls.Cost(
-                    lambda vals, var, weight=end_w: (
-                        (vals[var] - init_traj[-1])
-                    ).flatten()
-                    * weight,
-                    (
-                        self.robot.var_cls(
-                            jnp.arange(self.timesteps - 2, self.timesteps)
-                        ),
+        factors.extend([
+            jaxls.Cost(
+                lambda vals,
+                var,
+                weight=start_w:
+                ((vals[var] - init_traj[0])).flatten() * weight,
+                (self.robot.var_cls(jnp.arange(0, 2)), ),
+                name="start_pose_constraint",
+            ),
+            jaxls.Cost(
+                lambda vals,
+                var,
+                weight=end_w: ((vals[var] - init_traj[-1])).flatten() * weight,
+                (
+                    self.robot.var_cls(
+                        jnp.arange(self.timesteps - 2, self.timesteps)
                     ),
-                    name="end_pose_constraint",
                 ),
-            ]
-        )
+                name="end_pose_constraint",
+            ),
+        ])
         # 3. Add collision avoidance costs.
         for world_coll_obj in world_coll:
             factors.append(
@@ -222,11 +225,11 @@ class TrajOptimizer:
             jaxls.LeastSquaresProblem(
                 factors,
                 [traj_vars],
-            )
-            .analyze()
-            .solve(
+            ).analyze().solve(
                 verbose=False,
-                initial_vals=jaxls.VarValues.make((traj_vars.with_value(init_traj),)),
+                initial_vals=jaxls.VarValues.make(
+                    (traj_vars.with_value(init_traj), )
+                ),
             )
         )
         return solution[traj_vars]
@@ -246,8 +249,10 @@ class TrajOptimizer:
         dt: Optional[float] = None,
     ):
         """
-        Optimize trajectory with time-based smoothness constraints for tendon lengths.
-        This is specifically designed for TDCR robots to ensure smooth tendon movements.
+        Optimize trajectory with time-based smoothness constraints for tendon
+        lengths.
+        This is specifically designed for TDCR robots to ensure smooth tendon
+        movements.
 
         Args:
             init_traj: Initial trajectory guess
@@ -259,42 +264,36 @@ class TrajOptimizer:
         """
         # Use provided weights or fall back to instance options
         limit_w = (
-            limit_weight if limit_weight is not None else self.options.limit_weight
+            limit_weight
+            if limit_weight is not None else self.options.limit_weight
         )
         smooth_w = (
-            smoothness_weight
-            if smoothness_weight is not None
-            else self.options.smoothness_weight
+            smoothness_weight if smoothness_weight is not None else
+            self.options.smoothness_weight
         )
         traj_len_w = (
-            trajectory_length_weight
-            if trajectory_length_weight is not None
+            trajectory_length_weight if trajectory_length_weight is not None
             else self.options.trajectory_length_weight
         )
         coll_w = (
             collision_weight
-            if collision_weight is not None
-            else self.options.collision_weight
+            if collision_weight is not None else self.options.collision_weight
         )
         start_w = (
-            start_pose_weight
-            if start_pose_weight is not None
-            else self.options.start_pose_weight
+            start_pose_weight if start_pose_weight is not None else
+            self.options.start_pose_weight
         )
         end_w = (
             end_pose_weight
-            if end_pose_weight is not None
-            else self.options.end_pose_weight
+            if end_pose_weight is not None else self.options.end_pose_weight
         )
         tendon_vel_w = (
-            tendon_vel_weight
-            if tendon_vel_weight is not None
-            else self.options.tendon_vel_weight
+            tendon_vel_weight if tendon_vel_weight is not None else
+            self.options.tendon_vel_weight
         )
         tendon_acc_w = (
-            tendon_acc_weight
-            if tendon_acc_weight is not None
-            else self.options.tendon_acc_weight
+            tendon_acc_weight if tendon_acc_weight is not None else
+            self.options.tendon_acc_weight
         )
         dt_val = dt if dt is not None else self.options.dt
 
@@ -315,25 +314,23 @@ class TrajOptimizer:
         ]
 
         # Tendon length velocity and acceleration smoothness
-        factors.extend(
-            [
-                tendon_length_velocity_cost(
-                    self._robot_batch,
-                    self.robot.var_cls(jnp.arange(1, self.timesteps)),
-                    self.robot.var_cls(jnp.arange(0, self.timesteps - 1)),
-                    jnp.array([dt_val])[None],
-                    jnp.array([tendon_vel_w])[None],
-                ),
-                tendon_length_acceleration_cost(
-                    self._robot_batch,
-                    self.robot.var_cls(jnp.arange(0, self.timesteps - 2)),
-                    self.robot.var_cls(jnp.arange(1, self.timesteps - 1)),
-                    self.robot.var_cls(jnp.arange(2, self.timesteps)),
-                    jnp.array([dt_val])[None],
-                    jnp.array([tendon_acc_w])[None],
-                ),
-            ]
-        )
+        factors.extend([
+            tendon_length_velocity_cost(
+                self._robot_batch,
+                self.robot.var_cls(jnp.arange(1, self.timesteps)),
+                self.robot.var_cls(jnp.arange(0, self.timesteps - 1)),
+                jnp.array([dt_val])[None],
+                jnp.array([tendon_vel_w])[None],
+            ),
+            tendon_length_acceleration_cost(
+                self._robot_batch,
+                self.robot.var_cls(jnp.arange(0, self.timesteps - 2)),
+                self.robot.var_cls(jnp.arange(1, self.timesteps - 1)),
+                self.robot.var_cls(jnp.arange(2, self.timesteps)),
+                jnp.array([dt_val])[None],
+                jnp.array([tendon_acc_w])[None],
+            ),
+        ])
 
         # 3. Add trajectory length cost for efficient motion
         factors.append(
@@ -346,26 +343,23 @@ class TrajOptimizer:
         )
 
         # 4. Add start and end pose constraints
-        factors.extend(
-            [
-                jaxls.Cost(
-                    lambda vals, var, weight=start_w: (
-                        (vals[var] - init_traj[0])
-                    ).flatten()
-                    * weight,
-                    (self.robot.var_cls(jnp.array([0])),),
-                    name="start_pose_constraint",
-                ),
-                jaxls.Cost(
-                    lambda vals, var, weight=end_w: (
-                        (vals[var] - init_traj[-1])
-                    ).flatten()
-                    * weight,
-                    (self.robot.var_cls(jnp.array([self.timesteps - 1])),),
-                    name="end_pose_constraint",
-                ),
-            ]
-        )
+        factors.extend([
+            jaxls.Cost(
+                lambda vals,
+                var,
+                weight=start_w:
+                ((vals[var] - init_traj[0])).flatten() * weight,
+                (self.robot.var_cls(jnp.array([0])), ),
+                name="start_pose_constraint",
+            ),
+            jaxls.Cost(
+                lambda vals,
+                var,
+                weight=end_w: ((vals[var] - init_traj[-1])).flatten() * weight,
+                (self.robot.var_cls(jnp.array([self.timesteps - 1])), ),
+                name="end_pose_constraint",
+            ),
+        ])
 
         # 5. Add collision avoidance costs
         for world_coll_obj in world_coll:
@@ -385,15 +379,15 @@ class TrajOptimizer:
             jaxls.LeastSquaresProblem(
                 factors,
                 [traj_vars],
-            )
-            .analyze()
-            .solve(
+            ).analyze().solve(
                 verbose=False,
                 termination=jaxls.TerminationConfig(
                     max_iterations=self.options.max_iter_num,
                     early_termination=False,
                 ),
-                initial_vals=jaxls.VarValues.make((traj_vars.with_value(init_traj),)),
+                initial_vals=jaxls.VarValues.make(
+                    (traj_vars.with_value(init_traj), )
+                ),
             )
         )
 
@@ -451,11 +445,11 @@ class TrajOptimizer:
             jaxls.LeastSquaresProblem(
                 factors,
                 [traj_vars],
-            )
-            .analyze()
-            .solve(
+            ).analyze().solve(
                 verbose=False,
-                initial_vals=jaxls.VarValues.make((traj_vars.with_value(init_traj),)),
+                initial_vals=jaxls.VarValues.make(
+                    (traj_vars.with_value(init_traj), )
+                ),
             )
         )
         return solution[traj_vars]

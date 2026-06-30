@@ -1,24 +1,26 @@
-import jax
-import time
-import viser
-import numpy as np
 import os
+import time
+
+import jax
+import numpy as np
+import viser
+
+from soul.geom import RobotCollision, WorldCollision
 from soul.robots.cc_robot import CCRobot
 from soul.robots.tdcr_robot import TDCRRobot
-from soul.geom import RobotCollision, WorldCollision
 from soul.solver import (
-    TrajOptimizer,
-    TrajOptimizerOptions,
+    OptimizedRRT,
     ParallelPRM,
     PRMOptions,
-    OptimizedRRT,
     RRTOptions,
+    TrajOptimizer,
+    TrajOptimizerOptions,
 )
 from soul.solver.motion_planner import resample_trajectory
 from soul.visualization.visualizer_viser import (
+    ViserRenderer,
     ViserSoftRobot,
     ViserWorld,
-    ViserRenderer,
 )
 
 # Initialize JAX persistent compilation cache
@@ -27,7 +29,8 @@ jax.config.update("jax_compilation_cache_dir", "/tmp/jax_cache")
 jax.config.update("jax_persistent_cache_min_entry_size_bytes", -1)
 jax.config.update("jax_persistent_cache_min_compile_time_secs", 0)
 jax.config.update(
-    "jax_persistent_cache_enable_xla_caches", "xla_gpu_per_fusion_autotune_cache_dir"
+    "jax_persistent_cache_enable_xla_caches",
+    "xla_gpu_per_fusion_autotune_cache_dir"
 )
 from jax.experimental.compilation_cache import compilation_cache as cc
 
@@ -36,6 +39,7 @@ DISABLE_JIT = False
 
 if DISABLE_JIT:
     import os
+
     import jax
 
     os.environ["JAX_DISABLE_JIT"] = "True"
@@ -50,11 +54,15 @@ def viser_main(robot_type: str = "cc", default_method: str = "trajopt"):
     elif robot_type == "tdcr":
         robot = TDCRRobot.from_config("configs/robots/cc_tdcr.json")
         robot_coll = RobotCollision.from_config("configs/robots/cc_tdcr.json")
-    world_coll = WorldCollision.from_config("configs/maps/mp_scene/mp_demo.json")
+    world_coll = WorldCollision.from_config(
+        "configs/maps/mp_scene/mp_demo.json"
+    )
 
     # Setup Visualization
     server = viser.ViserServer()
-    robot_vis = ViserSoftRobot(server, robot, robot_coll, root_node_name="/robot")
+    robot_vis = ViserSoftRobot(
+        server, robot, robot_coll, root_node_name="/robot"
+    )
     robot_vis.create_robot_visualizations()
     obstacles_vis = ViserWorld(server, world_coll, enable_collision=False)
     obstacles_vis.create_mesh_visualizations()
@@ -196,20 +204,28 @@ def viser_main(robot_type: str = "cc", default_method: str = "trajopt"):
             )
 
         # Add reset button for weights
-        reset_weights_button = server.gui.add_button("Reset Weights to Default")
+        reset_weights_button = server.gui.add_button(
+            "Reset Weights to Default"
+        )
 
         def reset_weights_callback(args):
             """Reset all weights to default values."""
             default_options = TrajOptimizerOptions()
             limit_weight_slider.value = default_options.limit_weight
             smoothness_weight_slider.value = default_options.smoothness_weight
-            traj_length_weight_slider.value = default_options.trajectory_length_weight
+            traj_length_weight_slider.value = (
+                default_options.trajectory_length_weight
+            )
             collision_weight_slider.value = default_options.collision_weight
             start_pose_weight_slider.value = default_options.start_pose_weight
             end_pose_weight_slider.value = default_options.end_pose_weight
             if robot_type == "tdcr":
-                tendon_vel_weight_slider.value = default_options.tendon_vel_weight
-                tendon_acc_weight_slider.value = default_options.tendon_acc_weight
+                tendon_vel_weight_slider.value = (
+                    default_options.tendon_vel_weight
+                )
+                tendon_acc_weight_slider.value = (
+                    default_options.tendon_acc_weight
+                )
                 dt_slider.value = default_options.dt
             print("Weights reset to default values")
 
@@ -221,14 +237,18 @@ def viser_main(robot_type: str = "cc", default_method: str = "trajopt"):
     render_image_button = server.gui.add_button("Render Image", disabled=False)
 
     # init motion planners
-    traj_solver = TrajOptimizer(robot, robot_coll, timesteps, options=traj_options)
+    traj_solver = TrajOptimizer(
+        robot, robot_coll, timesteps, options=traj_options
+    )
     start_end_interpolate_jit = jax.jit(traj_solver.start_end_interpolate)
     start_end_ik_solver = traj_solver._ik_solver_best
     if robot_type == "cc":
-        # JIT compile without making options static - they will be traced as dynamic values
+        # JIT compile without making options static - they will be traced
+        # as dynamic values
         traj_opt = jax.jit(traj_solver.optimize)
     elif robot_type == "tdcr":
-        # JIT compile without making options static - they will be traced as dynamic values
+        # JIT compile without making options static - they will be traced
+        # as dynamic values
         traj_opt = jax.jit(traj_solver.optimize_tdcr)
     forward_kinematics = jax.jit(jax.vmap(robot._forward_kinematics))
 
@@ -291,7 +311,8 @@ def viser_main(robot_type: str = "cc", default_method: str = "trajopt"):
                     world_coll.collision_geoms,
                     limit_weight=traj_options.limit_weight,
                     smoothness_weight=traj_options.smoothness_weight,
-                    trajectory_length_weight=traj_options.trajectory_length_weight,
+                    trajectory_length_weight=traj_options.
+                    trajectory_length_weight,
                     collision_weight=traj_options.collision_weight,
                     start_pose_weight=traj_options.start_pose_weight,
                     end_pose_weight=traj_options.end_pose_weight,
@@ -302,7 +323,8 @@ def viser_main(robot_type: str = "cc", default_method: str = "trajopt"):
                     world_coll.collision_geoms,
                     limit_weight=traj_options.limit_weight,
                     smoothness_weight=traj_options.smoothness_weight,
-                    trajectory_length_weight=traj_options.trajectory_length_weight,
+                    trajectory_length_weight=traj_options.
+                    trajectory_length_weight,
                     collision_weight=traj_options.collision_weight,
                     start_pose_weight=traj_options.start_pose_weight,
                     end_pose_weight=traj_options.end_pose_weight,
@@ -339,7 +361,8 @@ def viser_main(robot_type: str = "cc", default_method: str = "trajopt"):
                         world_coll.collision_geoms,
                         limit_weight=traj_options.limit_weight,
                         smoothness_weight=traj_options.smoothness_weight,
-                        trajectory_length_weight=traj_options.trajectory_length_weight,
+                        trajectory_length_weight=traj_options.
+                        trajectory_length_weight,
                         collision_weight=traj_options.collision_weight,
                         start_pose_weight=traj_options.start_pose_weight,
                         end_pose_weight=traj_options.end_pose_weight,
@@ -350,7 +373,8 @@ def viser_main(robot_type: str = "cc", default_method: str = "trajopt"):
                         world_coll.collision_geoms,
                         limit_weight=traj_options.limit_weight,
                         smoothness_weight=traj_options.smoothness_weight,
-                        trajectory_length_weight=traj_options.trajectory_length_weight,
+                        trajectory_length_weight=traj_options.
+                        trajectory_length_weight,
                         collision_weight=traj_options.collision_weight,
                         start_pose_weight=traj_options.start_pose_weight,
                         end_pose_weight=traj_options.end_pose_weight,
@@ -387,7 +411,8 @@ def viser_main(robot_type: str = "cc", default_method: str = "trajopt"):
                         world_coll.collision_geoms,
                         limit_weight=traj_options.limit_weight,
                         smoothness_weight=traj_options.smoothness_weight,
-                        trajectory_length_weight=traj_options.trajectory_length_weight,
+                        trajectory_length_weight=traj_options.
+                        trajectory_length_weight,
                         collision_weight=traj_options.collision_weight,
                         start_pose_weight=traj_options.start_pose_weight,
                         end_pose_weight=traj_options.end_pose_weight,
@@ -398,7 +423,8 @@ def viser_main(robot_type: str = "cc", default_method: str = "trajopt"):
                         world_coll.collision_geoms,
                         limit_weight=traj_options.limit_weight,
                         smoothness_weight=traj_options.smoothness_weight,
-                        trajectory_length_weight=traj_options.trajectory_length_weight,
+                        trajectory_length_weight=traj_options.
+                        trajectory_length_weight,
                         collision_weight=traj_options.collision_weight,
                         start_pose_weight=traj_options.start_pose_weight,
                         end_pose_weight=traj_options.end_pose_weight,
@@ -416,7 +442,6 @@ def viser_main(robot_type: str = "cc", default_method: str = "trajopt"):
 
     def replay_callback(args):
         print("Start replaying....")
-        global traj
         if traj is None:
             return
         for i in range(len(traj)):
@@ -424,16 +449,18 @@ def viser_main(robot_type: str = "cc", default_method: str = "trajopt"):
         print("Finish replaying....")
 
     def render_video_callback(event: viser.GuiEvent):
-        global traj
         if traj is None:
             return
-        renderer.render_traj_video(event, traj, save_path="trajectory_video.mp4")
+        renderer.render_traj_video(
+            event, traj, save_path="trajectory_video.mp4"
+        )
 
     def render_image_callback(event: viser.GuiEvent):
-        global traj
         if traj is None:
             return
-        renderer.render_traj_image(event, traj, save_path="trajectory_image.png")
+        renderer.render_traj_image(
+            event, traj, save_path="trajectory_image.png"
+        )
 
     def on_handle_update(handle: viser.TransformControlsHandle):
         """Update GUI when handles are moved."""

@@ -1,8 +1,7 @@
-from setuptools import setup, find_packages
+from setuptools import find_packages, setup
 
 setup(
     name="soul",
-    version="0.1",
-    packages=find_packages(include=["soul"]),
-    # 其他参数...
+    version="0.0.1",
+    packages=find_packages(include=["soul", "soul.*"]),
 )

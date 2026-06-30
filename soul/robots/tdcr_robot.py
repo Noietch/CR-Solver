@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+
 import jax
 import jax_dataclasses as jdc
 import jaxls
@@ -8,7 +9,7 @@ from jax import Array
 from jax import numpy as jnp
 from jaxtyping import Float
 
-from soul.robots.cc_robot import CCRobot, CCModelConfig, ConstantCurvatureState
+from soul.robots.cc_robot import CCModelConfig, CCRobot, ConstantCurvatureState
 
 
 @jdc.pytree_dataclass
@@ -38,21 +39,20 @@ class TDCRModelConfig(CCModelConfig):
 
         # Set up tendon positions
         num_tendons_per_section = config_dict["num_tendons_per_section"]
-        disk_radius = config_dict.get("disk_radius", config_dict.get("radius", 10.0))
+        disk_radius = config_dict.get(
+            "disk_radius", config_dict.get("radius", 10.0)
+        )
 
         # Generate evenly spaced tendon positions around the disk
-        angles = jnp.linspace(0, 2 * jnp.pi, num_tendons_per_section, endpoint=False)
-        tendon_positions = jnp.array(
-            [
-                [
-                    disk_radius * jnp.cos(angles[i]),
-                    disk_radius * jnp.sin(angles[i]),
-                    0.0,
-                    1.0,
-                ]
-                for i in range(num_tendons_per_section)
-            ]
-        ).T
+        angles = jnp.linspace(
+            0, 2 * jnp.pi, num_tendons_per_section, endpoint=False
+        )
+        tendon_positions = jnp.array([[
+            disk_radius * jnp.cos(angles[i]),
+            disk_radius * jnp.sin(angles[i]),
+            0.0,
+            1.0,
+        ] for i in range(num_tendons_per_section)]).T
 
         return cls(
             num_sections=config_dict["num_sections"],
@@ -85,15 +85,16 @@ class TDCRRobot(CCRobot):
         def retract_fn(
             cfg: ConstantCurvatureState, delta: Array
         ) -> ConstantCurvatureState:
-            """Same as jaxls.SE3Var.retract_fn, but removing updates on certain axes."""
+            """Same as jaxls.SE3Var.retract_fn, but removing updates on
+            certain axes."""
             delta = delta * config.opt_mask
             return jaxls.Var._euclidean_retract(cfg, delta)
 
         # Default initial guess
         default_cfg = ConstantCurvatureState(
             base_position=jnp.zeros(3),
-            theta=jnp.ones((config.num_sections,)),
-            phi=jnp.zeros((config.num_sections,)),
+            theta=jnp.ones((config.num_sections, )),
+            phi=jnp.zeros((config.num_sections, )),
         )
 
         class StateVar(
@@ -101,7 +102,8 @@ class TDCRRobot(CCRobot):
             default_factory=lambda: default_cfg,
             retract_fn=retract_fn,
             tangent_dim=3 + config.num_sections + config.num_sections,
-        ): ...
+        ):
+            ...
 
         robot = TDCRRobot(
             config=config,
@@ -125,7 +127,8 @@ class TDCRRobot(CCRobot):
             theta: Curvature angle of the section
             phi: Rotation angle of the section
             section_length: Length of the section
-            tendon_position: Homogeneous coordinates (x, y, z, 1) of tendon position
+            tendon_position: Homogeneous coordinates (x, y, z, 1) of tendon
+                position
 
         Returns:
             Length of the tendon in this section
@@ -143,12 +146,15 @@ class TDCRRobot(CCRobot):
         # Effective bending plane angle relative to tendon
         effective_angle = alpha_tendon - phi
 
-        # When theta is very small (straight configuration), use linear approximation
+        # When theta is very small (straight configuration), use linear
+        # approximation
         is_straight = jnp.abs(theta) < 1e-6
 
         # For curved sections
-        # The tendon follows a helical path with radius offset from neutral axis
-        # Length = section_length * (1 - r_tendon * cos(effective_angle) * theta / section_length)
+        # The tendon follows a helical path with radius offset from neutral
+        # axis
+        # Length = section_length * (
+        #     1 - r_tendon * cos(effective_angle) * theta / section_length)
         curved_length = section_length * (
             1 - r_tendon * jnp.cos(effective_angle) * theta / section_length
         )
@@ -170,7 +176,8 @@ class TDCRRobot(CCRobot):
         Each section has its own set of tendons.
 
         Args:
-            state: Current state of the robot (base position, theta, phi for each section)
+            state: Current state of the robot (base position, theta, phi for
+                each section)
 
         Returns:
             Array of tendon lengths for each tendon in each section
@@ -180,7 +187,8 @@ class TDCRRobot(CCRobot):
 
         # Vectorize over sections
         vmap_sections = jax.vmap(
-            lambda theta, phi: jax.vmap(
+            lambda theta,
+            phi: jax.vmap(
                 lambda tendon_pos: self.calculate_tendon_length_single_section(
                     theta, phi, section_length, tendon_pos
                 ),

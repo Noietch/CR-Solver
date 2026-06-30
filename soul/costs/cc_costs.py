@@ -3,10 +3,10 @@ import jaxlie
 from jax import Array
 from jaxls import Cost, Var, VarValues
 
-from ..robots.cc_robot import CCRobot, ConstantCurvatureState
+from ..geom.collision import colldist_from_sdf, collide
 from ..geom.collision_cc_robot import RobotCollision
 from ..geom.geometry import CollGeom
-from ..geom.collision import colldist_from_sdf, collide
+from ..robots.cc_robot import CCRobot, ConstantCurvatureState
 
 
 @Cost.create_factory
@@ -76,17 +76,16 @@ def limit_cost(
     residual_lower_theta = jnp.maximum(
         0.0, robot.config.lower_limits_theta - state.theta
     )
-    residual_upper_phi = jnp.maximum(0.0, state.phi - robot.config.upper_limits_phi)
-    residual_lower_phi = jnp.maximum(0.0, robot.config.lower_limits_phi - state.phi)
-    return (
-        (
-            residual_upper_theta
-            + residual_lower_theta
-            + residual_upper_phi
-            + residual_lower_phi
-        )
-        * weight
-    ).flatten()
+    residual_upper_phi = jnp.maximum(
+        0.0, state.phi - robot.config.upper_limits_phi
+    )
+    residual_lower_phi = jnp.maximum(
+        0.0, robot.config.lower_limits_phi - state.phi
+    )
+    return ((
+        residual_upper_theta + residual_lower_theta + residual_upper_phi
+        + residual_lower_phi
+    ) * weight).flatten()
 
 
 @Cost.create_factory
@@ -104,25 +103,22 @@ def limit_cost_extend(
     residual_lower_theta = jnp.maximum(
         0.0, robot.config.lower_limits_theta - state.theta
     )
-    residual_upper_phi = jnp.maximum(0.0, state.phi - robot.config.upper_limits_phi)
-    residual_lower_phi = jnp.maximum(0.0, robot.config.lower_limits_phi - state.phi)
+    residual_upper_phi = jnp.maximum(
+        0.0, state.phi - robot.config.upper_limits_phi
+    )
+    residual_lower_phi = jnp.maximum(
+        0.0, robot.config.lower_limits_phi - state.phi
+    )
     residual_upper_length = jnp.maximum(
         0.0, state.length - robot.config.upper_limits_length
     )
     residual_lower_length = jnp.maximum(
         0.0, robot.config.lower_limits_length - state.length
     )
-    return (
-        (
-            residual_upper_theta
-            + residual_lower_theta
-            + residual_upper_phi
-            + residual_lower_phi
-            + residual_upper_length
-            + residual_lower_length
-        )
-        * weight
-    ).flatten()
+    return ((
+        residual_upper_theta + residual_lower_theta + residual_upper_phi
+        + residual_lower_phi + residual_upper_length + residual_lower_length
+    ) * weight).flatten()
 
 
 @Cost.create_factory
@@ -137,7 +133,9 @@ def world_collision_cost(
 ) -> Array:
     """Computes the residual penalizing world collisions below a margin."""
     state = vals[robot_var]
-    dist_matrix = robot_coll.compute_world_collision_distance(robot, state, world_geom)
+    dist_matrix = robot_coll.compute_world_collision_distance(
+        robot, state, world_geom
+    )
     residual = colldist_from_sdf(dist_matrix, margin)
     return (residual * weight).flatten()
 
@@ -183,7 +181,10 @@ def smoothness_cost(
     past_robot_var: Var[ConstantCurvatureState],
     weight: Array | float,
 ) -> Array:
-    """Computes the residual penalizing joint configuration differences (velocity)."""
+    """Computes the residual penalizing joint configuration differences.
+
+    (velocity)
+    """
     return ((vals[curr_robot_var] - vals[past_robot_var])).flatten() * weight
 
 
@@ -218,7 +219,8 @@ def rest_base_cost(
     robot_var: Var[ConstantCurvatureState],
     weight: Array | float,
 ) -> Array:
-    """Computes the residual penalizing the difference between the current state and the rest pose."""
+    """Computes the residual penalizing the difference between the current
+    state and the rest pose."""
     state = vals[robot_var]
     return ((state.base_position)).flatten() * weight
 
@@ -231,7 +233,8 @@ def trajectory_length_cost(
     past_robot_var: Var[ConstantCurvatureState],
     weight: Array | float,
 ) -> Array:
-    """Computes the residual penalizing the total path length of the end-effector."""
+    """Computes the residual penalizing the total path length of the
+    end-effector."""
     prev_states = vals[past_robot_var]
     curr_states = vals[curr_robot_var]
     prev_poses = robot.forward_kinematics(prev_states)

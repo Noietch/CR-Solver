@@ -1,22 +1,23 @@
+import time
+
 import jax
 import jaxlie
-import time
-import viser
 import numpy as np
-from soul.robots.cc_robot import CCRobot
+import viser
+
 from soul.geom import RobotCollision, WorldCollision
+from soul.robots.cc_robot import CCRobot
 from soul.solver.traj_optimizer import TrajOptimizer, TrajOptimizerOptions
 from soul.visualization.visualizer_viser import (
+    ViserRenderer,
     ViserSoftRobot,
     ViserWorld,
-    ViserRenderer,
 )
 
 DISABLE_JIT = False
 
 if DISABLE_JIT:
     import os
-    import jax
 
     os.environ["JAX_DISABLE_JIT"] = "True"
     jax.config.update("jax_disable_jit", True)
@@ -45,11 +46,15 @@ def viser_main():
     # Setup Environment
     robot = CCRobot.from_config("configs/robots/cc.json")
     robot_coll = RobotCollision.from_config("configs/robots/cc.json")
-    world_coll = WorldCollision.from_config("configs/maps/ik_maps/obstacles_test.json")
+    world_coll = WorldCollision.from_config(
+        "configs/maps/ik_maps/obstacles_test.json"
+    )
 
     # Setup Visualization
     server = viser.ViserServer()
-    robot_vis = ViserSoftRobot(server, robot, robot_coll, root_node_name="/robot")
+    robot_vis = ViserSoftRobot(
+        server, robot, robot_coll, root_node_name="/robot"
+    )
     robot_vis.create_robot_visualizations()
     obstacles_vis = ViserWorld(server, world_coll)
     obstacles_vis.create_mesh_visualizations()
@@ -86,7 +91,9 @@ def viser_main():
             disabled=True,
         )
         end_wxyz_text = server.gui.add_text(
-            "End wxyz", initial_value=str(np.round(end_handle.wxyz, 2)), disabled=True
+            "End wxyz",
+            initial_value=str(np.round(end_handle.wxyz, 2)),
+            disabled=True
         )
 
     # Set up reference trajectory
@@ -101,7 +108,9 @@ def viser_main():
             timesteps,
         )
         robot_vis.visualize_tip_traj(
-            reference_traj, color=np.array([1.0, 0.0, 0.0]), name="reference_traj"
+            reference_traj,
+            color=np.array([1.0, 0.0, 0.0]),
+            name="reference_traj"
         )
         return reference_traj
 
@@ -146,7 +155,6 @@ def viser_main():
             robot_vis.update_pose(traj[i])
 
     def replay_callback(event):
-        global traj
         if traj is None:
             return
         render.render_traj_image(event, traj, skip_frames=20, save_path=None)
