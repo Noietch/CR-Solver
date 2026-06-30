@@ -1,0 +1,56 @@
+{
+    "obstacle_1": {
+        "type": "sphere",
+        "center": [
+            0.8,
+            0.0,
+            0.0
+        ],
+        "radius": 0.4
+    },
+    "obstacle_2": {
+        "type": "sphere",
+        "center": [
+            -0.8,
+            0.0,
+            0.0
+        ],
+        "radius": 0.4
+    },
+    "obstacle_3": {
+        "type": "sphere",
+        "center": [
+            0.0,
+            0.8,
+            0.0
+        ],
+        "radius": 0.4
+    },
+    "obstacle_4": {
+        "type": "sphere",
+        "center": [
+            0.0,
+            -0.8,
+            0.0
+        ],
+        "radius": 0.4
+    },
+    "obstacle_5": {
+        "type": "sphere",
+        "center": [
+            0.0,
+            0.0,
+            0.8
+        ],
+        "radius": 0.4
+    },
+    "obstacle_6": {
+        "type": "sphere",
+        "center": [
+            0.0,
+            0.0,
+            -0.8
+        ],
+        "radius": 0.4
+    }
+}

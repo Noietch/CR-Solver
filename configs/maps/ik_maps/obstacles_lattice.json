@@ -1,0 +1,245 @@
+{
+    "obstacle_1": {
+        "type": "sphere",
+        "center": [
+            -0.8,
+            -0.4,
+            -0.8
+        ],
+        "radius": 0.2
+    },
+    "obstacle_2": {
+        "type": "sphere",
+        "center": [
+            -0.8,
+            -0.4,
+            0.19999999999999996
+        ],
+        "radius": 0.2
+    },
+    "obstacle_3": {
+        "type": "sphere",
+        "center": [
+            -0.8,
+            -0.4,
+            1.2
+        ],
+        "radius": 0.2
+    },
+    "obstacle_4": {
+        "type": "sphere",
+        "center": [
+            -0.8,
+            0.4,
+            -0.8
+        ],
+        "radius": 0.2
+    },
+    "obstacle_5": {
+        "type": "sphere",
+        "center": [
+            -0.8,
+            0.4,
+            0.19999999999999996
+        ],
+        "radius": 0.2
+    },
+    "obstacle_6": {
+        "type": "sphere",
+        "center": [
+            -0.8,
+            0.4,
+            1.2
+        ],
+        "radius": 0.2
+    },
+    "obstacle_7": {
+        "type": "sphere",
+        "center": [
+            -0.8,
+            1.2000000000000002,
+            -0.8
+        ],
+        "radius": 0.2
+    },
+    "obstacle_8": {
+        "type": "sphere",
+        "center": [
+            -0.8,
+            1.2000000000000002,
+            0.19999999999999996
+        ],
+        "radius": 0.2
+    },
+    "obstacle_9": {
+        "type": "sphere",
+        "center": [
+            -0.8,
+            1.2000000000000002,
+            1.2
+        ],
+        "radius": 0.2
+    },
+    "obstacle_10": {
+        "type": "sphere",
+        "center": [
+            0.0,
+            -0.4,
+            -0.8
+        ],
+        "radius": 0.2
+    },
+    "obstacle_11": {
+        "type": "sphere",
+        "center": [
+            0.0,
+            -0.4,
+            0.19999999999999996
+        ],
+        "radius": 0.2
+    },
+    "obstacle_12": {
+        "type": "sphere",
+        "center": [
+            0.0,
+            -0.4,
+            1.2
+        ],
+        "radius": 0.2
+    },
+    "obstacle_13": {
+        "type": "sphere",
+        "center": [
+            0.0,
+            0.4,
+            -0.8
+        ],
+        "radius": 0.2
+    },
+    "obstacle_14": {
+        "type": "sphere",
+        "center": [
+            0.0,
+            0.4,
+            0.19999999999999996
+        ],
+        "radius": 0.2
+    },
+    "obstacle_15": {
+        "type": "sphere",
+        "center": [
+            0.0,
+            0.4,
+            1.2
+        ],
+        "radius": 0.2
+    },
+    "obstacle_16": {
+        "type": "sphere",
+        "center": [
+            0.0,
+            1.2000000000000002,
+            -0.8
+        ],
+        "radius": 0.2
+    },
+    "obstacle_17": {
+        "type": "sphere",
+        "center": [
+            0.0,
+            1.2000000000000002,
+            0.19999999999999996
+        ],
+        "radius": 0.2
+    },
+    "obstacle_18": {
+        "type": "sphere",
+        "center": [
+            0.0,
+            1.2000000000000002,
+            1.2
+        ],
+        "radius": 0.2
+    },
+    "obstacle_19": {
+        "type": "sphere",
+        "center": [
+            0.8,
+            -0.4,
+            -0.8
+        ],
+        "radius": 0.2
+    },
+    "obstacle_20": {
+        "type": "sphere",
+        "center": [
+            0.8,
+            -0.4,
+            0.19999999999999996
+        ],
+        "radius": 0.2
+    },
+    "obstacle_21": {
+        "type": "sphere",
+        "center": [
+            0.8,
+            -0.4,
+            1.2
+        ],
+        "radius": 0.2
+    },
+    "obstacle_22": {
+        "type": "sphere",
+        "center": [
+            0.8,
+            0.4,
+            -0.8
+        ],
+        "radius": 0.2
+    },
+    "obstacle_23": {
+        "type": "sphere",
+        "center": [
+            0.8,
+            0.4,
+            0.19999999999999996
+        ],
+        "radius": 0.2
+    },
+    "obstacle_24": {
+        "type": "sphere",
+        "center": [
+            0.8,
+            0.4,
+            1.2
+        ],
+        "radius": 0.2
+    },
+    "obstacle_25": {
+        "type": "sphere",
+        "center": [
+            0.8,
+            1.2000000000000002,
+            -0.8
+        ],
+        "radius": 0.2
+    },
+    "obstacle_26": {
+        "type": "sphere",
+        "center": [
+            0.8,
+            1.2000000000000002,
+            0.19999999999999996
+        ],
+        "radius": 0.2
+    },
+    "obstacle_27": {
+        "type": "sphere",
+        "center": [
+            0.8,
+            1.2000000000000002,
+            1.2
+        ],
+        "radius": 0.2
+    }
+}

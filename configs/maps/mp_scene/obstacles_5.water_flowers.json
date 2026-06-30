@@ -1,0 +1,13 @@
+{
+  "obstacle_1": {
+    "type": "mesh",
+    "path": "assets/scene_trans/5.water_flowers/5.water_flowers.glb",
+    "scale": 10,
+    "wxyz": [0.707, 0.707, 0, 0],
+    "position": [0.2, 3, 1.5],
+    "decompose_type": "voxel",
+    "decompose_params": {
+      "pitch": 0.01
+    }
+  }
+}

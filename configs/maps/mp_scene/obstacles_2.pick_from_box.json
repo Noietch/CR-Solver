@@ -1,0 +1,13 @@
+{
+  "obstacle_1": {
+    "type": "mesh",
+    "path": "assets/scene_trans/2.pick_from_box/2.pick_from_box.glb",
+    "scale": 2,
+    "wxyz": [0.707, 0.707, 0, 0],
+    "position": [0.2, -1, -0.4],
+    "decompose_type": "voxel",
+    "decompose_params": {
+      "pitch": 0.05
+    }
+  }
+}
