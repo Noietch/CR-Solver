@@ -19,7 +19,9 @@ def viser_main():
     # Setup Environment
     robot = CCRobot.from_config("configs/robots/cc_mobile_z.json")
     robot_coll = RobotCollision.from_config("configs/robots/cc_mobile_z.json")
-    world_coll = WorldCollision.from_config("configs/maps/obstacles_01.json")
+    world_coll = WorldCollision.from_config(
+        "configs/maps/ik_maps/obstacles_test.json"
+    )
 
     # Setup Visualization
     server = viser.ViserServer()

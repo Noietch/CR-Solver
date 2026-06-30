@@ -21,14 +21,12 @@ batch_state = ConstantCurvatureState(
     base_position=jnp.array([[0, 0, 0], [0, 0, 0]]),
     theta=jnp.array([[1, 2, 3], [0, 0, 0]]),
     phi=jnp.array([[-1, -2, -3], [0, 0, 0]]),
-    length=jnp.array([[1, 1, 1], [1, 1, 1]]),
 )
 
 state = ConstantCurvatureState(
     base_position=jnp.array([0, 0, 0]),
     theta=jnp.array([3.1415926 / 3, 3.1415926 / 3, 3.1415926 / 3]),
     phi=jnp.array([0, 0, 0]),
-    length=jnp.array([1, 1, 1]),
 )
 
 pose = robot.forward_kinematics(state)
