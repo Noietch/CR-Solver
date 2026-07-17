@@ -19,8 +19,8 @@
 
 <div>
     <h4 align="center">
-        <a href="https://github.com/Noietch/DiffSoft" target='_blank'>
-        <img src="https://img.shields.io/badge/arXiv-xxxx.xxxxx-b31b1b.svg">
+        <a href="https://arxiv.org/abs/2607.11340" target='_blank'>
+        <img src="https://img.shields.io/badge/arXiv-2607.11340-b31b1b.svg">
         </a>
         <a href="https://github.com/Noietch/DiffSoft" target='_blank'>
         <img src="https://img.shields.io/badge/Project-Page-green">
@@ -245,7 +245,10 @@ If you find this work useful, please consider citing our paper:
   title={CR-Solver: GPU-Accelerated Kinematics Solver for Tendon-driven Continuum Robots},
   author={Yang, Heqing and Yi, Yang and Zhong, Linqing and Huang, Linjiang and Liu, Si},
   booktitle={IEEE/RSJ International Conference on Intelligent Robots and Systems (IROS)},
-  year={2026}
+  year={2026},
+  eprint={2607.11340},
+  archivePrefix={arXiv},
+  primaryClass={cs.RO}
 }
 ```
 
