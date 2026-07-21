@@ -25,9 +25,6 @@
         <a href="https://noietch.github.io/projects/crsolver/" target='_blank'>
         <img src="https://img.shields.io/badge/Project-Page-green">
         </a>
-        <a href="https://github.com/Noietch/DiffSoft" target='_blank'>
-        <img src="https://img.shields.io/badge/Cite-BibTeX-blue">
-        </a>
     </h4>
 </div>
 
