@@ -22,7 +22,7 @@
         <a href="https://arxiv.org/abs/2607.11340" target='_blank'>
         <img src="https://img.shields.io/badge/arXiv-2607.11340-b31b1b.svg">
         </a>
-        <a href="https://github.com/Noietch/DiffSoft" target='_blank'>
+        <a href="https://noietch.github.io/projects/crsolver/" target='_blank'>
         <img src="https://img.shields.io/badge/Project-Page-green">
         </a>
         <a href="https://github.com/Noietch/DiffSoft" target='_blank'>
